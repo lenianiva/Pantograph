@@ -16,4 +16,5 @@ lean_lib Pantograph {
 @[default_target]
 lean_exe pantograph {
   root := `Main
+  supportInterpreter := true
 }

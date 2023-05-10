@@ -10,4 +10,14 @@ structure Catalog where
   id: Nat
   deriving Lean.FromJson
 
+structure CreateResult where
+  id: Nat
+  deriving Lean.ToJson
+structure CatalogResult where
+  theorems: List String
+  deriving Lean.ToJson
+structure ClearResult where
+  n: Nat -- Number of environments reset
+  deriving Lean.ToJson
+
 end Pantograph.Commands
