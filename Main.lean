@@ -1,24 +1,41 @@
-import Pantograph
 import Lean.Data.Json
+import Pantograph.Commands
 
 
 namespace Pantograph
 
 structure State where
-  keys: Array String
+  environments: Array String
 
 -- State monad
 abbrev T (m: Type → Type) := StateT State m
+abbrev Subroutine := T (Except String) Lean.Json
+
+structure Command where
+  cmd: String
+  payload: Lean.Json
+  deriving Lean.FromJson
+
+--def create_environment (args: Create): Subroutine := do
+--  let state ← get
+
 
 end Pantograph
 
 open Pantograph
 
-
-def execute (command: String): T (Except String) Lean.Json := do
+def execute (command: String): T (ExceptT String IO) Lean.Json := do
   let state ← get
   let obj ← Lean.Json.parse command
-  return "success"
+  let command: Command ← Lean.fromJson? obj
+  match command.cmd with
+  | "create" =>
+    let create: Commands.Create ← Lean.fromJson? command.payload
+    return Lean.toJson create.imports
+  | "catalog" =>
+    let catalog: Commands.Catalog ← Lean.fromJson? command.payload
+    return "catalog stub"
+  | cmd => throw s!"Unknown verb: {cmd}"
 
 -- Main IO functions
 
@@ -32,7 +49,8 @@ unsafe def loop : T IO Unit := do
   let state ← get
   let command ← getLines
   if command == "" then return ()
-  match (execute command).run' <| state with
+  let ret ← execute command
+  match ret with
   | .error e => IO.println s!"Could not parse json: {e}"
   | .ok obj => IO.println <| toString <| obj
 
