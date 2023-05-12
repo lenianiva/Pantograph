@@ -12,6 +12,8 @@ structure Catalog where
 
 structure CreateResult where
   id: Nat
+  symbols: Nat
+  filtered_symbols: Nat
   deriving Lean.ToJson
 structure CatalogResult where
   theorems: List String

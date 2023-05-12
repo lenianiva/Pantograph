@@ -2,6 +2,7 @@ import Lean.Data.Json
 import Lean.Environment
 
 import Pantograph.Commands
+import Pantograph.Symbols
 
 namespace Pantograph
 
@@ -35,7 +36,12 @@ def create (args: Create): Subroutine CreateResult := do
     (opts := {})
     (trustLevel := 1)
   modify fun s => { environments := s.environments.push env }
-  return { id := id }
+  let num_filtered_symbols := env.constants.fold (init := 0) (λ acc name info =>
+    acc + if is_symbol_unsafe_or_internal name info then 0 else 1)
+  return {
+    id := id,
+    symbols := env.constants.size,
+    filtered_symbols := num_filtered_symbols }
   where strTransform (s: String): Lean.Import :=
       let li := s.split (λ c => c == '.')
       let name := li.foldl (λ pre segment => Lean.Name.str pre segment) Lean.Name.anonymous
@@ -46,8 +52,7 @@ def catalog (args: Catalog): Subroutine CatalogResult := do
   match state.environments.get? args.id with
   | .some env =>
     let names := env.constants.fold (init := []) (λ es name info =>
-      if info.isUnsafe ∨ es.length > 500 then es else (toString name)::es)
-    --let names := env.constants.toList.map (λ ⟨x, _⟩ => toString x)
+      if es.length > 3000 ∨ is_symbol_unsafe_or_internal name info then es else (toString name)::es)
     return { theorems := names }
   | .none => throw s!"Invalid environment id {args.id}"
 
@@ -99,5 +104,6 @@ unsafe def loop : T IO Unit := do
   loop
 
 unsafe def main : IO Unit := do
+  Lean.enableInitializersExecution
   Lean.initSearchPath (← Lean.findSysroot)
   StateT.run' loop ⟨#[]⟩
