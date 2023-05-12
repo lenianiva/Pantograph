@@ -45,7 +45,9 @@ def catalog (args: Catalog): Subroutine CatalogResult := do
   let state ← get
   match state.environments.get? args.id with
   | .some env =>
-    let names := env.constants.toList.map (λ ⟨x, _⟩ => toString x)
+    let names := env.constants.fold (init := []) (λ es name info =>
+      if info.isUnsafe ∨ es.length > 500 then es else (toString name)::es)
+    --let names := env.constants.toList.map (λ ⟨x, _⟩ => toString x)
     return { theorems := names }
   | .none => throw s!"Invalid environment id {args.id}"
 
@@ -96,5 +98,6 @@ unsafe def loop : T IO Unit := do
   | .ok obj => IO.println <| toString <| obj
   loop
 
-unsafe def main : IO Unit :=
+unsafe def main : IO Unit := do
+  Lean.initSearchPath (← Lean.findSysroot)
   StateT.run' loop ⟨#[]⟩
