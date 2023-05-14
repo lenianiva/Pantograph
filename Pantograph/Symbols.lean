@@ -15,4 +15,21 @@ def is_symbol_unsafe_or_internal (n: Lean.Name) (info: Lean.ConstantInfo): Bool 
   | .num _ _ => true
   nameDeduce ∨ stemDeduce ∨ info.isUnsafe
 
+def to_compact_symbol_name (n: Lean.Name) (info: Lean.ConstantInfo): String :=
+  let pref := match info with
+  | .axiomInfo  _ => "axiom"
+  | .defnInfo   _ => "defn"
+  | .thmInfo    _ => "thm"
+  | .opaqueInfo _ => "opaque"
+  | .quotInfo   _ => "quot"
+  | .inductInfo _ => "induct"
+  | .ctorInfo   _ => "ctor"
+  | .recInfo    _ => "rec"
+  s!"{pref}|{toString n}"
+
+def to_filtered_symbol (n: Lean.Name) (info: Lean.ConstantInfo): Option String :=
+  if is_symbol_unsafe_or_internal n info
+  then Option.none
+  else Option.some <| to_compact_symbol_name n info
+
 end Pantograph

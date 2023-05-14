@@ -52,7 +52,9 @@ def catalog (args: Catalog): Subroutine CatalogResult := do
   match state.environments.get? args.id with
   | .some env =>
     let names := env.constants.fold (init := []) (λ es name info =>
-      if es.length > 3000 ∨ is_symbol_unsafe_or_internal name info then es else (toString name)::es)
+      match to_filtered_symbol name info with
+      | .some x => x::es
+      | .none => es)
     return { theorems := names }
   | .none => throw s!"Invalid environment id {args.id}"
 

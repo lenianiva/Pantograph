@@ -35,4 +35,9 @@ $ lake env build/bin/Pantograph
 ```
 
 
+## Troubleshooting
 
+If lean encounters stack overflow problems when printing catalog, execute this before running lean:
+```sh
+ulimit -s unlimited
+```
