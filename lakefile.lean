@@ -17,3 +17,9 @@ lean_exe pantograph {
   -- Somehow solves the native symbol not found problem
   supportInterpreter := true
 }
+
+lean_exe examples_proof {
+  root := `Examples.Proof
+  -- Somehow solves the native symbol not found problem
+  supportInterpreter := true
+}

@@ -12,6 +12,7 @@ def option_expect (o: Option α) (error: String): Except String α :=
   | .some value => return value
   | .none => throw error
 
+
 structure State where
   environments: Array Lean.Environment
 
@@ -26,48 +27,7 @@ structure Command where
   payload: Lean.Json
   deriving Lean.FromJson
 
-namespace Commands
-
-def create (args: Create): Subroutine CreateResult := do
-  let state ← get
-  let id := nextId state
-  let env ← Lean.importModules
-    (imports := args.imports.map strTransform)
-    (opts := {})
-    (trustLevel := 1)
-  modify fun s => { environments := s.environments.push env }
-  let num_filtered_symbols := env.constants.fold (init := 0) (λ acc name info =>
-    acc + if is_symbol_unsafe_or_internal name info then 0 else 1)
-  return {
-    id := id,
-    symbols := env.constants.size,
-    filtered_symbols := num_filtered_symbols }
-  where strTransform (s: String): Lean.Import :=
-      let li := s.split (λ c => c == '.')
-      let name := li.foldl (λ pre segment => Lean.Name.str pre segment) Lean.Name.anonymous
-      { module := name, runtimeOnly := false }
-
-def catalog (args: Catalog): Subroutine CatalogResult := do
-  let state ← get
-  match state.environments.get? args.id with
-  | .some env =>
-    let names := env.constants.fold (init := []) (λ es name info =>
-      match to_filtered_symbol name info with
-      | .some x => x::es
-      | .none => es)
-    return { theorems := names }
-  | .none => throw s!"Invalid environment id {args.id}"
-
-unsafe def clear: Subroutine ClearResult := do
-  let state ← get
-  for env in state.environments do
-    env.freeRegions
-  return { n := state.environments.size }
-
-end Commands
-end Pantograph
-
-open Pantograph
+open Commands
 
 unsafe def execute (command: String): ExceptT String (T IO) Lean.Json := do
   let obj ← Lean.Json.parse command
@@ -75,17 +35,62 @@ unsafe def execute (command: String): ExceptT String (T IO) Lean.Json := do
   match command.cmd with
   | "create" =>
     let args: Commands.Create ← Lean.fromJson? command.payload
-    let ret ← Commands.create args
+    let ret ← create args
     return Lean.toJson ret
   | "catalog" =>
     let args: Commands.Catalog ← Lean.fromJson? command.payload
-    let ret ← Commands.catalog args
+    let ret ← catalog args
     return Lean.toJson ret
   | "clear" =>
     -- Delete all the environments
-    let ret ← Commands.clear
+    let ret ← clear
+    return Lean.toJson ret
+  | "proof.trace" =>
+    let args: Commands.ProofTrace ← Lean.fromJson? command.payload
+    let ret ← proof_trace args
     return Lean.toJson ret
   | cmd => throw s!"Unknown verb: {cmd}"
+  where
+  create (args: Create): Subroutine CreateResult := do
+    let state ← get
+    let id := nextId state
+    let env ← Lean.importModules
+      (imports := args.imports.map (λ str => { module := strToName str, runtimeOnly := false }))
+      (opts := {})
+      (trustLevel := 1)
+    modify fun s => { environments := s.environments.push env }
+    let num_filtered_symbols := env.constants.fold (init := 0) (λ acc name info =>
+      acc + if is_symbol_unsafe_or_internal name info then 0 else 1)
+    return {
+      id := id,
+      symbols := env.constants.size,
+      filtered_symbols := num_filtered_symbols }
+  catalog (args: Catalog): Subroutine CatalogResult := do
+    let state ← get
+    match state.environments.get? args.id with
+    | .some env =>
+      let names := env.constants.fold (init := []) (λ es name info =>
+        match to_filtered_symbol name info with
+        | .some x => x::es
+        | .none => es)
+      return { theorems := names }
+    | .none => throw s!"Invalid environment id {args.id}"
+  clear: Subroutine ClearResult := do
+    let state ← get
+    for env in state.environments do
+      env.freeRegions
+    return { n := state.environments.size }
+  proof_trace (args: ProofTrace): Subroutine ProofTraceResult := do
+    -- Step 1: Create tactic state
+    -- Step 2: Execute tactic
+    -- Step 3: ??
+    return { expr := "test" }
+
+
+end Pantograph
+
+open Pantograph
+
 
 
 -- Main IO functions

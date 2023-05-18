@@ -5,6 +5,9 @@ import Lean.Declaration
 
 namespace Pantograph
 
+def strToName (s: String): Lean.Name :=
+  (s.splitOn ".").foldl Lean.Name.str Lean.Name.anonymous
+
 def is_symbol_unsafe_or_internal (n: Lean.Name) (info: Lean.ConstantInfo): Bool :=
   let nameDeduce: Bool := match n.getRoot with
   | .str _ name => name.startsWith "_" ∨ name == "Lean"
