@@ -23,3 +23,9 @@ lean_exe examples_proof {
   -- Somehow solves the native symbol not found problem
   supportInterpreter := true
 }
+
+lean_exe examples_expr_io {
+  root := `Examples.ExprIO
+  -- Somehow solves the native symbol not found problem
+  supportInterpreter := true
+}

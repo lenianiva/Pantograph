@@ -19,19 +19,26 @@ lake build mathlib
 
 ## Usage
 
-The binary must be run inside a `lake env` environment.
+The binary must be run inside a `lake env` environment. i.e. `lake env
+build/bin/pantograph`. The REPL loop accepts commands and outputs either an
+`Error:` (indicating malformed command) or a json return value indicating the
+result of a command execution. The command can be passed in one of two formats
+```
+command { ... }
+{ "cmd": command, "payload": ... }
+```
 
 Example: (~5k symbols)
 ```
 $ lake env build/bin/Pantograph
-{"cmd": "create", "payload": {"imports": ["Init"]}}
-{"cmd": "catalog", "payload": {"id": 0}}
+create {"imports": ["Init"]}
+catalog {"id": 0}
 ```
 Example with `mathlib` (~90k symbols)
 ```
 $ lake env build/bin/Pantograph
-{"cmd": "create", "payload": {"imports": ["Mathlib.Analysis.Seminorm"]}}
-{"cmd": "catalog", "payload": {"id": 0}}
+create {"imports": ["Mathlib.Analysis.Seminorm"]}
+catalog {"id": 0}
 ```
 
 

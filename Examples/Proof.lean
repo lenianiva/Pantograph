@@ -17,9 +17,9 @@ def execute_proof (env: Lean.Environment): IO Unit := do
     let tactic := "intro n m"
     let (state, response) ← execute_tactic state tactic
     IO.println s! "Executed {tactic}  Errors: {response.errors}  Goals: {response.goals}"
-    --let tactic := "assumption" -- should fail
-    --let (_, response) ← execute_tactic state tactic
-    --IO.println s! "Executed {tactic}  Errors: {response.errors}  Goals: {response.goals}"
+    let tactic := "assumption" -- should fail
+    let (_, response) ← execute_tactic state tactic
+    IO.println s! "Executed {tactic}  Errors: {response.errors}  Goals: {response.goals}"
     let tactic := "rw [Nat.add_comm]"
     let (state, response) ← execute_tactic state tactic
     IO.println s! "Executed {tactic}  Errors: {response.errors}  Goals: {response.goals}"
@@ -34,7 +34,3 @@ unsafe def main : IO Unit := do
     (opts := {})
     (trustLevel := 1)
   execute_proof env
-
-example : ∀ (n m : Nat), n + m = m + n := by
-  intros n m
-  rw [Nat.add_comm]

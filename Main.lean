@@ -12,6 +12,27 @@ def option_expect (o: Option α) (error: String): Except String α :=
   | .some value => return value
   | .none => throw error
 
+structure Command where
+  cmd: String
+  payload: Lean.Json
+  deriving Lean.FromJson
+
+
+/-- Parse a command either in `{ "cmd": ..., "payload": ... }` form or `cmd { ... }` form. -/
+def parse_command (s: String): Except String Command := do
+  let s := s.trim
+  match s.get? 0 with
+  | .some '{' => -- Parse in Json mode
+    Lean.fromJson? (← Lean.Json.parse s)
+  | .some _ => -- Parse in line mode
+    let offset := s.posOf ' ' |> s.offsetOfPos
+    if offset = s.length then
+      return { cmd := s.take offset, payload := Lean.Json.null }
+    else
+      let payload ← s.drop offset |> Lean.Json.parse
+      return { cmd := s.take offset, payload := payload }
+  | .none => throw "Command is empty"
+
 
 structure State where
   environments: Array Lean.Environment
@@ -22,16 +43,10 @@ abbrev Subroutine α := ExceptT String (T IO) α
 
 def nextId (s: State): Nat := s.environments.size
 
-structure Command where
-  cmd: String
-  payload: Lean.Json
-  deriving Lean.FromJson
-
 open Commands
 
 unsafe def execute (command: String): ExceptT String (T IO) Lean.Json := do
-  let obj ← Lean.Json.parse command
-  let command: Command ← Lean.fromJson? obj
+  let command: Command ← parse_command command
   match command.cmd with
   | "create" =>
     let args: Commands.Create ← Lean.fromJson? command.payload
