@@ -4,7 +4,7 @@ import Lean.Data.Json
 namespace Pantograph.Commands
 
 structure Create where
-  imports : List String
+  imports : List String  := []
   deriving Lean.FromJson
 structure CreateResult where
   id: Nat
@@ -21,6 +21,14 @@ structure CatalogResult where
 
 structure ClearResult where
   n: Nat -- Number of environments reset
+  deriving Lean.ToJson
+
+structure Inspect where
+  id: Nat -- Environment id
+  symbol: String
+  deriving Lean.FromJson
+structure InspectResult where
+  type: String
   deriving Lean.ToJson
 
 structure ProofTrace where

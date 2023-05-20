@@ -2,9 +2,26 @@ import Lean.Data.Json
 import Lean.Environment
 
 import Pantograph.Commands
+import Pantograph.IO
 import Pantograph.Symbols
 
 namespace Pantograph
+
+/-- Stores state of the REPL -/
+structure State where
+  environments: Array Lean.Environment
+
+-- State monad
+abbrev T (m: Type → Type) := StateT State m
+abbrev Subroutine α := ExceptT String (T IO) α
+
+def nextId (s: State): Nat := s.environments.size
+
+def State.getEnv (state: State) (id: Nat): Except String Lean.Environment :=
+  match state.environments.get? id with
+  | .some env => return env
+  | .none => throw s!"Invalid environment id {id}"
+
 
 -- Utilities
 def option_expect (o: Option α) (error: String): Except String α :=
@@ -16,7 +33,6 @@ structure Command where
   cmd: String
   payload: Lean.Json
   deriving Lean.FromJson
-
 
 /-- Parse a command either in `{ "cmd": ..., "payload": ... }` form or `cmd { ... }` form. -/
 def parse_command (s: String): Except String Command := do
@@ -34,14 +50,6 @@ def parse_command (s: String): Except String Command := do
   | .none => throw "Command is empty"
 
 
-structure State where
-  environments: Array Lean.Environment
-
--- State monad
-abbrev T (m: Type → Type) := StateT State m
-abbrev Subroutine α := ExceptT String (T IO) α
-
-def nextId (s: State): Nat := s.environments.size
 
 open Commands
 
@@ -59,6 +67,10 @@ unsafe def execute (command: String): ExceptT String (T IO) Lean.Json := do
   | "clear" =>
     -- Delete all the environments
     let ret ← clear
+    return Lean.toJson ret
+  | "inspect" =>
+    let args: Commands.Inspect ← Lean.fromJson? command.payload
+    let ret ← inspect args
     return Lean.toJson ret
   | "proof.trace" =>
     let args: Commands.ProofTrace ← Lean.fromJson? command.payload
@@ -82,19 +94,27 @@ unsafe def execute (command: String): ExceptT String (T IO) Lean.Json := do
       filtered_symbols := num_filtered_symbols }
   catalog (args: Catalog): Subroutine CatalogResult := do
     let state ← get
-    match state.environments.get? args.id with
-    | .some env =>
-      let names := env.constants.fold (init := []) (λ es name info =>
-        match to_filtered_symbol name info with
-        | .some x => x::es
-        | .none => es)
-      return { theorems := names }
-    | .none => throw s!"Invalid environment id {args.id}"
+    let env ← state.getEnv args.id
+    let names := env.constants.fold (init := []) (λ es name info =>
+      match to_filtered_symbol name info with
+      | .some x => x::es
+      | .none => es)
+    return { theorems := names }
   clear: Subroutine ClearResult := do
     let state ← get
     for env in state.environments do
       env.freeRegions
     return { n := state.environments.size }
+  inspect (args: Inspect): Subroutine InspectResult := do
+    let state ← get
+    let env ← state.getEnv args.id
+    let info? := env.find? <| strToName args.symbol
+    let info ← match info? with
+      | none => throw s!"Symbol not found: {args.symbol}"
+      | some info => pure info.toConstantVal
+    -- Now print the type expression
+    let format := IO.exprToStr env info.type
+    return { type := format }
   proof_trace (args: ProofTrace): Subroutine ProofTraceResult := do
     -- Step 1: Create tactic state
     -- Step 2: Execute tactic

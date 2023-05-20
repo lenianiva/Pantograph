@@ -27,6 +27,7 @@ result of a command execution. The command can be passed in one of two formats
 command { ... }
 { "cmd": command, "payload": ... }
 ```
+The list of available commands can be found in `Pantograph/Commands.lean`
 
 Example: (~5k symbols)
 ```
