@@ -27,13 +27,15 @@ result of a command execution. The command can be passed in one of two formats
 command { ... }
 { "cmd": command, "payload": ... }
 ```
-The list of available commands can be found in `Pantograph/Commands.lean`
+The list of available commands can be found in `Pantograph/Commands.lean`. An
+empty command aborts the REPL.
 
 Example: (~5k symbols)
 ```
 $ lake env build/bin/Pantograph
 create {"imports": ["Init"]}
 catalog {"id": 0}
+inspect {"id": 0, "symbol": "Nat.le_add_left"}
 ```
 Example with `mathlib` (~90k symbols)
 ```

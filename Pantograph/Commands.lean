@@ -3,6 +3,20 @@ import Lean.Data.Json
 
 namespace Pantograph.Commands
 
+structure Command where
+  cmd: String
+  payload: Lean.Json
+  deriving Lean.FromJson
+
+structure InteractionError where
+  error: String
+  desc: String
+  deriving Lean.ToJson
+
+
+-- Individual command and return types
+
+-- Create a new environment using the given imports
 structure Create where
   imports : List String  := []
   deriving Lean.FromJson
@@ -12,6 +26,7 @@ structure CreateResult where
   filtered_symbols: Nat
   deriving Lean.ToJson
 
+-- Print all symbols in environment
 structure Catalog where
   id: Nat
   deriving Lean.FromJson
@@ -19,16 +34,18 @@ structure CatalogResult where
   theorems: List String
   deriving Lean.ToJson
 
+-- Reset the state of REPL
 structure ClearResult where
-  n: Nat -- Number of environments reset
+  nEnv: Nat   -- Number of environments reset
   deriving Lean.ToJson
 
+-- Print the type of a symbol
 structure Inspect where
   id: Nat -- Environment id
   symbol: String
   deriving Lean.FromJson
 structure InspectResult where
-  type: String
+  type: String  := ""
   deriving Lean.ToJson
 
 structure ProofTrace where

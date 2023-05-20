@@ -7,13 +7,16 @@ import Pantograph.Symbols
 
 namespace Pantograph
 
+
+structure Context where
+  coreContext: Lean.Core.Context
+
 /-- Stores state of the REPL -/
 structure State where
-  environments: Array Lean.Environment
+  environments: Array Lean.Environment := #[]
 
 -- State monad
-abbrev T (m: Type → Type) := StateT State m
-abbrev Subroutine α := ExceptT String (T IO) α
+abbrev Subroutine := ReaderT Context (StateT State IO)
 
 def nextId (s: State): Nat := s.environments.size
 
@@ -29,10 +32,8 @@ def option_expect (o: Option α) (error: String): Except String α :=
   | .some value => return value
   | .none => throw error
 
-structure Command where
-  cmd: String
-  payload: Lean.Json
-  deriving Lean.FromJson
+
+open Commands
 
 /-- Parse a command either in `{ "cmd": ..., "payload": ... }` form or `cmd { ... }` form. -/
 def parse_command (s: String): Except String Command := do
@@ -51,34 +52,35 @@ def parse_command (s: String): Except String Command := do
 
 
 
-open Commands
-
-unsafe def execute (command: String): ExceptT String (T IO) Lean.Json := do
-  let command: Command ← parse_command command
+unsafe def execute (command: Command): Subroutine Lean.Json := do
   match command.cmd with
   | "create" =>
-    let args: Commands.Create ← Lean.fromJson? command.payload
-    let ret ← create args
-    return Lean.toJson ret
+    match Lean.fromJson? command.payload with
+    | .ok args => create args
+    | .error x => return errorJson x
   | "catalog" =>
-    let args: Commands.Catalog ← Lean.fromJson? command.payload
-    let ret ← catalog args
-    return Lean.toJson ret
+    match Lean.fromJson? command.payload with
+    | .ok args => catalog args
+    | .error x => return errorJson x
   | "clear" =>
     -- Delete all the environments
     let ret ← clear
     return Lean.toJson ret
   | "inspect" =>
-    let args: Commands.Inspect ← Lean.fromJson? command.payload
-    let ret ← inspect args
-    return Lean.toJson ret
+    match Lean.fromJson? command.payload with
+    | .ok args => inspect args
+    | .error x => return errorJson x
   | "proof.trace" =>
-    let args: Commands.ProofTrace ← Lean.fromJson? command.payload
-    let ret ← proof_trace args
-    return Lean.toJson ret
-  | cmd => throw s!"Unknown verb: {cmd}"
+    match Lean.fromJson? command.payload with
+    | .ok args => proof_trace args
+    | .error x => return errorJson x
+  | cmd =>
+    let error: InteractionError := { error := "unknown", desc := s!"Unknown command {cmd}" }
+      return Lean.toJson error
   where
-  create (args: Create): Subroutine CreateResult := do
+  errorJson (s: String) := Lean.toJson ({ error := "json", desc := s }: InteractionError)
+  errorIndex (s: String) := Lean.toJson ({ error := "index", desc := s }: InteractionError)
+  create (args: Create): Subroutine Lean.Json := do
     let state ← get
     let id := nextId state
     let env ← Lean.importModules
@@ -88,38 +90,47 @@ unsafe def execute (command: String): ExceptT String (T IO) Lean.Json := do
     modify fun s => { environments := s.environments.push env }
     let num_filtered_symbols := env.constants.fold (init := 0) (λ acc name info =>
       acc + if is_symbol_unsafe_or_internal name info then 0 else 1)
-    return {
+    return Lean.toJson ({
       id := id,
       symbols := env.constants.size,
-      filtered_symbols := num_filtered_symbols }
-  catalog (args: Catalog): Subroutine CatalogResult := do
+      filtered_symbols := num_filtered_symbols }: CreateResult)
+  catalog (args: Catalog): Subroutine Lean.Json := do
     let state ← get
-    let env ← state.getEnv args.id
-    let names := env.constants.fold (init := []) (λ es name info =>
-      match to_filtered_symbol name info with
-      | .some x => x::es
-      | .none => es)
-    return { theorems := names }
-  clear: Subroutine ClearResult := do
+    match state.getEnv args.id with
+    | .error error => return Lean.toJson <| errorIndex error
+    | .ok env =>
+      let names := env.constants.fold (init := []) (λ es name info =>
+        match to_filtered_symbol name info with
+        | .some x => x::es
+        | .none => es)
+      return Lean.toJson <| ({ theorems := names }: CatalogResult)
+  clear: Subroutine Lean.Json := do
     let state ← get
+    let nEnv := state.environments.size
     for env in state.environments do
       env.freeRegions
-    return { n := state.environments.size }
-  inspect (args: Inspect): Subroutine InspectResult := do
+    set { state with environments := #[] }
+    return Lean.toJson ({ nEnv := nEnv }: ClearResult)
+  inspect (args: Inspect): Subroutine Lean.Json := do
+    let context ← read
     let state ← get
-    let env ← state.getEnv args.id
-    let info? := env.find? <| strToName args.symbol
-    let info ← match info? with
-      | none => throw s!"Symbol not found: {args.symbol}"
-      | some info => pure info.toConstantVal
-    -- Now print the type expression
-    let format := IO.exprToStr env info.type
-    return { type := format }
-  proof_trace (args: ProofTrace): Subroutine ProofTraceResult := do
+    match state.getEnv args.id with
+    | .error error => return Lean.toJson <| errorIndex error
+    | .ok env =>
+      let info? := env.find? <| strToName args.symbol
+      match info? with
+      | none => return Lean.toJson <| errorIndex s!"Symbol not found {args.symbol}"
+      | some info =>
+        let format ← IO.exprToStr
+          (env := env)
+          (coreContext := context.coreContext)
+          (expr := info.toConstantVal.type)
+        return Lean.toJson ({ type := format }: InspectResult)
+  proof_trace (args: ProofTrace): Subroutine Lean.Json := do
     -- Step 1: Create tactic state
     -- Step 2: Execute tactic
     -- Step 3: ??
-    return { expr := "test" }
+    return Lean.toJson ({ expr := "test" }: ProofTraceResult)
 
 
 end Pantograph
@@ -136,16 +147,26 @@ unsafe def getLines : IO String := do
   | "\n" => pure "\n"
   | line => pure <| line ++ (← getLines)
 
-unsafe def loop : T IO Unit := do
-  let command ← getLines
-  if command == "" then return ()
-  let ret ← execute command
-  match ret with
-  | .error e => IO.println s!"Error: {e}"
-  | .ok obj => IO.println <| toString <| obj
+unsafe def loop : Subroutine Unit := do
+  let command ← (← IO.getStdin).getLine
+  match parse_command command with
+  | .error _ =>
+    -- Halt execution if command is empty
+    return ()
+  | .ok command =>
+    let ret ← execute command
+    IO.println <| toString <| ret
   loop
 
 unsafe def main : IO Unit := do
   Lean.enableInitializersExecution
   Lean.initSearchPath (← Lean.findSysroot)
-  StateT.run' loop ⟨#[]⟩
+  let context: Context := {
+    coreContext := {
+      currNamespace := strToName "Aniva",
+      openDecls := [],     -- No 'open' directives needed
+      fileName := "<Pantograph>",
+      fileMap := { source := "", positions := #[0], lines := #[1] }
+    }
+  }
+  loop.run context |>.run' {}
