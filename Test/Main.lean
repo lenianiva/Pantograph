@@ -1,8 +1,17 @@
 import LSpec
 import Pantograph.Symbols
+import Test.Proofs
+import Test.Serial
 
-open Pantograph
+open Pantograph.Test
 
-def main := do
-  LSpec.lspecIO $
-    LSpec.test "Symbol parsing" (Lean.Name.str (.str (.str .anonymous "Lean") "Meta") "run" = Pantograph.str_to_name "Lean.Meta.run")
+unsafe def main := do
+  Lean.enableInitializersExecution
+  Lean.initSearchPath (← Lean.findSysroot)
+
+  let suites := [
+    test_serial,
+    test_proofs
+  ]
+  let all ← suites.foldlM (λ acc m => do pure $ acc ++ (← m)) LSpec.TestSeq.done
+  LSpec.lspecIO $ all

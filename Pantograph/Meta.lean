@@ -109,15 +109,17 @@ def execute_tactic (env: Lean.Environment) (state: Lean.Elab.Tactic.SavedState) 
     | .none => return .error #[s!"Invalid goalId {goalId}"]
     | .some mvarId =>
       try
+        Lean.Elab.Term.synthesizeSyntheticMVarsNoPostponing
         let unsolvedGoals ← Lean.Elab.Tactic.run mvarId tac
         if (← getThe Lean.Core.State).messages.hasErrors then
           let messages := (← getThe Lean.Core.State).messages.getErrorMessages |>.toList.toArray
           let errors ← (messages.map Lean.Message.data).mapM fun md => md.toString
           return .error errors
         else
+          unsolvedGoals.forM Lean.instantiateMVarDeclMVars
           let nextState : Lean.Elab.Tactic.SavedState := {
             term := (← Lean.Elab.Term.saveState),
-            tactic := { goals := unsolvedGoals}
+            tactic := { goals := unsolvedGoals }
           }
           return .ok nextState
       catch ex =>
@@ -134,7 +136,7 @@ inductive TacticResult where
   -- Invalid id
   | invalid (message: String): TacticResult
   -- Goes to next state
-  | success (nextId: Nat) (goals: Array String)
+  | success (nextId: Option Nat) (goals: Array String)
   -- Fails with messages
   | failure (messages: Array String)
 
@@ -153,7 +155,7 @@ def ProofM.execute (stateId: Nat) (goalId: Nat) (tactic: String): ProofM TacticR
       let goals ← ProofM.runTermElabM' <| extract_goals nextState
 
       if goals.size = 0 then
-        return .success 0 #[]
+        return .success .none #[]
       else
         -- Create next proof state node
         let proofState: ProofState := {
@@ -163,7 +165,7 @@ def ProofM.execute (stateId: Nat) (goalId: Nat) (tactic: String): ProofM TacticR
         }
         modify fun s => { s with states := s.states.push proofState }
 
-        return .success nextId goals
+        return .success (.some nextId) goals
 
 
 end Pantograph.Meta

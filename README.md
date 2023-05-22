@@ -57,6 +57,15 @@ proof.printTree {"treeId": 0}
 ```
 where the application of `assumption` should lead to a failure.
 
+```
+create {"imports": ["Init"]}
+proof.start {"id": 0, "expr": "∀ (p q: Prop), p ∨ q → q ∨ p"}
+proof.tactic {"treeId": 0, "stateId": 0, "goalId": 0, "tactic": "intro p q h"}
+proof.tactic {"treeId": 0, "stateId": 1, "goalId": 0, "tactic": "cases h"}
+proof.tactic {"treeId": 0, "stateId": 2, "goalId": 0, "tactic": "apply Or.inr"}
+proof.tactic {"treeId": 0, "stateId": 2, "goalId": 0, "tactic": "apply Or.inl"}
+```
+
 ## Troubleshooting
 
 If lean encounters stack overflow problems when printing catalog, execute this before running lean:
@@ -64,3 +73,12 @@ If lean encounters stack overflow problems when printing catalog, execute this b
 ulimit -s unlimited
 ```
 Due to a current bug in Lean (which existed in Lean 3), [the default value of structures are not honoured when parsing Json's](https://github.com/leanprover/lean4/issues/2225).
+
+
+## Testing
+
+The tests are based on `LSpec`. To run tests,
+``` sh
+test/all.sh
+```
+

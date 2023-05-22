@@ -210,10 +210,11 @@ open Pantograph
 
 unsafe def loop : Subroutine Unit := do
   let command ← (← IO.getStdin).getLine
+  if command.trim.length = 0 then return ()
   match parse_command command with
-  | .error _ =>
-    -- Halt execution if command is empty
-    return ()
+  | .error error =>
+    let error  := Lean.toJson ({ error := "json", desc := error }: Commands.InteractionError)
+    IO.println (toString error)
   | .ok command =>
     let ret ← execute command
     IO.println <| toString <| ret
