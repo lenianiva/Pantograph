@@ -120,7 +120,7 @@ def proof_or_comm: IO LSpec.TestSeq := do
   ]
 
 def test_proofs : IO LSpec.TestSeq := do
-  return LSpec.group "proofs" $
+  return LSpec.group "Proofs" $
     (LSpec.group "Nat.add_comm" $ (← proof_nat_add_comm)) ++
     (LSpec.group "Nat.add_comm manual" $ (← proof_nat_add_comm_manual)) ++
     (LSpec.group "Or.comm" $ (← proof_or_comm))

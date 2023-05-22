@@ -20,8 +20,6 @@ structure State where
 -- State monad
 abbrev Subroutine := ReaderT Context (StateT State IO)
 
-def nextId (s: State): Nat := s.environments.size
-
 def State.getEnv (state: State) (id: Nat): Except String Lean.Environment :=
   match state.environments.get? id with
   | .some env => return env
@@ -92,7 +90,7 @@ unsafe def execute (command: Command): Subroutine Lean.Json := do
   errorIndex (s: String) := Lean.toJson ({ error := "index", desc := s }: InteractionError)
   create (args: Create): Subroutine Lean.Json := do
     let state ← get
-    let id := nextId state
+    let id := state.environments.size
     let env ← Lean.importModules
       (imports := args.imports.map (λ str => { module := str_to_name str, runtimeOnly := false }))
       (opts := {})
@@ -172,9 +170,9 @@ unsafe def execute (command: Command): Subroutine Lean.Json := do
     | .error error => return error
     | .ok tree =>
       -- Put the new tree in the environment
-      let nextId := state.proofTrees.size
+      let nextTreeId := state.proofTrees.size
       set { state with proofTrees := state.proofTrees.push tree }
-      return Lean.toJson ({ treeId := nextId }: ProofStartResult)
+      return Lean.toJson ({ treeId := nextTreeId }: ProofStartResult)
   proof_tactic (args: ProofTactic): Subroutine Lean.Json := do
     let state ← get
     match state.proofTrees.get? args.treeId with
@@ -186,9 +184,9 @@ unsafe def execute (command: Command): Subroutine Lean.Json := do
         (tactic := args.tactic) |>.run tree
       match result with
       | .invalid message => return Lean.toJson <| errorIndex message
-      | .success nextId goals =>
+      | .success nextId? goals =>
         set { state with proofTrees := state.proofTrees.set! args.treeId nextTree }
-        return Lean.toJson ({ nextId := nextId, goals := goals }: ProofTacticResultSuccess)
+        return Lean.toJson ({ nextId? := nextId?, goals := goals }: ProofTacticResultSuccess)
       | .failure messages =>
         return Lean.toJson ({ errorMessages := messages }: ProofTacticResultFailure)
   proof_print_tree (args: ProofPrintTree): Subroutine Lean.Json := do

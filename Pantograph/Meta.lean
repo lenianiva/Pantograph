@@ -136,7 +136,7 @@ inductive TacticResult where
   -- Invalid id
   | invalid (message: String): TacticResult
   -- Goes to next state
-  | success (nextId: Option Nat) (goals: Array String)
+  | success (nextId?: Option Nat) (goals: Array String)
   -- Fails with messages
   | failure (messages: Array String)
 
