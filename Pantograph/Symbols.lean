@@ -5,7 +5,7 @@ import Lean.Declaration
 
 namespace Pantograph
 
-def strToName (s: String): Lean.Name :=
+def str_to_name (s: String): Lean.Name :=
   (s.splitOn ".").foldl Lean.Name.str Lean.Name.anonymous
 
 def is_symbol_unsafe_or_internal (n: Lean.Name) (info: Lean.ConstantInfo): Bool :=

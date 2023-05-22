@@ -1,7 +1,6 @@
 import Lake
 open Lake DSL
 
-
 package pantograph
 
 require mathlib from git
@@ -20,12 +19,6 @@ lean_exe pantograph {
 
 lean_exe examples_proof {
   root := `Examples.Proof
-  -- Somehow solves the native symbol not found problem
-  supportInterpreter := true
-}
-
-lean_exe examples_expr_io {
-  root := `Examples.ExprIO
   -- Somehow solves the native symbol not found problem
   supportInterpreter := true
 }
