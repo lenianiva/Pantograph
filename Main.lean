@@ -125,7 +125,8 @@ unsafe def execute (command: Command): Subroutine Lean.Json := do
     match state.getEnv args.id with
     | .error error => return Lean.toJson <| errorIndex error
     | .ok env =>
-      let info? := env.find? <| str_to_name args.symbol
+      let name := str_to_name args.symbol
+      let info? := env.find? name
       match info? with
       | none => return Lean.toJson <| errorIndex s!"Symbol not found {args.symbol}"
       | some info =>
@@ -133,7 +134,12 @@ unsafe def execute (command: Command): Subroutine Lean.Json := do
           (env := env)
           (coreContext := context.coreContext)
           (expr := info.toConstantVal.type)
-        return Lean.toJson ({ type := format }: InspectResult)
+        let module? := env.getModuleIdxFor? name >>=
+          (λ idx => env.allImportedModuleNames.get? idx.toNat) |>.map toString
+        return Lean.toJson ({
+          type := format,
+          module? := module?
+        }: InspectResult)
   proof_start (args: ProofStart): Subroutine Lean.Json := do
     let context ← read
     let state ← get

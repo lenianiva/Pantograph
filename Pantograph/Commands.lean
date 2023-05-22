@@ -45,7 +45,8 @@ structure Inspect where
   symbol: String
   deriving Lean.FromJson
 structure InspectResult where
-  type: String  := ""
+  type: String
+  module?: Option String
   deriving Lean.ToJson
 
 structure ProofStart where
