@@ -144,13 +144,13 @@ unsafe def execute (command: Command): Subroutine Lean.Json := do
         | .error error => throw <| Lean.toJson <| errorIndex error
         | .ok env => pure env
       let tree := Meta.createProofTree
-        (name := args.name)
+        (name := args.name.getD "Untitled")
         (env := env)
         (coreContext := context.coreContext)
       let expr: Lean.Expr ← match args.expr, args.copyFrom with
-        | "", "" =>
+        | .none, .none =>
           throw <| Lean.toJson ({ error := "arguments", desc := "At least one of {expr, copyFrom} must be supplied" }: InteractionError)
-        | expr, "" =>
+        | .some expr, .none =>
           let syn ← match Serial.syntax_from_str env expr with
             | .error str => throw <| Lean.toJson ({ error := "parsing", desc := str }: InteractionError)
             | .ok syn => pure syn
@@ -158,7 +158,7 @@ unsafe def execute (command: Command): Subroutine Lean.Json := do
             | .error str => throw <| Lean.toJson ({ error := "elab", desc := str }: InteractionError)
             | .ok expr => pure expr
           pure expr
-        | "", copyFrom =>
+        | .none, .some copyFrom =>
           match Serial.expr_from_const env (name := str_to_name copyFrom) with
           | .error str =>
             IO.println "Symbol not found"
@@ -180,7 +180,10 @@ unsafe def execute (command: Command): Subroutine Lean.Json := do
     match state.proofTrees.get? args.treeId with
     | .none => return Lean.toJson <| errorIndex "Invalid tree index {args.treeId}"
     | .some tree =>
-      let (result, nextTree) ← Meta.ProofM.execute args.stateId args.goalId args.tactic |>.run tree
+      let (result, nextTree) ← Meta.ProofM.execute
+        (stateId := args.stateId)
+        (goalId := args.goalId.getD 0)
+        (tactic := args.tactic) |>.run tree
       match result with
       | .invalid message => return Lean.toJson <| errorIndex message
       | .success nextId goals =>

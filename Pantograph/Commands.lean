@@ -50,10 +50,10 @@ structure InspectResult where
 
 structure ProofStart where
   id: Nat -- Environment id
-  name: String := "Untitled" -- Identifier of the proof
+  name: Option String     -- Identifier of the proof
   -- Only one of the fields below may be populated.
-  expr: String := "" -- Proof expression
-  copyFrom: String := "" -- Theorem name
+  expr: Option String     -- Proof expression
+  copyFrom: Option String -- Theorem name
   deriving Lean.FromJson
 structure ProofStartResult where
   error: String := ""
@@ -63,7 +63,7 @@ structure ProofStartResult where
 structure ProofTactic where
   treeId: Nat
   stateId: Nat
-  goalId: Nat := 0
+  goalId: Option Nat     -- defaults to 0
   tactic: String
   deriving Lean.FromJson
 structure ProofTacticResultSuccess where

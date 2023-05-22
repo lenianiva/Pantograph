@@ -48,7 +48,7 @@ Example proving a theorem: (alternatively use `proof.start {"id": 0, "name": "aa
 ```
 $ lake env build/bin/Pantograph
 create {"imports": ["Init"]}
-proof.start {"id": 0, "name": "aa", "copyFrom": "", "expr": "∀ (n m : Nat), n + m = m + n"}
+proof.start {"id": 0, "expr": "∀ (n m : Nat), n + m = m + n"}
 proof.tactic {"treeId": 0, "stateId": 0, "goalId": 0, "tactic": "intro n m"}
 proof.tactic {"treeId": 0, "stateId": 1, "goalId": 0, "tactic": "assumption"}
 proof.printTree {"treeId": 0}
