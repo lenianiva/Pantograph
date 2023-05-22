@@ -17,6 +17,15 @@ lean_exe pantograph {
   supportInterpreter := true
 }
 
+require LSpec from git
+  "https://github.com/lurk-lab/LSpec.git" @ "88f7d23e56a061d32c7173cea5befa4b2c248b41"
+lean_exe test {
+  root := `Test.Main
+  -- Somehow solves the native symbol not found problem
+  supportInterpreter := true
+
+}
+
 lean_exe examples_proof {
   root := `Examples.Proof
   -- Somehow solves the native symbol not found problem

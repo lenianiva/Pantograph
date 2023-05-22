@@ -2,6 +2,12 @@
  "packagesDir": "lake-packages",
  "packages":
  [{"git":
+   {"url": "https://github.com/lurk-lab/LSpec.git",
+    "subDir?": null,
+    "rev": "88f7d23e56a061d32c7173cea5befa4b2c248b41",
+    "name": "LSpec",
+    "inputRev?": "88f7d23e56a061d32c7173cea5befa4b2c248b41"}},
+  {"git":
    {"url": "https://github.com/leanprover-community/mathlib4.git",
     "subDir?": null,
     "rev": "8e5a00a8afc8913c0584cb85f37951995275fd87",
