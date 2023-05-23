@@ -35,20 +35,20 @@ Example: (~5k symbols)
 ```
 $ lake env build/bin/Pantograph
 create {"imports": ["Init"]}
-catalog {"id": 0}
-inspect {"id": 0, "symbol": "Nat.le_add_left"}
+catalog {"envId": 0}
+inspect {"envId": 0, "name": "Nat.le_add_left"}
 ```
 Example with `mathlib` (~90k symbols)
 ```
 $ lake env build/bin/Pantograph
 create {"imports": ["Mathlib.Analysis.Seminorm"]}
-catalog {"id": 0}
+catalog {"envId": 0}
 ```
 Example proving a theorem: (alternatively use `proof.start {"id": 0, "name": "aa", "copyFrom": "Nat.add_comm", "expr": ""}`) to prime the proof
 ```
 $ lake env build/bin/Pantograph
 create {"imports": ["Init"]}
-proof.start {"id": 0, "expr": "∀ (n m : Nat), n + m = m + n"}
+proof.start {"envId": 0, "expr": "∀ (n m : Nat), n + m = m + n"}
 proof.tactic {"treeId": 0, "stateId": 0, "goalId": 0, "tactic": "intro n m"}
 proof.tactic {"treeId": 0, "stateId": 1, "goalId": 0, "tactic": "assumption"}
 proof.printTree {"treeId": 0}

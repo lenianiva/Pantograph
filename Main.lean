@@ -90,7 +90,7 @@ unsafe def execute (command: Command): Subroutine Lean.Json := do
   errorIndex (s: String) := Lean.toJson ({ error := "index", desc := s }: InteractionError)
   create (args: Create): Subroutine Lean.Json := do
     let state ← get
-    let id := state.environments.size
+    let envId := state.environments.size
     let env ← Lean.importModules
       (imports := args.imports.map (λ str => { module := str_to_name str, runtimeOnly := false }))
       (opts := {})
@@ -99,19 +99,19 @@ unsafe def execute (command: Command): Subroutine Lean.Json := do
     let num_filtered_symbols := env.constants.fold (init := 0) (λ acc name info =>
       acc + if is_symbol_unsafe_or_internal name info then 0 else 1)
     return Lean.toJson ({
-      id := id,
+      envId := envId,
       symbols := env.constants.size,
       filtered_symbols := num_filtered_symbols }: CreateResult)
   catalog (args: Catalog): Subroutine Lean.Json := do
     let state ← get
-    match state.getEnv args.id with
+    match state.getEnv args.envId with
     | .error error => return Lean.toJson <| errorIndex error
     | .ok env =>
       let names := env.constants.fold (init := []) (λ es name info =>
         match to_filtered_symbol name info with
         | .some x => x::es
         | .none => es)
-      return Lean.toJson <| ({ theorems := names }: CatalogResult)
+      return Lean.toJson <| ({ symbols := names }: CatalogResult)
   clear: Subroutine Lean.Json := do
     let state ← get
     let nEnv := state.environments.size
@@ -122,13 +122,13 @@ unsafe def execute (command: Command): Subroutine Lean.Json := do
   inspect (args: Inspect): Subroutine Lean.Json := do
     let context ← read
     let state ← get
-    match state.getEnv args.id with
+    match state.getEnv args.envId with
     | .error error => return Lean.toJson <| errorIndex error
     | .ok env =>
-      let name := str_to_name args.symbol
+      let name := str_to_name args.name
       let info? := env.find? name
       match info? with
-      | none => return Lean.toJson <| errorIndex s!"Symbol not found {args.symbol}"
+      | none => return Lean.toJson <| errorIndex s!"Symbol not found {args.name}"
       | some info =>
         let format ← Serial.expr_to_str
           (env := env)
@@ -144,7 +144,7 @@ unsafe def execute (command: Command): Subroutine Lean.Json := do
     let context ← read
     let state ← get
     let ret?: Except Lean.Json Meta.ProofTree ← ExceptT.run <| (do
-      let env ← match state.getEnv args.id with
+      let env ← match state.getEnv args.envId with
         | .error error => throw <| Lean.toJson <| errorIndex error
         | .ok env => pure env
       let tree := Meta.createProofTree
@@ -152,8 +152,6 @@ unsafe def execute (command: Command): Subroutine Lean.Json := do
         (env := env)
         (coreContext := context.coreContext)
       let expr: Lean.Expr ← match args.expr, args.copyFrom with
-        | .none, .none =>
-          throw <| Lean.toJson ({ error := "arguments", desc := "At least one of {expr, copyFrom} must be supplied" }: InteractionError)
         | .some expr, .none =>
           let syn ← match Serial.syntax_from_str env expr with
             | .error str => throw <| Lean.toJson ({ error := "parsing", desc := str }: InteractionError)
@@ -168,6 +166,8 @@ unsafe def execute (command: Command): Subroutine Lean.Json := do
             IO.println "Symbol not found"
             throw <| errorIndex str
           | .ok expr => pure expr
+        | .none, .none =>
+          throw <| Lean.toJson ({ error := "arguments", desc := "At least one of {expr, copyFrom} must be supplied" }: InteractionError)
         | _, _ => throw <| Lean.toJson ({ error := "arguments", desc := "Cannot populate both of {expr, copyFrom}" }: InteractionError)
       let (_, tree) := ← (Meta.ProofM.start expr |>.run tree)
       return tree
