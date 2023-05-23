@@ -16,32 +16,16 @@ structure InteractionError where
 
 -- Individual command and return types
 
--- Create a new environment using the given imports
-structure Create where
-  imports : List String  := []
-  deriving Lean.FromJson
-structure CreateResult where
-  envId: Nat
-  symbols: Nat
-  filtered_symbols: Nat
-  deriving Lean.ToJson
 
 -- Print all symbols in environment
 structure Catalog where
-  envId: Nat
   deriving Lean.FromJson
 structure CatalogResult where
   symbols: List String
   deriving Lean.ToJson
 
--- Reset the state of REPL
-structure ClearResult where
-  nEnv: Nat   -- Number of environments reset
-  deriving Lean.ToJson
-
 -- Print the type of a symbol
 structure Inspect where
-  envId: Nat -- Environment id
   name: String
   deriving Lean.FromJson
 structure InspectResult where
@@ -50,7 +34,6 @@ structure InspectResult where
   deriving Lean.ToJson
 
 structure ProofStart where
-  envId: Nat -- Environment id
   name: Option String     -- Identifier of the proof
   -- Only one of the fields below may be populated.
   expr: Option String     -- Proof expression

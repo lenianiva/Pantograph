@@ -31,24 +31,23 @@ command { ... }
 The list of available commands can be found in `Pantograph/Commands.lean`. An
 empty command aborts the REPL.
 
+The `Pantograph` executable must be run with a list of modules to import.
+
 Example: (~5k symbols)
 ```
-$ lake env build/bin/Pantograph
-create {"imports": ["Init"]}
-catalog {"envId": 0}
-inspect {"envId": 0, "name": "Nat.le_add_left"}
+$ lake env build/bin/Pantograph "Init"
+catalog
+inspect {"name": "Nat.le_add_left"}
 ```
 Example with `mathlib` (~90k symbols)
 ```
-$ lake env build/bin/Pantograph
-create {"imports": ["Mathlib.Analysis.Seminorm"]}
-catalog {"envId": 0}
+$ lake env build/bin/Pantograph "Mathlib.Analysis.Seminorm"
+catalog
 ```
-Example proving a theorem: (alternatively use `proof.start {"id": 0, "name": "aa", "copyFrom": "Nat.add_comm", "expr": ""}`) to prime the proof
+Example proving a theorem: (alternatively use `proof.start {"copyFrom": "Nat.add_comm"}`) to prime the proof
 ```
-$ lake env build/bin/Pantograph
-create {"imports": ["Init"]}
-proof.start {"envId": 0, "expr": "∀ (n m : Nat), n + m = m + n"}
+$ lake env build/bin/Pantograph "Init"
+proof.start {"expr": "∀ (n m : Nat), n + m = m + n"}
 proof.tactic {"treeId": 0, "stateId": 0, "goalId": 0, "tactic": "intro n m"}
 proof.tactic {"treeId": 0, "stateId": 1, "goalId": 0, "tactic": "assumption"}
 proof.printTree {"treeId": 0}
@@ -63,8 +62,6 @@ If lean encounters stack overflow problems when printing catalog, execute this b
 ```sh
 ulimit -s unlimited
 ```
-Due to a current bug in Lean (which existed in Lean 3), [the default value of structures are not honoured when parsing Json's](https://github.com/leanprover/lean4/issues/2225).
-
 
 ## Testing
 

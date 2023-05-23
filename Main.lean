@@ -10,28 +10,14 @@ namespace Pantograph
 
 
 structure Context where
-  coreContext: Lean.Core.Context
 
 /-- Stores state of the REPL -/
 structure State where
-  environments: Array Lean.Environment := #[]
+  --environments: Array Lean.Environment := #[]
   proofTrees:   Array Meta.ProofTree := #[]
 
 -- State monad
-abbrev Subroutine := ReaderT Context (StateT State IO)
-
-def State.getEnv (state: State) (id: Nat): Except String Lean.Environment :=
-  match state.environments.get? id with
-  | .some env => return env
-  | .none => throw s!"Invalid environment id {id}"
-
-
--- Utilities
-def option_expect (o: Option α) (error: String): Except String α :=
-  match o with
-  | .some value => return value
-  | .none => throw error
-
+abbrev Subroutine := ReaderT Context (StateT State Lean.Elab.TermElabM)
 
 open Commands
 
@@ -52,20 +38,12 @@ def parse_command (s: String): Except String Command := do
 
 
 
-unsafe def execute (command: Command): Subroutine Lean.Json := do
+def execute (command: Command): Subroutine Lean.Json := do
   match command.cmd with
-  | "create" =>
-    match Lean.fromJson? command.payload with
-    | .ok args => create args
-    | .error x => return errorJson x
   | "catalog" =>
     match Lean.fromJson? command.payload with
     | .ok args => catalog args
     | .error x => return errorJson x
-  | "clear" =>
-    -- Delete all the environments
-    let ret ← clear
-    return Lean.toJson ret
   | "inspect" =>
     match Lean.fromJson? command.payload with
     | .ok args => inspect args
@@ -88,93 +66,49 @@ unsafe def execute (command: Command): Subroutine Lean.Json := do
   where
   errorJson (s: String) := Lean.toJson ({ error := "json", desc := s }: InteractionError)
   errorIndex (s: String) := Lean.toJson ({ error := "index", desc := s }: InteractionError)
-  create (args: Create): Subroutine Lean.Json := do
-    let state ← get
-    let envId := state.environments.size
-    let env ← Lean.importModules
-      (imports := args.imports.map (λ str => { module := str_to_name str, runtimeOnly := false }))
-      (opts := {})
-      (trustLevel := 1)
-    modify fun s => { environments := s.environments.push env }
-    let num_filtered_symbols := env.constants.fold (init := 0) (λ acc name info =>
-      acc + if is_symbol_unsafe_or_internal name info then 0 else 1)
-    return Lean.toJson ({
-      envId := envId,
-      symbols := env.constants.size,
-      filtered_symbols := num_filtered_symbols }: CreateResult)
-  catalog (args: Catalog): Subroutine Lean.Json := do
-    let state ← get
-    match state.getEnv args.envId with
-    | .error error => return Lean.toJson <| errorIndex error
-    | .ok env =>
-      let names := env.constants.fold (init := []) (λ es name info =>
-        match to_filtered_symbol name info with
-        | .some x => x::es
-        | .none => es)
-      return Lean.toJson <| ({ symbols := names }: CatalogResult)
-  clear: Subroutine Lean.Json := do
-    let state ← get
-    let nEnv := state.environments.size
-    for env in state.environments do
-      env.freeRegions
-    set ({ }: State)
-    return Lean.toJson ({ nEnv := nEnv }: ClearResult)
+  catalog (_: Catalog): Subroutine Lean.Json := do
+    let env ← Lean.MonadEnv.getEnv
+    let names := env.constants.fold (init := []) (λ es name info =>
+      match to_filtered_symbol name info with
+      | .some x => x::es
+      | .none => es)
+    return Lean.toJson <| ({ symbols := names }: CatalogResult)
   inspect (args: Inspect): Subroutine Lean.Json := do
-    let context ← read
-    let state ← get
-    match state.getEnv args.envId with
-    | .error error => return Lean.toJson <| errorIndex error
-    | .ok env =>
-      let name := str_to_name args.name
-      let info? := env.find? name
-      match info? with
-      | none => return Lean.toJson <| errorIndex s!"Symbol not found {args.name}"
-      | some info =>
-        let format ← Serial.expr_to_str
-          (env := env)
-          (coreContext := context.coreContext)
-          (expr := info.toConstantVal.type)
-        let module? := env.getModuleIdxFor? name >>=
-          (λ idx => env.allImportedModuleNames.get? idx.toNat) |>.map toString
-        return Lean.toJson ({
-          type := format,
-          module? := module?
-        }: InspectResult)
+    let env ← Lean.MonadEnv.getEnv
+    let name := str_to_name args.name
+    let info? := env.find? name
+    match info? with
+    | none => return Lean.toJson <| errorIndex s!"Symbol not found {args.name}"
+    | some info =>
+      let format ← Lean.Meta.ppExpr info.toConstantVal.type
+      let module? := env.getModuleIdxFor? name >>=
+        (λ idx => env.allImportedModuleNames.get? idx.toNat) |>.map toString
+      return Lean.toJson ({
+        type := toString format,
+        module? := module?
+      }: InspectResult)
   proof_start (args: ProofStart): Subroutine Lean.Json := do
-    let context ← read
     let state ← get
-    let ret?: Except Lean.Json Meta.ProofTree ← ExceptT.run <| (do
-      let env ← match state.getEnv args.envId with
-        | .error error => throw <| Lean.toJson <| errorIndex error
-        | .ok env => pure env
-      let tree := Meta.createProofTree
-        (name := args.name.getD "Untitled")
-        (env := env)
-        (coreContext := context.coreContext)
-      let expr: Lean.Expr ← match args.expr, args.copyFrom with
-        | .some expr, .none =>
-          let syn ← match Serial.syntax_from_str env expr with
-            | .error str => throw <| Lean.toJson ({ error := "parsing", desc := str }: InteractionError)
-            | .ok syn => pure syn
-          let expr: Lean.Expr ← match (← Meta.ProofM.syntax_to_expr syn |>.run' tree) with
-            | .error str => throw <| Lean.toJson ({ error := "elab", desc := str }: InteractionError)
-            | .ok expr => pure expr
-          pure expr
-        | .none, .some copyFrom =>
-          match Serial.expr_from_const env (name := str_to_name copyFrom) with
-          | .error str =>
-            IO.println "Symbol not found"
-            throw <| errorIndex str
-          | .ok expr => pure expr
-        | .none, .none =>
-          throw <| Lean.toJson ({ error := "arguments", desc := "At least one of {expr, copyFrom} must be supplied" }: InteractionError)
-        | _, _ => throw <| Lean.toJson ({ error := "arguments", desc := "Cannot populate both of {expr, copyFrom}" }: InteractionError)
-      let (_, tree) := ← (Meta.ProofM.start expr |>.run tree)
-      return tree
-    )
-    match ret? with
+    let env ← Lean.MonadEnv.getEnv
+    let expr?: Except Lean.Json Lean.Expr ← (match args.expr, args.copyFrom with
+      | .some expr, .none =>
+        (match Serial.syntax_from_str env expr with
+        | .error str => return .error <| Lean.toJson ({ error := "parsing", desc := str }: InteractionError)
+        | .ok syn => do
+          (match (← Meta.syntax_to_expr syn) with
+          | .error str => return .error <| Lean.toJson ({ error := "elab", desc := str }: InteractionError)
+          | .ok expr => return .ok expr))
+      | .none, .some copyFrom =>
+        (match env.find? <| str_to_name copyFrom with
+        | .none => return .error <| errorIndex s!"Symbol not found: {copyFrom}"
+        | .some cInfo => return .ok cInfo.type)
+      | .none, .none =>
+        return .error <| Lean.toJson ({ error := "arguments", desc := "At least one of {expr, copyFrom} must be supplied" }: InteractionError)
+      | _, _ => return .error <| Lean.toJson ({ error := "arguments", desc := "Cannot populate both of {expr, copyFrom}" }: InteractionError))
+    match expr? with
     | .error error => return error
-    | .ok tree =>
+    | .ok expr =>
+      let tree ← Meta.ProofTree.create (str_to_name <| args.name.getD "Untitled") expr
       -- Put the new tree in the environment
       let nextTreeId := state.proofTrees.size
       set { state with proofTrees := state.proofTrees.push tree }
@@ -184,7 +118,7 @@ unsafe def execute (command: Command): Subroutine Lean.Json := do
     match state.proofTrees.get? args.treeId with
     | .none => return Lean.toJson <| errorIndex "Invalid tree index {args.treeId}"
     | .some tree =>
-      let (result, nextTree) ← Meta.ProofM.execute
+      let (result, nextTree) ← Meta.ProofTree.execute
         (stateId := args.stateId)
         (goalId := args.goalId.getD 0)
         (tactic := args.tactic) |>.run tree
@@ -221,19 +155,30 @@ unsafe def loop : Subroutine Unit := do
     IO.println <| toString <| ret
   loop
 
-unsafe def main : IO Unit := do
+unsafe def main (args: List String): IO Unit := do
   Lean.enableInitializersExecution
   Lean.initSearchPath (← Lean.findSysroot)
+
+  let env ← Lean.importModules
+    (imports := args.map (λ str => { module := str_to_name str, runtimeOnly := false }))
+    (opts := {})
+    (trustLevel := 1)
   let context: Context := {
-    coreContext := {
-      currNamespace := str_to_name "Aniva",
-      openDecls := [],     -- No 'open' directives needed
-      fileName := "<Pantograph>",
-      fileMap := { source := "", positions := #[0], lines := #[1] }
-    }
+  }
+  let coreContext: Lean.Core.Context := {
+    currNamespace := str_to_name "Aniva",
+    openDecls := [],     -- No 'open' directives needed
+    fileName := "<Pantograph>",
+    fileMap := { source := "", positions := #[0], lines := #[1] }
   }
   try
-    loop.run context |>.run' {}
+    let termElabM := loop.run context |>.run' {}
+    let metaM := termElabM.run' (ctx := {
+      declName? := some "_pantograph",
+      errToSorry := false
+    })
+    let coreM := metaM.run'
+    discard <| coreM.toIO coreContext { env := env }
   catch ex =>
     IO.println "Uncaught IO exception"
     IO.println ex.toString
