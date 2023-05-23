@@ -65,6 +65,9 @@ def proof_step (stateId: Nat) (goalId: Nat) (tactic: String)
     return LSpec.test s!"{stateId}.{goalId} {tactic}"   (result = expected)
   | _, _ =>
     return LSpec.test s!"{stateId}.{goalId} {tactic}"   (result = expected)
+def proof_inspect (expected: Array String) : Meta.ProofM LSpec.TestSeq := do
+  let result := (← get).structure_array
+  return LSpec.test s!"Tree structure" (result = expected)
 
 def proof_runner (start: Start) (steps: List (Meta.ProofM LSpec.TestSeq)): IO LSpec.TestSeq := do
   let (testSeq, state?) ← start_proof start
@@ -96,6 +99,7 @@ def proof_nat_add_comm_manual: IO LSpec.TestSeq := do
       (.success .none #[])
   ]
 
+-- Two ways to write the same theorem
 example: ∀ (p q: Prop), p ∨ q → q ∨ p := by
   intro p q h
   cases h
@@ -103,20 +107,30 @@ example: ∀ (p q: Prop), p ∨ q → q ∨ p := by
   assumption
   apply Or.inl
   assumption
+example: ∀ (p q: Prop), p ∨ q → q ∨ p := by
+  intro p q h
+  cases h
+  . apply Or.inr
+    assumption
+  . apply Or.inl
+    assumption
 def proof_or_comm: IO LSpec.TestSeq := do
   proof_runner (.expr "∀ (p q: Prop), p ∨ q → q ∨ p") [
     proof_step 0 0 "intro p q h"
       (.success (.some 1) #["p q : Prop\nh : p ∨ q\n⊢ q ∨ p"]),
     proof_step 1 0 "cases h"
       (.success (.some 2) #[]),
+    proof_inspect #["", "0.0", "1.0"],
     proof_step 2 0 "apply Or.inr"
-      (.success (.some 3) #[]),
+      (.success (.some 3) #[""]),
+    proof_inspect #["", "0.0", "1.0", "2.0"],
     proof_step 3 0 "assumption"
       (.success .none #[]),
     proof_step 2 1 "apply Or.inl"
       (.success (.some 4) #[]),
     proof_step 4 0 "assumption"
-      (.success .none #[])
+      (.success .none #[]),
+    proof_inspect #["", "0.0", "1.0", "2.0", "1.1"]
   ]
 
 def test_proofs : IO LSpec.TestSeq := do

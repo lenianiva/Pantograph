@@ -200,10 +200,7 @@ unsafe def execute (command: Command): Subroutine Lean.Json := do
     match state.proofTrees.get? args.treeId with
     | .none => return Lean.toJson <| errorIndex "Invalid tree index {args.treeId}"
     | .some tree =>
-      let parents := tree.states.map λ state => match state.parent with
-        | .none => ""
-        | .some parent => s!"{parent}.{state.parentGoalId}"
-      return Lean.toJson ({parents := parents}: ProofPrintTreeResult)
+      return Lean.toJson ({parents := tree.structure_array}: ProofPrintTreeResult)
 
 
 end Pantograph
