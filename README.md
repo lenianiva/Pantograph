@@ -57,15 +57,6 @@ proof.printTree {"treeId": 0}
 ```
 where the application of `assumption` should lead to a failure.
 
-```
-create {"imports": ["Init"]}
-proof.start {"id": 0, "expr": "∀ (p q: Prop), p ∨ q → q ∨ p"}
-proof.tactic {"treeId": 0, "stateId": 0, "goalId": 0, "tactic": "intro p q h"}
-proof.tactic {"treeId": 0, "stateId": 1, "goalId": 0, "tactic": "cases h"}
-proof.tactic {"treeId": 0, "stateId": 2, "goalId": 0, "tactic": "apply Or.inr"}
-proof.tactic {"treeId": 0, "stateId": 2, "goalId": 0, "tactic": "apply Or.inl"}
-```
-
 ## Troubleshooting
 
 If lean encounters stack overflow problems when printing catalog, execute this before running lean:
