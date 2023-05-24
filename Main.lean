@@ -14,7 +14,7 @@ structure Context where
 /-- Stores state of the REPL -/
 structure State where
   --environments: Array Lean.Environment := #[]
-  proofTrees:   Array Meta.ProofTree := #[]
+  proofTrees:   Array ProofTree := #[]
 
 -- State monad
 abbrev Subroutine := ReaderT Context (StateT State Lean.Elab.TermElabM)
@@ -35,8 +35,6 @@ def parse_command (s: String): Except String Command := do
       let payload ← s.drop offset |> Lean.Json.parse
       return { cmd := s.take offset, payload := payload }
   | .none => throw "Command is empty"
-
-
 
 def execute (command: Command): Subroutine Lean.Json := do
   match command.cmd with
@@ -83,8 +81,12 @@ def execute (command: Command): Subroutine Lean.Json := do
       let format ← Lean.Meta.ppExpr info.toConstantVal.type
       let module? := env.getModuleIdxFor? name >>=
         (λ idx => env.allImportedModuleNames.get? idx.toNat) |>.map toString
+      let boundExpr? ← (match info.toConstantVal.type with
+        | .forallE _ _ _ _ => return .some (← type_expr_to_bound info.toConstantVal.type)
+        | _ => return Option.none)
       return Lean.toJson ({
         type := toString format,
+        boundExpr? := boundExpr?,
         module? := module?
       }: InspectResult)
   proof_start (args: ProofStart): Subroutine Lean.Json := do
@@ -92,10 +94,10 @@ def execute (command: Command): Subroutine Lean.Json := do
     let env ← Lean.MonadEnv.getEnv
     let expr?: Except Lean.Json Lean.Expr ← (match args.expr, args.copyFrom with
       | .some expr, .none =>
-        (match Serial.syntax_from_str env expr with
+        (match syntax_from_str env expr with
         | .error str => return .error <| Lean.toJson ({ error := "parsing", desc := str }: InteractionError)
         | .ok syn => do
-          (match (← Meta.syntax_to_expr syn) with
+          (match (← syntax_to_expr syn) with
           | .error str => return .error <| Lean.toJson ({ error := "elab", desc := str }: InteractionError)
           | .ok expr => return .ok expr))
       | .none, .some copyFrom =>
@@ -108,7 +110,7 @@ def execute (command: Command): Subroutine Lean.Json := do
     match expr? with
     | .error error => return error
     | .ok expr =>
-      let tree ← Meta.ProofTree.create (str_to_name <| args.name.getD "Untitled") expr
+      let tree ← ProofTree.create (str_to_name <| args.name.getD "Untitled") expr
       -- Put the new tree in the environment
       let nextTreeId := state.proofTrees.size
       set { state with proofTrees := state.proofTrees.push tree }
@@ -118,7 +120,7 @@ def execute (command: Command): Subroutine Lean.Json := do
     match state.proofTrees.get? args.treeId with
     | .none => return Lean.toJson <| errorIndex "Invalid tree index {args.treeId}"
     | .some tree =>
-      let (result, nextTree) ← Meta.ProofTree.execute
+      let (result, nextTree) ← ProofTree.execute
         (stateId := args.stateId)
         (goalId := args.goalId.getD 0)
         (tactic := args.tactic) |>.run tree
@@ -155,12 +157,42 @@ unsafe def loop : Subroutine Unit := do
     IO.println <| toString <| ret
   loop
 
+namespace Lean
+-- This is better than the default version since it handles `.`
+def setOptionFromString' (opts : Options) (entry : String) : IO Options := do
+  let ps := (entry.splitOn "=").map String.trim
+  let [key, val] ← pure ps | throw $ IO.userError "invalid configuration option entry, it must be of the form '<key> = <value>'"
+  let key := str_to_name key
+  let defValue ← getOptionDefaultValue key
+  match defValue with
+  | DataValue.ofString _ => pure $ opts.setString key val
+  | DataValue.ofBool _   =>
+    match val with
+    | "true" => pure $ opts.setBool key true
+    | "false" => pure $ opts.setBool key false
+    | _ => throw $ IO.userError s!"invalid Bool option value '{val}'"
+  | DataValue.ofName _   => pure $ opts.setName key val.toName
+  | DataValue.ofNat _    =>
+    match val.toNat? with
+    | none   => throw (IO.userError s!"invalid Nat option value '{val}'")
+    | some v => pure $ opts.setNat key v
+  | DataValue.ofInt _    =>
+    match val.toInt? with
+    | none   => throw (IO.userError s!"invalid Int option value '{val}'")
+    | some v => pure $ opts.setInt key v
+  | DataValue.ofSyntax _ => throw (IO.userError s!"invalid Syntax option value")
+end Lean
+
 unsafe def main (args: List String): IO Unit := do
   Lean.enableInitializersExecution
   Lean.initSearchPath (← Lean.findSysroot)
 
+  -- Separate imports and options
+  let options := args.filterMap (λ s => if s.startsWith "--" then .some <| s.drop 2 else .none)
+  let imports:= args.filter (λ s => ¬ (s.startsWith "--"))
+
   let env ← Lean.importModules
-    (imports := args.map (λ str => { module := str_to_name str, runtimeOnly := false }))
+    (imports := imports.map (λ str => { module := str_to_name str, runtimeOnly := false }))
     (opts := {})
     (trustLevel := 1)
   let context: Context := {
@@ -169,7 +201,8 @@ unsafe def main (args: List String): IO Unit := do
     currNamespace := str_to_name "Aniva",
     openDecls := [],     -- No 'open' directives needed
     fileName := "<Pantograph>",
-    fileMap := { source := "", positions := #[0], lines := #[1] }
+    fileMap := { source := "", positions := #[0], lines := #[1] },
+    options := ← options.foldlM Lean.setOptionFromString' Lean.Options.empty
   }
   try
     let termElabM := loop.run context |>.run' {}

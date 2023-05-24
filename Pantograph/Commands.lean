@@ -1,6 +1,8 @@
 -- All the command input/output structures are stored here
 import Lean.Data.Json
 
+import Pantograph.Serial
+
 namespace Pantograph.Commands
 
 structure Command where
@@ -30,6 +32,8 @@ structure Inspect where
   deriving Lean.FromJson
 structure InspectResult where
   type: String
+  -- Decompose the bound expression when the type is forall.
+  boundExpr?: Option BoundExpression
   module?: Option String
   deriving Lean.ToJson
 

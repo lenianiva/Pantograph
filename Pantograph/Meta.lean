@@ -7,38 +7,39 @@ import Pantograph.Symbols
 The proof state manipulation system
 
 A proof state is launched by providing
-1. Environment: `Lean.Environment`
-2. Expression: `Lean.Expr`
+1. Environment: `Environment`
+2. Expression: `Expr`
 The expression becomes the first meta variable in the saved tactic state
-`Lean.Elab.Tactic.SavedState`.
+`Elab.Tactic.SavedState`.
 From this point on, any proof which extends
-`Lean.Elab.Term.Context` and
+`Elab.Term.Context` and
 -/
 
-def Lean.MessageLog.getErrorMessages (log : Lean.MessageLog) : Lean.MessageLog :=
-{ msgs := log.msgs.filter fun m => match m.severity with | Lean.MessageSeverity.error => true | _ => false }
+def Lean.MessageLog.getErrorMessages (log : MessageLog) : MessageLog :=
+{ msgs := log.msgs.filter fun m => match m.severity with | MessageSeverity.error => true | _ => false }
 
 
-namespace Pantograph.Meta
+namespace Pantograph
+open Lean
 
 structure ProofState where
-  goals : List Lean.MVarId
-  savedState : Lean.Elab.Tactic.SavedState
+  goals : List MVarId
+  savedState : Elab.Tactic.SavedState
   parent : Option Nat := none
   parentGoalId : Nat  := 0
 structure ProofTree where
   -- All parameters needed to run a `TermElabM` monad
-  name: Lean.Name
+  name: Name
 
   -- Set of proof states
   states : Array ProofState := #[]
 
-abbrev M := Lean.Elab.TermElabM
+abbrev M := Elab.TermElabM
 
-def ProofTree.create (name: Lean.Name) (expr: Lean.Expr): M ProofTree := do
-  let expr ← Lean.instantiateMVars expr
-  let goal := (← Lean.Meta.mkFreshExprMVar expr (kind := Lean.MetavarKind.synthetic))
-  let savedStateMonad: Lean.Elab.Tactic.TacticM Lean.Elab.Tactic.SavedState := Lean.MonadBacktrack.saveState
+def ProofTree.create (name: Name) (expr: Expr): M ProofTree := do
+  let expr ← instantiateMVars expr
+  let goal := (← Meta.mkFreshExprMVar expr (kind := MetavarKind.synthetic))
+  let savedStateMonad: Elab.Tactic.TacticM Elab.Tactic.SavedState := MonadBacktrack.saveState
   let savedState ← savedStateMonad { elaborator := .anonymous } |>.run' { goals := [goal.mvarId!]}
   return {
     name := name,
@@ -54,42 +55,31 @@ def ProofTree.structure_array (tree: ProofTree): Array String :=
     | .none => ""
     | .some parent => s!"{parent}.{state.parentGoalId}"
 
--- Parsing syntax under the environment
-def syntax_to_expr (syn: Lean.Syntax): Lean.Elab.TermElabM (Except String Lean.Expr) := do
-  try
-    let expr ← Lean.Elab.Term.elabType syn
-    -- Immediately synthesise all metavariables if we need to leave the elaboration context.
-    -- See https://leanprover.zulipchat.com/#narrow/stream/270676-lean4/topic/Unknown.20universe.20metavariable/near/360130070
-    --Lean.Elab.Term.synthesizeSyntheticMVarsNoPostponing
-    let expr ← Lean.instantiateMVars expr
-    return .ok expr
-  catch ex => return .error (← ex.toMessageData.toString)
-
-def execute_tactic (state: Lean.Elab.Tactic.SavedState) (goal: Lean.MVarId) (tactic: String) :
-    M (Except (Array String) (Lean.Elab.Tactic.SavedState × List Lean.MVarId)):= do
-  let tacticM (stx: Lean.Syntax):  Lean.Elab.Tactic.TacticM (Except (Array String) (Lean.Elab.Tactic.SavedState × List Lean.MVarId)) := do
+def execute_tactic (state: Elab.Tactic.SavedState) (goal: MVarId) (tactic: String) :
+    M (Except (Array String) (Elab.Tactic.SavedState × List MVarId)):= do
+  let tacticM (stx: Syntax):  Elab.Tactic.TacticM (Except (Array String) (Elab.Tactic.SavedState × List MVarId)) := do
     state.restore
-    Lean.Elab.Tactic.setGoals [goal]
+    Elab.Tactic.setGoals [goal]
     try
-      Lean.Elab.Tactic.evalTactic stx
-      if (← getThe Lean.Core.State).messages.hasErrors then
-        let messages := (← getThe Lean.Core.State).messages.getErrorMessages |>.toList.toArray
-        let errors ← (messages.map Lean.Message.data).mapM fun md => md.toString
+      Elab.Tactic.evalTactic stx
+      if (← getThe Core.State).messages.hasErrors then
+        let messages := (← getThe Core.State).messages.getErrorMessages |>.toList.toArray
+        let errors ← (messages.map Message.data).mapM fun md => md.toString
         return .error errors
       else
-        return .ok (← Lean.MonadBacktrack.saveState, ← Lean.Elab.Tactic.getUnsolvedGoals)
+        return .ok (← MonadBacktrack.saveState, ← Elab.Tactic.getUnsolvedGoals)
     catch exception =>
       return .error #[← exception.toMessageData.toString]
-  match Lean.Parser.runParserCategory
-    (env := ← Lean.MonadEnv.getEnv)
+  match Parser.runParserCategory
+    (env := ← MonadEnv.getEnv)
     (catName := `tactic)
     (input := tactic)
     (fileName := "<stdin>") with
   | Except.error err => return .error #[err]
   | Except.ok stx    => tacticM stx { elaborator := .anonymous } |>.run' state.tactic
 
-def goals_to_string (goals: List Lean.MVarId): M (Array String) := do
-  let goals ← goals.mapM fun g => do pure $ toString (← Lean.Meta.ppGoal g)
+def goals_to_string (goals: List MVarId): M (Array String) := do
+  let goals ← goals.mapM fun g => do pure $ toString (← Meta.ppGoal g)
   pure goals.toArray
 
 
@@ -128,4 +118,4 @@ def ProofTree.execute (stateId: Nat) (goalId: Nat) (tactic: String): StateRefT P
           modify fun s => { s with states := s.states.push proofState }
         return .success (.some nextId) (← goals_to_string nextGoals)
 
-end Pantograph.Meta
+end Pantograph

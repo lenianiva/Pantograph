@@ -4,15 +4,15 @@ import Pantograph.Serial
 
 namespace Pantograph.Test
 open Pantograph
+open Lean
 
 inductive Start where
   | copy (name: String) -- Start from some name in the environment
   | expr (expr: String) -- Start from some expression
 
-abbrev M := Meta.M
-abbrev TestM := StateRefT Meta.ProofTree M
+abbrev TestM := StateRefT ProofTree M
 
-def start_proof (start: Start): M (LSpec.TestSeq × Option Meta.ProofTree) := do
+def start_proof (start: Start): M (LSpec.TestSeq × Option ProofTree) := do
   let env ← Lean.MonadEnv.getEnv
   let mut testSeq := LSpec.TestSeq.done
   match start with
@@ -21,37 +21,37 @@ def start_proof (start: Start): M (LSpec.TestSeq × Option Meta.ProofTree) := do
     testSeq := testSeq ++ LSpec.check s!"Symbol exists {name}" cInfo?.isSome
     match cInfo? with
     | .some cInfo =>
-      let state ← Meta.ProofTree.create
+      let state ← ProofTree.create
         (name := str_to_name "TestExample")
         (expr := cInfo.type)
       return (testSeq, Option.some state)
     | .none =>
       return (testSeq, Option.none)
   | .expr expr =>
-    let syn? := Serial.syntax_from_str env expr
+    let syn? := syntax_from_str env expr
     testSeq := testSeq ++ LSpec.check s!"Parsing {expr}" (syn?.isOk)
     match syn? with
     | .error error =>
       IO.println error
       return (testSeq, Option.none)
     | .ok syn =>
-      let expr? ← Meta.syntax_to_expr syn
+      let expr? ← syntax_to_expr syn
       testSeq := testSeq ++ LSpec.check s!"Elaborating" expr?.isOk
       match expr? with
       | .error error =>
         IO.println error
         return (testSeq, Option.none)
       | .ok expr =>
-        let state ← Meta.ProofTree.create
+        let state ← ProofTree.create
           (name := str_to_name "TestExample")
           (expr := expr)
         return (testSeq, Option.some state)
 
-deriving instance DecidableEq, Repr for Meta.TacticResult
+deriving instance DecidableEq, Repr for TacticResult
 
 def proof_step (stateId: Nat) (goalId: Nat) (tactic: String)
-    (expected: Meta.TacticResult) : TestM LSpec.TestSeq := do
-  let result: Meta.TacticResult ← Meta.ProofTree.execute stateId goalId tactic
+    (expected: TacticResult) : TestM LSpec.TestSeq := do
+  let result: TacticResult ← ProofTree.execute stateId goalId tactic
   match expected, result with
   | .success (.some i) #[], .success (.some _) goals =>
     -- If the goals are omitted but the next state is specified, we imply that
