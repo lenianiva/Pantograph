@@ -20,10 +20,10 @@ lake build mathlib
 ## Usage
 
 The binary must be run inside a `lake env` environment. i.e. `lake env
-build/bin/pantograph`. The REPL loop accepts commands as single-line JSON inputs
-and outputs either an `Error:` (indicating malformed command) or a json return
-value indicating the result of a command execution. The command can be passed in
-one of two formats
+build/bin/pantograph OPTIONS|MODULES`. The REPL loop accepts commands as
+single-line JSON inputs and outputs either an `Error:` (indicating malformed
+command) or a json return value indicating the result of a command execution.
+The command can be passed in one of two formats
 ```
 command { ... }
 { "cmd": command, "payload": ... }
@@ -31,7 +31,8 @@ command { ... }
 The list of available commands can be found in `Pantograph/Commands.lean`. An
 empty command aborts the REPL.
 
-The `Pantograph` executable must be run with a list of modules to import.
+The `Pantograph` executable must be run with a list of modules to import. It can
+also accept options of the form `--key=value` e.g. `--pp.raw=true`.
 
 Example: (~5k symbols)
 ```
