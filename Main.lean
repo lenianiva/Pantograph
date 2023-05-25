@@ -46,6 +46,10 @@ def execute (command: Command): Subroutine Lean.Json := do
     match Lean.fromJson? command.payload with
     | .ok args => inspect args
     | .error x => return errorJson x
+  | "expr.type" =>
+    match Lean.fromJson? command.payload with
+    | .ok args => expr_type args
+    | .error x => return errorJson x
   | "proof.start" =>
     match Lean.fromJson? command.payload with
     | .ok args => proof_start args
@@ -90,6 +94,19 @@ def execute (command: Command): Subroutine Lean.Json := do
         boundExpr? := boundExpr?,
         module? := module?
       }: InspectResult)
+  expr_type (args: ExprType): Subroutine Lean.Json := do
+    let env ← Lean.MonadEnv.getEnv
+    match syntax_from_str env args.expr with
+    | .error str => return errorI "parsing" str
+    | .ok syn => do
+      match (← syntax_to_expr syn) with
+      | .error str => return errorI "elab" str
+      | .ok expr => do
+        try
+          let format ← Lean.Meta.ppExpr (← Lean.Meta.inferType expr)
+          return Lean.toJson <| ({ type := toString format }: ExprTypeResult)
+        catch exception =>
+          return errorI "typing" (← exception.toMessageData.toString)
   proof_start (args: ProofStart): Subroutine Lean.Json := do
     let state ← get
     let env ← Lean.MonadEnv.getEnv

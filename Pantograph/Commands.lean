@@ -42,6 +42,14 @@ structure InspectResult where
   module?: Option String
   deriving Lean.ToJson
 
+-- Get the type of an expression
+structure ExprType where
+  expr: String
+  deriving Lean.FromJson
+structure ExprTypeResult where
+  type: String
+  deriving Lean.ToJson
+
 structure ProofStart where
   name: Option String     -- Identifier of the proof
   -- Only one of the fields below may be populated.
