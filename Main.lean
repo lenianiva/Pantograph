@@ -62,8 +62,9 @@ def execute (command: Command): Subroutine Lean.Json := do
     let error: InteractionError := { error := "unknown", desc := s!"Unknown command {cmd}" }
       return Lean.toJson error
   where
-  errorJson (s: String) := Lean.toJson ({ error := "json", desc := s }: InteractionError)
-  errorIndex (s: String) := Lean.toJson ({ error := "index", desc := s }: InteractionError)
+  errorI (type desc: String) := Lean.toJson ({ error := type, desc := desc }: InteractionError)
+  errorJson := errorI "json"
+  errorIndex := errorI "index"
   catalog (_: Catalog): Subroutine Lean.Json := do
     let env ← Lean.MonadEnv.getEnv
     let names := env.constants.fold (init := []) (λ es name info =>
@@ -76,7 +77,7 @@ def execute (command: Command): Subroutine Lean.Json := do
     let name := str_to_name args.name
     let info? := env.find? name
     match info? with
-    | none => return Lean.toJson <| errorIndex s!"Symbol not found {args.name}"
+    | none => return  errorIndex s!"Symbol not found {args.name}"
     | some info =>
       let format ← Lean.Meta.ppExpr info.toConstantVal.type
       let module? := env.getModuleIdxFor? name >>=
@@ -95,18 +96,18 @@ def execute (command: Command): Subroutine Lean.Json := do
     let expr?: Except Lean.Json Lean.Expr ← (match args.expr, args.copyFrom with
       | .some expr, .none =>
         (match syntax_from_str env expr with
-        | .error str => return .error <| Lean.toJson ({ error := "parsing", desc := str }: InteractionError)
+        | .error str => return .error <| errorI "parsing" str
         | .ok syn => do
           (match (← syntax_to_expr syn) with
-          | .error str => return .error <| Lean.toJson ({ error := "elab", desc := str }: InteractionError)
+          | .error str => return .error <| errorI "elab" str
           | .ok expr => return .ok expr))
       | .none, .some copyFrom =>
         (match env.find? <| str_to_name copyFrom with
         | .none => return .error <| errorIndex s!"Symbol not found: {copyFrom}"
         | .some cInfo => return .ok cInfo.type)
       | .none, .none =>
-        return .error <| Lean.toJson ({ error := "arguments", desc := "At least one of {expr, copyFrom} must be supplied" }: InteractionError)
-      | _, _ => return .error <| Lean.toJson ({ error := "arguments", desc := "Cannot populate both of {expr, copyFrom}" }: InteractionError))
+        return .error <| errorI "arguments" "At least one of {expr, copyFrom} must be supplied"
+      | _, _ => return .error <| errorI "arguments" "Cannot populate both of {expr, copyFrom}")
     match expr? with
     | .error error => return error
     | .ok expr =>
@@ -118,7 +119,7 @@ def execute (command: Command): Subroutine Lean.Json := do
   proof_tactic (args: ProofTactic): Subroutine Lean.Json := do
     let state ← get
     match state.proofTrees.get? args.treeId with
-    | .none => return Lean.toJson <| errorIndex "Invalid tree index {args.treeId}"
+    | .none => return errorIndex "Invalid tree index {args.treeId}"
     | .some tree =>
       let (result, nextTree) ← ProofTree.execute
         (stateId := args.stateId)
@@ -130,11 +131,11 @@ def execute (command: Command): Subroutine Lean.Json := do
         set { state with proofTrees := state.proofTrees.set! args.treeId nextTree }
         return Lean.toJson ({ nextId? := nextId?, goals := goals }: ProofTacticResultSuccess)
       | .failure messages =>
-        return Lean.toJson ({ errorMessages := messages }: ProofTacticResultFailure)
+        return Lean.toJson ({ tacticErrors := messages }: ProofTacticResultFailure)
   proof_print_tree (args: ProofPrintTree): Subroutine Lean.Json := do
     let state ← get
     match state.proofTrees.get? args.treeId with
-    | .none => return Lean.toJson <| errorIndex "Invalid tree index {args.treeId}"
+    | .none => return errorIndex "Invalid tree index {args.treeId}"
     | .some tree =>
       return Lean.toJson ({parents := tree.structure_array}: ProofPrintTreeResult)
 
