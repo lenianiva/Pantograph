@@ -46,6 +46,7 @@ def execute (command: Command): Subroutine Lean.Json := do
     match Lean.fromJson? command.payload with
     | .ok args => inspect args
     | .error x => return errorJson x
+  | "clear" => clear
   | "expr.type" =>
     match Lean.fromJson? command.payload with
     | .ok args => expr_type args
@@ -94,6 +95,11 @@ def execute (command: Command): Subroutine Lean.Json := do
         boundExpr? := boundExpr?,
         module? := module?
       }: InspectResult)
+  clear : Subroutine Lean.Json := do
+    let state ← get
+    let nTrees := state.proofTrees.size
+    set { state with proofTrees := #[] }
+    return Lean.toJson ({ nTrees := nTrees }: ClearResult)
   expr_type (args: ExprType): Subroutine Lean.Json := do
     let env ← Lean.MonadEnv.getEnv
     match syntax_from_str env args.expr with

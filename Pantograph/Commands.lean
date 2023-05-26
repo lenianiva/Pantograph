@@ -42,6 +42,10 @@ structure InspectResult where
   module?: Option String
   deriving Lean.ToJson
 
+structure ClearResult where
+  nTrees: Nat
+  deriving Lean.ToJson
+
 -- Get the type of an expression
 structure ExprType where
   expr: String
