@@ -72,10 +72,10 @@ def execute (command: Command): Subroutine Lean.Json := do
   errorIndex := errorI "index"
   catalog (_: Catalog): Subroutine Lean.Json := do
     let env ← Lean.MonadEnv.getEnv
-    let names := env.constants.fold (init := []) (λ es name info =>
+    let names := env.constants.fold (init := #[]) (λ acc name info =>
       match to_filtered_symbol name info with
-      | .some x => x::es
-      | .none => es)
+      | .some x => acc.push x
+      | .none => acc)
     return Lean.toJson <| ({ symbols := names }: CatalogResult)
   inspect (args: Inspect): Subroutine Lean.Json := do
     let env ← Lean.MonadEnv.getEnv

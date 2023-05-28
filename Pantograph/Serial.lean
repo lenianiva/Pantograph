@@ -41,4 +41,71 @@ def type_expr_to_bound (expr: Expr): MetaM BoundExpression := do
     return { binders, target := toString (← Meta.ppExpr body) }
 
 
+structure Variable where
+  name: String
+  /-- Does the name contain a dagger -/
+  isInaccessible: Bool      := false
+  type: String
+  value?: Option String     := .none
+  deriving ToJson
+structure Goal where
+  /-- String case id -/
+  caseName?: Option String  := .none
+  /-- Is the goal in conversion mode -/
+  isConversion: Bool        := false
+  /-- target expression type -/
+  target: String
+  /-- Variables -/
+  vars: Array Variable      := #[]
+  deriving ToJson
+
+/-- Adapted from ppGoal -/
+def serialize_goal (mvarDecl: MetavarDecl) : MetaM Goal := do
+  -- Options for printing; See Meta.ppGoal for details
+  let showLetValues  := True
+  let ppAuxDecls     := false
+  let ppImplDetailHyps := false
+  let lctx           := mvarDecl.lctx
+  let lctx           := lctx.sanitizeNames.run' { options := (← getOptions) }
+  Meta.withLCtx lctx mvarDecl.localInstances do
+    let rec ppVars (localDecl : LocalDecl) : MetaM Variable := do
+      match localDecl with
+      | .cdecl _ _ varName type _ _ =>
+        let varName := varName.simpMacroScopes
+        let type ← instantiateMVars type
+        return {
+          name := toString varName,
+          isInaccessible := varName.isInaccessibleUserName,
+          type := toString <| ← Meta.ppExpr type
+        }
+      | .ldecl _ _ varName type val _ _ => do
+        let varName := varName.simpMacroScopes
+        let type ← instantiateMVars type
+        let value? ← if showLetValues then
+          let val ← instantiateMVars val
+          pure $ .some <| toString <| (← Meta.ppExpr val)
+        else
+          pure $ .none
+        return {
+          name := toString varName,
+          isInaccessible := varName.isInaccessibleUserName,
+          type := toString <| ← Meta.ppExpr type
+          value? := value?
+        }
+    let vars ← lctx.foldlM (init := []) fun acc (localDecl : LocalDecl) => do
+       let skip := !ppAuxDecls && localDecl.isAuxDecl || !ppImplDetailHyps && localDecl.isImplementationDetail
+       if skip then
+         return acc
+       else
+         let var ← ppVars localDecl
+         return var::acc
+    return {
+      caseName? := match mvarDecl.userName with
+        | Name.anonymous => .none
+        | name => .some <| toString name,
+      isConversion := "| " == (Meta.getGoalPrefix mvarDecl)
+      target := toString <| (← Meta.ppExpr (← instantiateMVars mvarDecl.type)),
+      vars := vars.reverse.toArray
+    }
+
 end Pantograph

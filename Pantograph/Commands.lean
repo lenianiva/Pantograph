@@ -28,7 +28,7 @@ structure InteractionError where
 structure Catalog where
   deriving Lean.FromJson
 structure CatalogResult where
-  symbols: List String
+  symbols: Array String
   deriving Lean.ToJson
 
 -- Print the type of a symbol
@@ -72,7 +72,7 @@ structure ProofTactic where
   tactic: String
   deriving Lean.FromJson
 structure ProofTacticResultSuccess where
-  goals: Array String
+  goals: Array Goal
   nextId?: Option Nat -- Next proof state id
   deriving Lean.ToJson
 structure ProofTacticResultFailure where

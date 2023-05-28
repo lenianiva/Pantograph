@@ -1,7 +1,7 @@
 import Lean
 
 import Pantograph.Symbols
-
+import Pantograph.Serial
 
 /-
 The proof state manipulation system
@@ -78,17 +78,12 @@ def execute_tactic (state: Elab.Tactic.SavedState) (goal: MVarId) (tactic: Strin
   | Except.error err => return .error #[err]
   | Except.ok stx    => tacticM stx { elaborator := .anonymous } |>.run' state.tactic
 
-def goals_to_string (goals: List MVarId): M (Array String) := do
-  let goals ← goals.mapM fun g => do pure $ toString (← Meta.ppGoal g)
-  pure goals.toArray
-
-
 /-- Response for executing a tactic -/
 inductive TacticResult where
   -- Invalid id
   | invalid (message: String): TacticResult
   -- Goes to next state
-  | success (nextId?: Option Nat) (goals: Array String)
+  | success (nextId?: Option Nat) (goals: Array Goal)
   -- Fails with messages
   | failure (messages: Array String)
 
@@ -116,6 +111,10 @@ def ProofTree.execute (stateId: Nat) (goalId: Nat) (tactic: String): StateRefT P
             parentGoalId := goalId
           }
           modify fun s => { s with states := s.states.push proofState }
-        return .success (.some nextId) (← goals_to_string nextGoals)
+        let goals ← nextGoals.mapM fun mvarId => do
+          match (← MonadMCtx.getMCtx).findDecl? mvarId with
+          | .some mvarDecl => serialize_goal mvarDecl
+          | .none => throwError mvarId
+        return .success (.some nextId) goals.toArray
 
 end Pantograph

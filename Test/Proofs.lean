@@ -47,6 +47,8 @@ def start_proof (start: Start): M (LSpec.TestSeq × Option ProofTree) := do
           (expr := expr)
         return (testSeq, Option.some state)
 
+deriving instance DecidableEq, Repr for Variable
+deriving instance DecidableEq, Repr for Goal
 deriving instance DecidableEq, Repr for TacticResult
 
 def proof_step (stateId: Nat) (goalId: Nat) (tactic: String)
@@ -88,27 +90,35 @@ def proof_runner (env: Lean.Environment) (start: Start) (steps: List (TestM LSpe
     return LSpec.test "Exception" (s!"internal exception #{← exception.toMessageData.toString}" = "")
   | .ok a            => return a
 
+def build_goal (nameType: List (String × String)) (target: String): Goal :=
+  {
+    target := target,
+    vars := (nameType.map fun x => ({ name := x.fst, type := x.snd }: Variable)).toArray
+  }
 
 example: ∀ (a b: Nat), a + b = b + a := by
   intro n m
   rw [Nat.add_comm]
-def proof_nat_add_comm (env: Lean.Environment): IO LSpec.TestSeq :=
-  let goal1 := "n m : Nat\n⊢ n + m = m + n"
+def proof_nat_add_comm (env: Lean.Environment): IO LSpec.TestSeq := do
+  let goal1: Goal := {
+    target := "n + m = m + n",
+    vars := #[{ name := "n", type := "Nat" }, { name := "m", type := "Nat" }]
+  }
   proof_runner env (.copy "Nat.add_comm") [
     proof_step 0 0 "intro n m"
       (.success (.some 1) #[goal1]),
     proof_step 1 0 "assumption"
-      (.failure #[s!"tactic 'assumption' failed\n{goal1}"]),
+      (.failure #[s!"tactic 'assumption' failed\nn m : Nat\n⊢ n + m = m + n"]),
     proof_step 1 0 "rw [Nat.add_comm]"
       (.success .none #[])
   ]
 def proof_nat_add_comm_manual (env: Lean.Environment): IO LSpec.TestSeq := do
-  let goal1 := "n m : Nat\n⊢ n + m = m + n"
+  let goal1: Goal := build_goal [("n", "Nat"), ("m", "Nat")] "n + m = m + n"
   proof_runner env (.expr "∀ (a b: Nat), a + b = b + a") [
     proof_step 0 0 "intro n m"
       (.success (.some 1) #[goal1]),
     proof_step 1 0 "assumption"
-      (.failure #[s!"tactic 'assumption' failed\n{goal1}"]),
+      (.failure #[s!"tactic 'assumption' failed\nn m : Nat\n⊢ n + m = m + n"]),
     proof_step 1 0 "rw [Nat.add_comm]"
       (.success .none #[])
   ]
@@ -129,11 +139,20 @@ example: ∀ (p q: Prop), p ∨ q → q ∨ p := by
   . apply Or.inl
     assumption
 def proof_or_comm (env: Lean.Environment): IO LSpec.TestSeq := do
+  let branchGoal (caseName name: String): Goal := {
+    caseName? := .some caseName,
+    target := "q ∨ p",
+    vars := #[
+      { name := "p", type := "Prop" },
+      { name := "q", type := "Prop" },
+      { name := "h✝", type := name, isInaccessible := true }
+    ]
+  }
   proof_runner env (.expr "∀ (p q: Prop), p ∨ q → q ∨ p") [
     proof_step 0 0 "intro p q h"
-      (.success (.some 1) #["p q : Prop\nh : p ∨ q\n⊢ q ∨ p"]),
+      (.success (.some 1) #[build_goal [("p", "Prop"), ("q", "Prop"), ("h", "p ∨ q")] "q ∨ p"]),
     proof_step 1 0 "cases h"
-      (.success (.some 2) #[]),
+      (.success (.some 2) #[branchGoal "inl" "p", branchGoal "inr" "q"]),
     proof_inspect #["", "0.0", "1.0"],
     proof_step 2 0 "apply Or.inr"
       (.success (.some 3) #[]),
