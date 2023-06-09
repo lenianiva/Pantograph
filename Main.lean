@@ -110,7 +110,10 @@ def execute (command: Command): Subroutine Lean.Json := do
       | .ok expr => do
         try
           let format ← Lean.Meta.ppExpr (← Lean.Meta.inferType expr)
-          return Lean.toJson <| ({ type := toString format }: ExprTypeResult)
+          return Lean.toJson <| ({
+              type := toString format,
+              roundTrip := toString <| (← Lean.Meta.ppExpr expr)
+          }: ExprTypeResult)
         catch exception =>
           return errorI "typing" (← exception.toMessageData.toString)
   proof_start (args: ProofStart): Subroutine Lean.Json := do

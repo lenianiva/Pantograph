@@ -20,9 +20,18 @@ def syntax_from_str (env: Environment) (s: String): Except String Syntax :=
     (fileName := "<stdin>")
 
 
-def syntax_to_expr (syn: Syntax): Elab.TermElabM (Except String Expr) := do
+def syntax_to_expr_type (syn: Syntax): Elab.TermElabM (Except String Expr) := do
   try
     let expr ← Elab.Term.elabType syn
+    -- Immediately synthesise all metavariables if we need to leave the elaboration context.
+    -- See https://leanprover.zulipchat.com/#narrow/stream/270676-lean4/topic/Unknown.20universe.20metavariable/near/360130070
+    --Elab.Term.synthesizeSyntheticMVarsNoPostponing
+    let expr ← instantiateMVars expr
+    return .ok expr
+  catch ex => return .error (← ex.toMessageData.toString)
+def syntax_to_expr (syn: Syntax): Elab.TermElabM (Except String Expr) := do
+  try
+    let expr ← Elab.Term.elabTerm (stx := syn) (expectedType? := .none)
     -- Immediately synthesise all metavariables if we need to leave the elaboration context.
     -- See https://leanprover.zulipchat.com/#narrow/stream/270676-lean4/topic/Unknown.20universe.20metavariable/near/360130070
     --Elab.Term.synthesizeSyntheticMVarsNoPostponing

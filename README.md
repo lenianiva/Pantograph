@@ -2,20 +2,23 @@
 
 An interaction system for Lean 4.
 
+![Pantograph](doc/icon.svg)
+
 ## Installation
 
 Install `elan` and `lean4`. Then, execute
 ``` sh
 lake build
 ```
-In order to use `mathlib`, its binary must also be built
+Then, setup the `LEAN_PATH` environment variable so it contains the library path of lean libraries. The libraries must be built in advance. For example, if `mathlib4` is stored at `../lib/mathlib4`,
 ``` sh
-lake build Qq
-lake build aesop
-lake build std
-lake build mathlib
+LIB="../lib"
+LIB_MATHLIB="$LIB/mathlib4/lake-packages"
+export LEAN_PATH="$LIB/mathlib4/build/lib:$LIB_MATHLIB/aesop/build/lib:$LIB_MATHLIB/Qq/build/lib:$LIB_MATHLIB/std/build/lib"
+
+LEAN_PATH=$LEAN_PATH build/bin/pantograph $@
 ```
-In a future version, the dependencies of mathlib will be removed and the user will be responsible for adding such library paths to `LEAN_PATH`.
+Note that `lean-toolchain` must be present in the `$PWD` in order to run Pantograph! This is because Pantograph taps into Lean's internals.
 
 ## Usage
 
@@ -42,7 +45,7 @@ $ build/bin/Pantograph Init
 catalog
 inspect {"name": "Nat.le_add_left"}
 ```
-Example with `mathlib` (~90k symbols)
+Example with `mathlib4` (~90k symbols, may stack overflow, see troubleshooting)
 ```
 $ lake env build/bin/Pantograph Mathlib.Analysis.Seminorm
 catalog
@@ -58,6 +61,17 @@ proof.tactic {"treeId": 0, "stateId": 1, "goalId": 0, "tactic": "rw [Nat.add_com
 proof.printTree {"treeId": 0}
 ```
 where the application of `assumption` should lead to a failure.
+
+## Commands
+
+See `Pantograph/Commands.lean` for a description of the parameters and return values in Json.
+- `catalog`: Display a list of all safe Lean symbols in the current context
+- `inspect {"name": <name>}`: Show the type and package of a given symbol
+- `clear`: Delete all cached expressions and proof trees
+- `expr.type {"expr": <expr>}`: Determine the type of an expression and round-trip it
+- `proof.start {["name": <name>], ["expr": <expr>], ["copyFrom": <symbol>]}`: Start a new proof state from a given expression or symbol
+- `proof.tactic {"treeId": <id>, "stateId": <id>, "goalId": <id>, "tactic": string}`: Execute a tactic on a given proof state
+- `proof.printTree {"treeId": <id>}`: Print the topological structure of a proof tree
 
 ## Troubleshooting
 

@@ -52,6 +52,7 @@ structure ExprType where
   deriving Lean.FromJson
 structure ExprTypeResult where
   type: String
+  roundTrip: String
   deriving Lean.ToJson
 
 structure ProofStart where
