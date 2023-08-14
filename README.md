@@ -23,7 +23,7 @@ Note that `lean-toolchain` must be present in the `$PWD` in order to run Pantogr
 ## Usage
 
 ``` sh
-build/bin/pantograph OPTIONS|MODULES
+build/bin/pantograph MODULES|LEAN_OPTIONS
 ```
 
 The REPL loop accepts commands as single-line JSON inputs and outputs either an
@@ -37,7 +37,7 @@ The list of available commands can be found in `Pantograph/Commands.lean`. An
 empty command aborts the REPL.
 
 The `Pantograph` executable must be run with a list of modules to import. It can
-also accept options of the form `--key=value` e.g. `--pp.raw=true`.
+also accept lean options of the form `--key=value` e.g. `--pp.raw=true`.
 
 Example: (~5k symbols)
 ```

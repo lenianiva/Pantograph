@@ -1,5 +1,5 @@
 import LSpec
-import Pantograph.Symbols
+import Test.Integration
 import Test.Proofs
 import Test.Serial
 
@@ -12,6 +12,7 @@ unsafe def main := do
   let suites := [
     test_serial,
     test_proofs
+    --test_integration
   ]
   let all ← suites.foldlM (λ acc m => do pure $ acc ++ (← m)) LSpec.TestSeq.done
   LSpec.lspecIO $ all

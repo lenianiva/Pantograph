@@ -117,4 +117,64 @@ def serialize_goal (mvarDecl: MetavarDecl) : MetaM Goal := do
       vars := vars.reverse.toArray
     }
 
+/-- Completely serialises an expression tree. Json not used due to compactness -/
+def serialize_expression_ast (expr: Expr): MetaM String := do
+  match expr with
+  | .bvar deBruijnIndex => return s!"(:bv {deBruijnIndex})"
+  | .fvar fvarId =>
+    let name := (← fvarId.getDecl).userName
+    return s!"(:fv {name})"
+  | .mvar _ =>
+    -- mvarId is ignored.
+    return s!":mv"
+  | .sort u => return s!"(:sort {u.depth})"
+  | .const declName _ =>
+    -- The universe level of the const expression is elided since it should be
+    -- inferrable from surrounding expression
+    return s!"(:const {declName})"
+  | .app fn arg =>
+    let fn' ← serialize_expression_ast fn
+    let arg' ← serialize_expression_ast arg
+    return s!"(:app {fn'} {arg'})"
+  | .lam binderName binderType body binderInfo =>
+    let binderType' ← serialize_expression_ast binderType
+    let body' ← serialize_expression_ast body
+    let binderInfo' := binderInfoToAst binderInfo
+    return s!"(:lam {binderName} {binderType'} {body'} :{binderInfo'})"
+  | .forallE binderName binderType body binderInfo =>
+    let binderType' ← serialize_expression_ast binderType
+    let body' ← serialize_expression_ast body
+    let binderInfo' := binderInfoToAst binderInfo
+    return s!"(:forall {binderName} {binderType'} {body'} :{binderInfo'})"
+  | .letE name type value body _ =>
+    -- Dependent boolean flag diacarded
+    let type' ← serialize_expression_ast type
+    let value' ← serialize_expression_ast value
+    let body' ← serialize_expression_ast body
+    return s!"(:let {name} {type'} {value'} {body'})"
+  | .lit v =>
+    return (match v with
+      | .natVal val => toString val
+      | .strVal val => s!"\"{val}\"")
+  | .mdata _ expr =>
+    -- NOTE: Equivalent to expr itself, but mdata influences the prettyprinter
+    return (← serialize_expression_ast expr)
+  | .proj typeName idx struct =>
+    let struct' ← serialize_expression_ast struct
+    return s!"(:proj {typeName} {idx} {struct'})"
+
+  where
+  binderInfoToAst : Lean.BinderInfo → String
+    | .default => "default"
+    | .implicit => "implicit"
+    | .strictImplicit => "strictImplicit"
+    | .instImplicit => "instImplicit"
+
+/-- Serialised expression object --/
+structure Expression where
+  prettyprinted?: Option String := .none
+  bound?: Option BoundExpression := .none
+  sexp?: Option String := .none
+  deriving ToJson
+
 end Pantograph

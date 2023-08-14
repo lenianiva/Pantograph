@@ -21,7 +21,16 @@ structure InteractionError where
   deriving Lean.ToJson
 
 
--- Individual command and return types
+--- Individual command and return types ---
+
+-- Set Lean options supplied in the form of
+--
+-- option=value
+structure OptionSet where
+  options: Array String
+  deriving Lean.FromJson
+structure OptionSetResult where
+  deriving Lean.ToJson
 
 
 -- Print all symbols in environment
@@ -38,7 +47,7 @@ structure Inspect where
 structure InspectResult where
   type: String
   -- Decompose the bound expression when the type is forall.
-  boundExpr?: Option BoundExpression
+  boundExpr?: Option BoundExpression := Option.none
   module?: Option String
   deriving Lean.ToJson
 
