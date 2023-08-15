@@ -53,10 +53,14 @@ def type_expr_to_bound (expr: Expr): MetaM Commands.BoundExpression := do
       return (toString (← fvar.fvarId!.getUserName), toString (← Meta.ppExpr (← fvar.fvarId!.getType)))
     return { binders, target := toString (← Meta.ppExpr body) }
 
-/-- Completely serialises an expression tree. Json not used due to compactness -/
+/--
+ Completely serialises an expression tree. Json not used due to compactness
+-/
 def serialize_expression_ast (expr: Expr): MetaM String := do
   match expr with
-  | .bvar deBruijnIndex => return s!"(:bv {deBruijnIndex})"
+  | .bvar deBruijnIndex =>
+    -- This is very common so the index alone is shown. Literals are handled below.
+    return s!"{deBruijnIndex}"
   | .fvar fvarId =>
     let name := (← fvarId.getDecl).userName
     return s!"(:fv {name})"
@@ -73,38 +77,50 @@ def serialize_expression_ast (expr: Expr): MetaM String := do
     let arg' ← serialize_expression_ast arg
     return s!"({fn'} {arg'})"
   | .lam binderName binderType body binderInfo =>
+    let binderName' := nameToAst binderName
     let binderType' ← serialize_expression_ast binderType
     let body' ← serialize_expression_ast body
     let binderInfo' := binderInfoToAst binderInfo
-    return s!"(:lambda {binderName} {binderType'} {body'} :{binderInfo'})"
+    return s!"(:lambda {binderName'} {binderType'} {body'}{binderInfo'})"
   | .forallE binderName binderType body binderInfo =>
+    let binderName' := nameToAst binderName
     let binderType' ← serialize_expression_ast binderType
     let body' ← serialize_expression_ast body
     let binderInfo' := binderInfoToAst binderInfo
-    return s!"(:forall {binderName} {binderType'} {body'} :{binderInfo'})"
+    return s!"(:forall {binderName'} {binderType'} {body'}{binderInfo'})"
   | .letE name type value body _ =>
     -- Dependent boolean flag diacarded
+    let name' := nameToAst name
     let type' ← serialize_expression_ast type
     let value' ← serialize_expression_ast value
     let body' ← serialize_expression_ast body
-    return s!"(:let {name} {type'} {value'} {body'})"
+    return s!"(:let {name'} {type'} {value'} {body'})"
   | .lit v =>
-    return (match v with
+    -- To not burden the downstream parser who needs to handle this, the literal
+    -- is wrapped in a :lit sexp.
+    let v' := match v with
       | .natVal val => toString val
-      | .strVal val => s!"\"{val}\"")
+      | .strVal val => s!"\"{val}\""
+    return s!"(:lit {v'})"
   | .mdata _ expr =>
     -- NOTE: Equivalent to expr itself, but mdata influences the prettyprinter
+    -- It may become necessary to incorporate the metadata.
     return (← serialize_expression_ast expr)
   | .proj typeName idx struct =>
     let struct' ← serialize_expression_ast struct
     return s!"(:proj {typeName} {idx} {struct'})"
 
   where
+  -- Elides all unhygenic names
+  nameToAst: Lean.Name → String
+    | .anonymous
+    | .num _ _ => ":anon"
+    | n@(.str _ _) => toString n
   binderInfoToAst : Lean.BinderInfo → String
-    | .default => "default"
-    | .implicit => "implicit"
-    | .strictImplicit => "strictImplicit"
-    | .instImplicit => "instImplicit"
+    | .default => ""
+    | .implicit => " :implicit"
+    | .strictImplicit => " :strictImplicit"
+    | .instImplicit => " :instImplicit"
 
 def serialize_expression (options: Commands.Options) (e: Expr): MetaM Commands.Expression := do
   let pp := toString (← Meta.ppExpr e)

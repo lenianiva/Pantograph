@@ -73,7 +73,7 @@ See `Pantograph/Commands.lean` for a description of the parameters and return va
   given symbol; If value flag is set, the value is printed or hidden. By default
   only the values of definitions are printed.
 - `clear`: Delete all cached expressions and proof trees
-- `expr.type {"expr": <expr>}`: Determine the type of an expression and round-trip it
+- `expr.echo {"expr": <expr>}`: Determine the type of an expression and round-trip it
 - `proof.start {["name": <name>], ["expr": <expr>], ["copyFrom": <symbol>]}`: Start a new proof state from a given expression or symbol
 - `proof.tactic {"treeId": <id>, "stateId": <id>, "goalId": <id>, "tactic": string}`: Execute a tactic on a given proof state
 - `proof.printTree {"treeId": <id>}`: Print the topological structure of a proof tree

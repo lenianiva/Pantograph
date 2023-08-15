@@ -17,8 +17,11 @@ structure Options where
   printExprAST: Bool       := false
   -- When enabled, the types and values of persistent variables in a proof goal
   -- are not shown unless they are new to the proof step. Reduces overhead
+  -- TODO: Not implemented yet.
   proofVariableDelta: Bool := false
   deriving Lean.ToJson
+
+abbrev OptionsT := ReaderT Options
 
 --- Expression Objects ---
 
@@ -106,13 +109,13 @@ structure ClearResult where
   nTrees: Nat
   deriving Lean.ToJson
 
--- Get the type of an expression
-structure ExprType where
+-- Return the type of an expression
+structure ExprEcho where
   expr: String
   deriving Lean.FromJson
-structure ExprTypeResult where
-  type: String
-  roundTrip: String
+structure ExprEchoResult where
+  expr: Expression
+  type: Expression
   deriving Lean.ToJson
 
 structure ProofStart where

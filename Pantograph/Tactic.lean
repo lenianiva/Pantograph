@@ -90,9 +90,9 @@ inductive TacticResult where
   | failure (messages: Array String)
 
 /-- Execute tactic on given state -/
-def ProofTree.execute (stateId: Nat) (goalId: Nat) (tactic: String): StateRefT ProofTree M TacticResult := do
-  -- TODO: Replace with actual options
-  let options: Commands.Options := {}
+def ProofTree.execute (stateId: Nat) (goalId: Nat) (tactic: String):
+    Commands.OptionsT StateRefT ProofTree M TacticResult := do
+  let options ← read
   let tree ← get
   match tree.states.get? stateId with
   | .none => return .invalid s!"Invalid state id {stateId}"

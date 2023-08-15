@@ -9,11 +9,10 @@ unsafe def main := do
   Lean.enableInitializersExecution
   Lean.initSearchPath (← Lean.findSysroot)
 
-	-- TODO: Add proper testing
   let suites := [
-    test_serial,
-    test_proofs
-    --test_integration
+    test_integration,
+    test_proofs,
+    test_serial
   ]
   let all ← suites.foldlM (λ acc m => do pure $ acc ++ (← m)) LSpec.TestSeq.done
   LSpec.lspecIO $ all

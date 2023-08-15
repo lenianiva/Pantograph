@@ -1,5 +1,5 @@
 import LSpec
-import Pantograph.Meta
+import Pantograph.Tactic
 import Pantograph.Serial
 
 namespace Pantograph.Test
@@ -47,13 +47,15 @@ def start_proof (start: Start): M (LSpec.TestSeq × Option ProofTree) := do
           (expr := expr)
         return (testSeq, Option.some state)
 
-deriving instance DecidableEq, Repr for Variable
-deriving instance DecidableEq, Repr for Goal
+deriving instance DecidableEq, Repr for Commands.Expression
+deriving instance DecidableEq, Repr for Commands.Variable
+deriving instance DecidableEq, Repr for Commands.Goal
 deriving instance DecidableEq, Repr for TacticResult
 
+/-- Check the output of each proof step -/
 def proof_step (stateId: Nat) (goalId: Nat) (tactic: String)
     (expected: TacticResult) : TestM LSpec.TestSeq := do
-  let result: TacticResult ← ProofTree.execute stateId goalId tactic
+  let result: TacticResult ← ProofTree.execute stateId goalId tactic |>.run {}
   match expected, result with
   | .success (.some i) #[], .success (.some _) goals =>
     -- If the goals are omitted but the next state is specified, we imply that
@@ -63,6 +65,7 @@ def proof_step (stateId: Nat) (goalId: Nat) (tactic: String)
   | _, _ =>
     return LSpec.test s!"{stateId}.{goalId} {tactic}"   (result = expected)
 
+/-- Check that the tree structure is correct -/
 def proof_inspect (expected: Array String) : TestM LSpec.TestSeq := do
   let result := (← get).structure_array
   return LSpec.test s!"tree structure" (result = expected)
@@ -90,20 +93,18 @@ def proof_runner (env: Lean.Environment) (start: Start) (steps: List (TestM LSpe
     return LSpec.test "Exception" (s!"internal exception #{← exception.toMessageData.toString}" = "")
   | .ok a            => return a
 
-def build_goal (nameType: List (String × String)) (target: String): Goal :=
+def build_goal (nameType: List (String × String)) (target: String): Commands.Goal :=
   {
-    target := target,
-    vars := (nameType.map fun x => ({ name := x.fst, type := x.snd }: Variable)).toArray
+    target := { pp? := .some target},
+    vars := (nameType.map fun x => ({
+      name := x.fst, type := { pp? := .some x.snd } })).toArray
   }
 
 example: ∀ (a b: Nat), a + b = b + a := by
   intro n m
   rw [Nat.add_comm]
 def proof_nat_add_comm (env: Lean.Environment): IO LSpec.TestSeq := do
-  let goal1: Goal := {
-    target := "n + m = m + n",
-    vars := #[{ name := "n", type := "Nat" }, { name := "m", type := "Nat" }]
-  }
+  let goal1: Commands.Goal := build_goal [("n", "Nat"), ("m", "Nat")] "n + m = m + n"
   proof_runner env (.copy "Nat.add_comm") [
     proof_step 0 0 "intro n m"
       (.success (.some 1) #[goal1]),
@@ -113,7 +114,7 @@ def proof_nat_add_comm (env: Lean.Environment): IO LSpec.TestSeq := do
       (.success .none #[])
   ]
 def proof_nat_add_comm_manual (env: Lean.Environment): IO LSpec.TestSeq := do
-  let goal1: Goal := build_goal [("n", "Nat"), ("m", "Nat")] "n + m = m + n"
+  let goal1: Commands.Goal := build_goal [("n", "Nat"), ("m", "Nat")] "n + m = m + n"
   proof_runner env (.expr "∀ (a b: Nat), a + b = b + a") [
     proof_step 0 0 "intro n m"
       (.success (.some 1) #[goal1]),
@@ -139,13 +140,14 @@ example: ∀ (p q: Prop), p ∨ q → q ∨ p := by
   . apply Or.inl
     assumption
 def proof_or_comm (env: Lean.Environment): IO LSpec.TestSeq := do
-  let branchGoal (caseName name: String): Goal := {
+  let typeProp: Commands.Expression := { pp? := .some "Prop" }
+  let branchGoal (caseName name: String): Commands.Goal := {
     caseName? := .some caseName,
-    target := "q ∨ p",
+    target := { pp? := .some "q ∨ p" },
     vars := #[
-      { name := "p", type := "Prop" },
-      { name := "q", type := "Prop" },
-      { name := "h✝", type := name, isInaccessible := true }
+      { name := "p", type := typeProp },
+      { name := "q", type := typeProp },
+      { name := "h✝", type := { pp? := .some name }, isInaccessible := true }
     ]
   }
   proof_runner env (.expr "∀ (p q: Prop), p ∨ q → q ∨ p") [

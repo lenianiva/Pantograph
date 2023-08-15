@@ -1,7 +1,7 @@
 import Pantograph.Commands
 import Pantograph.Serial
-import Pantograph.Meta
 import Pantograph.Symbols
+import Pantograph.Tactic
 
 namespace Pantograph
 
@@ -51,9 +51,9 @@ def execute (command: Commands.Command): Subroutine Lean.Json := do
     | .ok args => inspect args
     | .error x => return errorJson x
   | "clear" => clear
-  | "expr.type" =>
+  | "expr.echo" =>
     match Lean.fromJson? command.payload with
-    | .ok args => expr_type args
+    | .ok args => expr_echo args
     | .error x => return errorJson x
   | "proof.start" =>
     match Lean.fromJson? command.payload with
@@ -121,7 +121,8 @@ def execute (command: Commands.Command): Subroutine Lean.Json := do
     let nTrees := state.proofTrees.size
     set { state with proofTrees := #[] }
     return Lean.toJson ({ nTrees := nTrees }: Commands.ClearResult)
-  expr_type (args: Commands.ExprType): Subroutine Lean.Json := do
+  expr_echo (args: Commands.ExprEcho): Subroutine Lean.Json := do
+    let state ← get
     let env ← Lean.MonadEnv.getEnv
     match syntax_from_str env args.expr with
     | .error str => return errorI "parsing" str
@@ -130,11 +131,11 @@ def execute (command: Commands.Command): Subroutine Lean.Json := do
       | .error str => return errorI "elab" str
       | .ok expr => do
         try
-          let format ← Lean.Meta.ppExpr (← Lean.Meta.inferType expr)
+          let type ← Lean.Meta.inferType expr
           return Lean.toJson <| ({
-              type := toString format,
-              roundTrip := toString <| (← Lean.Meta.ppExpr expr)
-          }: Commands.ExprTypeResult)
+              type := (← serialize_expression (options := state.options) type),
+              expr := (← serialize_expression (options := state.options) expr)
+          }: Commands.ExprEchoResult)
         catch exception =>
           return errorI "typing" (← exception.toMessageData.toString)
   proof_start (args: Commands.ProofStart): Subroutine Lean.Json := do
@@ -171,7 +172,7 @@ def execute (command: Commands.Command): Subroutine Lean.Json := do
       let (result, nextTree) ← ProofTree.execute
         (stateId := args.stateId)
         (goalId := args.goalId.getD 0)
-        (tactic := args.tactic) |>.run tree
+        (tactic := args.tactic) |>.run state.options |>.run tree
       match result with
       | .invalid message => return Lean.toJson <| errorIndex message
       | .success nextId? goals =>
