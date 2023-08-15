@@ -137,23 +137,35 @@ def serialize_expression (options: Commands.Options) (e: Expr): MetaM Commands.E
   }
 
 /-- Adapted from ppGoal -/
-def serialize_goal (options: Commands.Options) (mvarDecl: MetavarDecl) : MetaM Commands.Goal := do
+def serialize_goal (options: Commands.Options) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl)
+      : MetaM Commands.Goal := do
   -- Options for printing; See Meta.ppGoal for details
-  let showLetValues  := True
-  let ppAuxDecls     := false
-  let ppImplDetailHyps := false
+  let showLetValues  := true
+  let ppAuxDecls     := options.printAuxDecls
+  let ppImplDetailHyps := options.printImplementationDetailHyps
   let lctx           := mvarDecl.lctx
   let lctx           := lctx.sanitizeNames.run' { options := (← getOptions) }
   Meta.withLCtx lctx mvarDecl.localInstances do
-    let rec ppVars (localDecl : LocalDecl) : MetaM Commands.Variable := do
+    let ppVarNameOnly (localDecl: LocalDecl): MetaM Commands.Variable := do
+      match localDecl with
+      | .cdecl _ _ varName _ _ _ =>
+        let varName := varName.simpMacroScopes
+        return {
+          name := toString varName,
+        }
+      | .ldecl _ _ varName _ _ _ _ => do
+        return {
+          name := toString varName,
+        }
+    let ppVar (localDecl : LocalDecl) : MetaM Commands.Variable := do
       match localDecl with
       | .cdecl _ _ varName type _ _ =>
         let varName := varName.simpMacroScopes
         let type ← instantiateMVars type
         return {
           name := toString varName,
-          isInaccessible := varName.isInaccessibleUserName,
-          type := (← serialize_expression options type)
+          isInaccessible? := .some varName.isInaccessibleUserName
+          type? := .some (← serialize_expression options type)
         }
       | .ldecl _ _ varName type val _ _ => do
         let varName := varName.simpMacroScopes
@@ -165,17 +177,22 @@ def serialize_goal (options: Commands.Options) (mvarDecl: MetavarDecl) : MetaM C
           pure $ .none
         return {
           name := toString varName,
-          isInaccessible := varName.isInaccessibleUserName,
-          type := (← serialize_expression options type)
+          isInaccessible? := .some varName.isInaccessibleUserName
+          type? := .some (← serialize_expression options type)
           value? := value?
         }
     let vars ← lctx.foldlM (init := []) fun acc (localDecl : LocalDecl) => do
-       let skip := !ppAuxDecls && localDecl.isAuxDecl || !ppImplDetailHyps && localDecl.isImplementationDetail
-       if skip then
-         return acc
-       else
-         let var ← ppVars localDecl
-         return var::acc
+      let skip := !ppAuxDecls && localDecl.isAuxDecl ||
+        !ppImplDetailHyps && localDecl.isImplementationDetail
+      if skip then
+        return acc
+      else
+        let nameOnly := options.proofVariableDelta && (parentDecl?.map
+          (λ decl => decl.lctx.find? localDecl.fvarId |>.isSome) |>.getD false)
+        let var ← match nameOnly with
+          | true => ppVarNameOnly localDecl
+          | false => ppVar localDecl
+        return var::acc
     return {
       caseName? := match mvarDecl.userName with
         | Name.anonymous => .none

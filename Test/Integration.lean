@@ -6,11 +6,11 @@ namespace Pantograph.Test
 open Pantograph
 
 def subroutine_step (cmd: String) (payload: List (String × Lean.Json))
-    (expected: Lean.Json): Subroutine LSpec.TestSeq := do
+    (expected: Lean.Json): MainM LSpec.TestSeq := do
   let result ← execute { cmd := cmd, payload := Lean.Json.mkObj payload }
   return LSpec.test s!"{cmd}" (toString result = toString expected)
 
-def subroutine_runner (steps: List (Subroutine LSpec.TestSeq)): IO LSpec.TestSeq := do
+def subroutine_runner (steps: List (MainM LSpec.TestSeq)): IO LSpec.TestSeq := do
   -- Setup the environment for execution
   let env ← Lean.importModules
     (imports := [{module := Lean.Name.str .anonymous "Init", runtimeOnly := false }])
@@ -26,7 +26,7 @@ def subroutine_runner (steps: List (Subroutine LSpec.TestSeq)): IO LSpec.TestSeq
     fileMap := { source := "", positions := #[0], lines := #[1] },
     options := Lean.Options.empty
   }
-  let commands: Subroutine LSpec.TestSeq :=
+  let commands: MainM LSpec.TestSeq :=
     steps.foldlM (λ suite step => do
       let result ← step
       return suite ++ result) LSpec.TestSeq.done
@@ -45,6 +45,7 @@ def test_option_print : IO LSpec.TestSeq :=
   let pp? := Option.some "∀ (n : Nat), n + 1 = Nat.succ n"
   let sexp? := Option.some "(:forall n (:c Nat) ((((:c Eq) (:c Nat)) (((((((:c HAdd.hAdd) (:c Nat)) (:c Nat)) (:c Nat)) (((:c instHAdd) (:c Nat)) (:c instAddNat))) 0) ((((:c OfNat.ofNat) (:c Nat)) (:lit 1)) ((:c instOfNatNat) (:lit 1))))) ((:c Nat.succ) 0)))"
   let module? := Option.some "Init.Data.Nat.Basic"
+  let options: Commands.Options := {}
   subroutine_runner [
     subroutine_step "inspect"
       [("name", .str "Nat.add_one")]
@@ -62,7 +63,7 @@ def test_option_print : IO LSpec.TestSeq :=
       Commands.InspectResult)),
     subroutine_step "options.print"
       []
-     (Lean.toJson ({ printExprAST := true }:
+     (Lean.toJson ({ options with printExprAST := true }:
       Commands.OptionsPrintResult))
   ]
 

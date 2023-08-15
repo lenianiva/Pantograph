@@ -10,7 +10,7 @@ inductive Start where
   | copy (name: String) -- Start from some name in the environment
   | expr (expr: String) -- Start from some expression
 
-abbrev TestM := StateRefT ProofTree M
+abbrev TestM := ReaderT Commands.Options StateRefT ProofTree M
 
 def start_proof (start: Start): M (LSpec.TestSeq × Option ProofTree) := do
   let env ← Lean.MonadEnv.getEnv
@@ -55,7 +55,8 @@ deriving instance DecidableEq, Repr for TacticResult
 /-- Check the output of each proof step -/
 def proof_step (stateId: Nat) (goalId: Nat) (tactic: String)
     (expected: TacticResult) : TestM LSpec.TestSeq := do
-  let result: TacticResult ← ProofTree.execute stateId goalId tactic |>.run {}
+  let options ← read
+  let result: TacticResult ← ProofTree.execute stateId goalId tactic |>.run options
   match expected, result with
   | .success (.some i) #[], .success (.some _) goals =>
     -- If the goals are omitted but the next state is specified, we imply that
@@ -70,12 +71,12 @@ def proof_inspect (expected: Array String) : TestM LSpec.TestSeq := do
   let result := (← get).structure_array
   return LSpec.test s!"tree structure" (result = expected)
 
-def proof_runner (env: Lean.Environment) (start: Start) (steps: List (TestM LSpec.TestSeq)): IO LSpec.TestSeq := do
+def proof_runner (env: Lean.Environment) (options: Commands.Options) (start: Start) (steps: List (TestM LSpec.TestSeq)): IO LSpec.TestSeq := do
   let termElabM := do
     let (testSeq, state?) ← start_proof start
     match state? with
     | .none => return testSeq
-    | .some state => steps.foldlM (fun tests m => do pure $ tests ++ (← m)) testSeq |>.run' state
+    | .some state => steps.foldlM (fun tests m => do pure $ tests ++ (← m)) testSeq |>.run options |>.run' state
 
   let coreContext: Lean.Core.Context := {
     currNamespace := str_to_name "Aniva",
@@ -97,7 +98,10 @@ def build_goal (nameType: List (String × String)) (target: String): Commands.Go
   {
     target := { pp? := .some target},
     vars := (nameType.map fun x => ({
-      name := x.fst, type := { pp? := .some x.snd } })).toArray
+      name := x.fst,
+      type? := .some { pp? := .some x.snd },
+      isInaccessible? := .some false
+    })).toArray
   }
 
 example: ∀ (a b: Nat), a + b = b + a := by
@@ -105,7 +109,7 @@ example: ∀ (a b: Nat), a + b = b + a := by
   rw [Nat.add_comm]
 def proof_nat_add_comm (env: Lean.Environment): IO LSpec.TestSeq := do
   let goal1: Commands.Goal := build_goal [("n", "Nat"), ("m", "Nat")] "n + m = m + n"
-  proof_runner env (.copy "Nat.add_comm") [
+  proof_runner env {} (.copy "Nat.add_comm") [
     proof_step 0 0 "intro n m"
       (.success (.some 1) #[goal1]),
     proof_step 1 0 "assumption"
@@ -115,7 +119,7 @@ def proof_nat_add_comm (env: Lean.Environment): IO LSpec.TestSeq := do
   ]
 def proof_nat_add_comm_manual (env: Lean.Environment): IO LSpec.TestSeq := do
   let goal1: Commands.Goal := build_goal [("n", "Nat"), ("m", "Nat")] "n + m = m + n"
-  proof_runner env (.expr "∀ (a b: Nat), a + b = b + a") [
+  proof_runner env {} (.expr "∀ (a b: Nat), a + b = b + a") [
     proof_step 0 0 "intro n m"
       (.success (.some 1) #[goal1]),
     proof_step 1 0 "assumption"
@@ -145,12 +149,12 @@ def proof_or_comm (env: Lean.Environment): IO LSpec.TestSeq := do
     caseName? := .some caseName,
     target := { pp? := .some "q ∨ p" },
     vars := #[
-      { name := "p", type := typeProp },
-      { name := "q", type := typeProp },
-      { name := "h✝", type := { pp? := .some name }, isInaccessible := true }
+      { name := "p", type? := .some typeProp, isInaccessible? := .some false },
+      { name := "q", type? := .some typeProp, isInaccessible? := .some false },
+      { name := "h✝", type? := .some { pp? := .some name }, isInaccessible? := .some true }
     ]
   }
-  proof_runner env (.expr "∀ (p q: Prop), p ∨ q → q ∨ p") [
+  proof_runner env {} (.expr "∀ (p q: Prop), p ∨ q → q ∨ p") [
     proof_step 0 0 "intro p q h"
       (.success (.some 1) #[build_goal [("p", "Prop"), ("q", "Prop"), ("h", "p ∨ q")] "q ∨ p"]),
     proof_step 1 0 "cases h"
@@ -173,13 +177,32 @@ example (w x y z : Nat) (p : Nat → Prop)
   simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm, Nat.mul_comm, Nat.mul_assoc, Nat.mul_left_comm] at *
   assumption
 def proof_arith_1 (env: Lean.Environment): IO LSpec.TestSeq := do
-  proof_runner env (.expr "∀ (w x y z : Nat) (p : Nat → Prop) (h : p (x * y + z * w * x)), p (x * w * z + y * x)") [
+  proof_runner env {} (.expr "∀ (w x y z : Nat) (p : Nat → Prop) (h : p (x * y + z * w * x)), p (x * w * z + y * x)") [
     proof_step 0 0 "intros"
       (.success (.some 1) #[]),
     proof_step 1 0 "simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm, Nat.mul_comm, Nat.mul_assoc, Nat.mul_left_comm] at *"
       (.success (.some 2) #[]),
     proof_step 2 0 "assumption"
       (.success .none #[])
+  ]
+
+def build_goal_selective (nameType: List (String × Option String)) (target: String): Commands.Goal :=
+  {
+    target := { pp? := .some target},
+    vars := (nameType.map fun x => ({
+      name := x.fst,
+      type? := x.snd.map (λ type => { pp? := type }),
+      isInaccessible? := x.snd.map (λ _ => false)
+    })).toArray
+  }
+def proof_delta_variable (env: Lean.Environment): IO LSpec.TestSeq := do
+  let goal1: Commands.Goal := build_goal_selective [("n", .some "Nat")] "∀ (b : Nat), n + b = b + n"
+  let goal2: Commands.Goal := build_goal_selective [("n", .none), ("m", .some "Nat")] "n + m = m + n"
+  proof_runner env { proofVariableDelta := true } (.expr "∀ (a b: Nat), a + b = b + a") [
+    proof_step 0 0 "intro n"
+      (.success (.some 1) #[goal1]),
+    proof_step 1 0 "intro m"
+      (.success (.some 2) #[goal2])
   ]
 
 def test_proofs : IO LSpec.TestSeq := do
@@ -192,7 +215,8 @@ def test_proofs : IO LSpec.TestSeq := do
     (LSpec.group "Nat.add_comm" $ (← proof_nat_add_comm env)) ++
     (LSpec.group "Nat.add_comm manual" $ (← proof_nat_add_comm_manual env)) ++
     (LSpec.group "Or.comm" $ (← proof_or_comm env)) ++
-    (LSpec.group "Arithmetic 1" $ (← proof_arith_1 env))
+    (LSpec.group "Arithmetic 1" $ (← proof_arith_1 env)) ++
+    (LSpec.group "Delta variable" $ (← proof_delta_variable env))
 
 end Pantograph.Test
 

@@ -7,7 +7,7 @@ import Pantograph
 -- Main IO functions
 open Pantograph
 
-unsafe def loop : Subroutine Unit := do
+unsafe def loop : MainM Unit := do
   let command ← (← IO.getStdin).getLine
   if command.trim.length = 0 then return ()
   match parse_command command with

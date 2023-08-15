@@ -115,9 +115,10 @@ def ProofTree.execute (stateId: Nat) (goalId: Nat) (tactic: String):
             parentGoalId := goalId
           }
           modify fun s => { s with states := s.states.push proofState }
+        let parentDecl? := (← MonadMCtx.getMCtx).findDecl? goal
         let goals ← nextGoals.mapM fun mvarId => do
           match (← MonadMCtx.getMCtx).findDecl? mvarId with
-          | .some mvarDecl => serialize_goal options mvarDecl
+          | .some mvarDecl => serialize_goal options mvarDecl (parentDecl? := parentDecl?)
           | .none => throwError mvarId
         return .success (.some nextId) goals.toArray
 
