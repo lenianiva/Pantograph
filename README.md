@@ -33,7 +33,7 @@ result of a command execution.  The command can be passed in one of two formats
 command { ... }
 { "cmd": command, "payload": ... }
 ```
-The list of available commands can be found in `Pantograph/Commands.lean`. An
+The list of available commands can be found in `Pantograph/Commands.lean` and below. An
 empty command aborts the REPL.
 
 The `Pantograph` executable must be run with a list of modules to import. It can
@@ -65,8 +65,13 @@ where the application of `assumption` should lead to a failure.
 ## Commands
 
 See `Pantograph/Commands.lean` for a description of the parameters and return values in Json.
+- `options.set { key: value, ... }`: Set one or more options (not Lean options; those
+  have to be set via command line arguments.)
+- `options.print`: Display the current set of options
 - `catalog`: Display a list of all safe Lean symbols in the current context
-- `inspect {"name": <name>}`: Show the type and package of a given symbol
+- `inspect {"name": <name>, "value": <bool>}`: Show the type and package of a
+  given symbol; If value flag is set, the value is printed or hidden. By default
+  only the values of definitions are printed.
 - `clear`: Delete all cached expressions and proof trees
 - `expr.type {"expr": <expr>}`: Determine the type of an expression and round-trip it
 - `proof.start {["name": <name>], ["expr": <expr>], ["copyFrom": <symbol>]}`: Start a new proof state from a given expression or symbol
@@ -86,4 +91,3 @@ The tests are based on `LSpec`. To run tests,
 ``` sh
 test/all.sh
 ```
-

@@ -3,39 +3,14 @@ import Pantograph.Serial
 import Pantograph.Meta
 import Pantograph.Symbols
 
-namespace Lean
--- This is better than the default version since it handles `.` and doesn't
--- crash the program when it fails.
-def setOptionFromString'' (opts : Options) (entry : String) : ExceptT String IO Options := do
-  let ps := (entry.splitOn "=").map String.trim
-  let [key, val] ← pure ps | throw "invalid configuration option entry, it must be of the form '<key> = <value>'"
-  let key := Pantograph.str_to_name key
-  let defValue ← getOptionDefaultValue key
-  match defValue with
-  | DataValue.ofString _ => pure $ opts.setString key val
-  | DataValue.ofBool _   =>
-    match val with
-    | "true" => pure $ opts.setBool key true
-    | "false" => pure $ opts.setBool key false
-    | _ => throw  s!"invalid Bool option value '{val}'"
-  | DataValue.ofName _   => pure $ opts.setName key val.toName
-  | DataValue.ofNat _    =>
-    match val.toNat? with
-    | none   => throw s!"invalid Nat option value '{val}'"
-    | some v => pure $ opts.setNat key v
-  | DataValue.ofInt _    =>
-    match val.toInt? with
-    | none   => throw s!"invalid Int option value '{val}'"
-    | some v => pure $ opts.setInt key v
-  | DataValue.ofSyntax _ => throw s!"invalid Syntax option value"
-end Lean
-
 namespace Pantograph
 
 structure Context where
+  imports: List String
 
 /-- Stores state of the REPL -/
 structure State where
+  options: Commands.Options := {}
   --environments: Array Lean.Environment := #[]
   proofTrees:   Array ProofTree := #[]
 
@@ -59,9 +34,13 @@ def parse_command (s: String): Except String Commands.Command := do
 
 def execute (command: Commands.Command): Subroutine Lean.Json := do
   match command.cmd with
-  | "option.set" =>
+  | "options.set" =>
     match Lean.fromJson? command.payload with
-    | .ok args => option_set args
+    | .ok args => options_set args
+    | .error x => return errorJson x
+  | "options.print" =>
+    match Lean.fromJson? command.payload with
+    | .ok args => options_print args
     | .error x => return errorJson x
   | "catalog" =>
     match Lean.fromJson? command.payload with
@@ -97,16 +76,19 @@ def execute (command: Commands.Command): Subroutine Lean.Json := do
     { error := type, desc := desc }: Commands.InteractionError)
   errorJson := errorI "json"
   errorIndex := errorI "index"
-  option_set (args: Commands.OptionSet): Subroutine Lean.Json := do
-    let options? ← args.options.foldlM Lean.setOptionFromString'' Lean.Options.empty
-      |>.run
-    match options? with
-    | .ok options =>
-      withTheReader Lean.Core.Context
-        (λ coreContext => { coreContext with options })
-        (pure $ Lean.toJson <| ({ }: Commands.OptionSetResult))
-    | .error e =>
-      return errorI "parsing" e
+  -- Command Functions
+  options_set (args: Commands.OptionsSet): Subroutine Lean.Json := do
+    let state ← get
+    set { state with
+      options := {
+        printExprPretty := args.printExprPretty?.getD true,
+        printExprAST := args.printExprAST?.getD true,
+        proofVariableDelta := args.proofVariableDelta?.getD false
+      }
+    }
+    return Lean.toJson ({ }: Commands.OptionsSetResult)
+  options_print (_: Commands.OptionsPrint): Subroutine Lean.Json := do
+    return Lean.toJson (← get).options
   catalog (_: Commands.Catalog): Subroutine Lean.Json := do
     let env ← Lean.MonadEnv.getEnv
     let names := env.constants.fold (init := #[]) (λ acc name info =>
@@ -115,22 +97,23 @@ def execute (command: Commands.Command): Subroutine Lean.Json := do
       | .none => acc)
     return Lean.toJson <| ({ symbols := names }: Commands.CatalogResult)
   inspect (args: Commands.Inspect): Subroutine Lean.Json := do
+    let state ← get
     let env ← Lean.MonadEnv.getEnv
     let name := str_to_name args.name
     let info? := env.find? name
     match info? with
     | none => return  errorIndex s!"Symbol not found {args.name}"
     | some info =>
-      let format ← Lean.Meta.ppExpr info.toConstantVal.type
       let module? := env.getModuleIdxFor? name >>=
         (λ idx => env.allImportedModuleNames.get? idx.toNat) |>.map toString
-      let boundExpr? ← (match info.toConstantVal.type with
-        | .forallE _ _ _ _ => return Option.none -- TODO: Temporary override, enable expression dissection in options.
-          -- return .some (← type_expr_to_bound info.toConstantVal.type)
-        | _ => return Option.none)
+      let value? := match args.value?, info with
+        | .some true, _ => info.value?
+        | .some false, _ => .none
+        | .none, .defnInfo _ => info.value?
+        | .none, _ => .none
       return Lean.toJson ({
-        type := toString format,
-        boundExpr? := boundExpr?,
+        type := ← serialize_expression state.options info.type,
+        value? := ← value?.mapM (λ v => serialize_expression state.options v),
         module? := module?
       }: Commands.InspectResult)
   clear : Subroutine Lean.Json := do

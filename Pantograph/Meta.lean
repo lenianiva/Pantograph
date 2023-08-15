@@ -16,7 +16,9 @@ From this point on, any proof which extends
 -/
 
 def Lean.MessageLog.getErrorMessages (log : MessageLog) : MessageLog :=
-{ msgs := log.msgs.filter fun m => match m.severity with | MessageSeverity.error => true | _ => false }
+  {
+    msgs := log.msgs.filter fun m => match m.severity with | MessageSeverity.error => true | _ => false
+  }
 
 
 namespace Pantograph
@@ -83,12 +85,14 @@ inductive TacticResult where
   -- Invalid id
   | invalid (message: String): TacticResult
   -- Goes to next state
-  | success (nextId?: Option Nat) (goals: Array Goal)
+  | success (nextId?: Option Nat) (goals: Array Commands.Goal)
   -- Fails with messages
   | failure (messages: Array String)
 
 /-- Execute tactic on given state -/
 def ProofTree.execute (stateId: Nat) (goalId: Nat) (tactic: String): StateRefT ProofTree M TacticResult := do
+  -- TODO: Replace with actual options
+  let options: Commands.Options := {}
   let tree ← get
   match tree.states.get? stateId with
   | .none => return .invalid s!"Invalid state id {stateId}"
@@ -113,7 +117,7 @@ def ProofTree.execute (stateId: Nat) (goalId: Nat) (tactic: String): StateRefT P
           modify fun s => { s with states := s.states.push proofState }
         let goals ← nextGoals.mapM fun mvarId => do
           match (← MonadMCtx.getMCtx).findDecl? mvarId with
-          | .some mvarDecl => serialize_goal mvarDecl
+          | .some mvarDecl => serialize_goal options mvarDecl
           | .none => throwError mvarId
         return .success (.some nextId) goals.toArray
 

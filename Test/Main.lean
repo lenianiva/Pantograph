@@ -9,6 +9,7 @@ unsafe def main := do
   Lean.enableInitializersExecution
   Lean.initSearchPath (← Lean.findSysroot)
 
+	-- TODO: Add proper testing
   let suites := [
     test_serial,
     test_proofs
