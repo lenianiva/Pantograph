@@ -44,12 +44,12 @@ def execute (command: Commands.Command): MainM Lean.Json := do
       | .error ierror => return Lean.toJson ierror
     | .error error => pure $ error
   match command.cmd with
+  | "reset"           => run reset
+  | "expr.echo"       => run expr_echo
+  | "lib.catalog"     => run lib_catalog
+  | "lib.inspect"     => run lib_inspect
   | "options.set"     => run options_set
   | "options.print"   => run options_print
-  | "catalog"         => run catalog
-  | "inspect"         => run inspect
-  | "clear"           => run clear
-  | "expr.echo"       => run expr_echo
   | "proof.start"     => run proof_start
   | "proof.tactic"    => run proof_tactic
   | "proof.printTree" => run proof_print_tree
@@ -61,30 +61,19 @@ def execute (command: Commands.Command): MainM Lean.Json := do
   errorI (type desc: String): Commands.InteractionError := { error := type, desc := desc }
   errorIndex := errorI "index"
   -- Command Functions
-  options_set (args: Commands.OptionsSet): MainM (CR Commands.OptionsSetResult) := do
+  reset (_: Commands.Reset): MainM (CR Commands.ResetResult) := do
     let state ← get
-    let options := state.options
-    set { state with
-      options := {
-        -- FIXME: This should be replaced with something more elegant
-        printExprPretty := args.printExprPretty?.getD options.printExprPretty,
-        printExprAST := args.printExprAST?.getD options.printExprAST,
-        proofVariableDelta := args.proofVariableDelta?.getD options.proofVariableDelta,
-        printAuxDecls := args.printAuxDecls?.getD options.printAuxDecls,
-        printImplementationDetailHyps := args.printImplementationDetailHyps?.getD options.printImplementationDetailHyps
-      }
-    }
-    return .ok {  }
-  options_print (_: Commands.OptionsPrint): MainM (CR Commands.OptionsPrintResult) := do
-    return .ok (← get).options
-  catalog (_: Commands.Catalog): MainM (CR Commands.CatalogResult) := do
+    let nTrees := state.proofTrees.size
+    set { state with proofTrees := #[] }
+    return .ok { nTrees := nTrees }
+  lib_catalog (_: Commands.LibCatalog): MainM (CR Commands.LibCatalogResult) := do
     let env ← Lean.MonadEnv.getEnv
     let names := env.constants.fold (init := #[]) (λ acc name info =>
       match to_filtered_symbol name info with
       | .some x => acc.push x
       | .none => acc)
     return .ok { symbols := names }
-  inspect (args: Commands.Inspect): MainM (CR Commands.InspectResult) := do
+  lib_inspect (args: Commands.LibInspect): MainM (CR Commands.LibInspectResult) := do
     let state ← get
     let env ← Lean.MonadEnv.getEnv
     let name := str_to_name args.name
@@ -104,11 +93,6 @@ def execute (command: Commands.Command): MainM Lean.Json := do
         value? := ← value?.mapM (λ v => serialize_expression state.options v),
         module? := module?
       }
-  clear (_: Commands.Clear): MainM (CR Commands.ClearResult) := do
-    let state ← get
-    let nTrees := state.proofTrees.size
-    set { state with proofTrees := #[] }
-    return .ok { nTrees := nTrees }
   expr_echo (args: Commands.ExprEcho): MainM (CR Commands.ExprEchoResult) := do
     let state ← get
     let env ← Lean.MonadEnv.getEnv
@@ -126,6 +110,23 @@ def execute (command: Commands.Command): MainM Lean.Json := do
           }
         catch exception =>
           return .error $ errorI "typing" (← exception.toMessageData.toString)
+  options_set (args: Commands.OptionsSet): MainM (CR Commands.OptionsSetResult) := do
+    let state ← get
+    let options := state.options
+    set { state with
+      options := {
+        -- FIXME: This should be replaced with something more elegant
+        printJsonPretty := args.printJsonPretty?.getD options.printJsonPretty,
+        printExprPretty := args.printExprPretty?.getD options.printExprPretty,
+        printExprAST := args.printExprAST?.getD options.printExprAST,
+        proofVariableDelta := args.proofVariableDelta?.getD options.proofVariableDelta,
+        printAuxDecls := args.printAuxDecls?.getD options.printAuxDecls,
+        printImplementationDetailHyps := args.printImplementationDetailHyps?.getD options.printImplementationDetailHyps
+      }
+    }
+    return .ok {  }
+  options_print (_: Commands.OptionsPrint): MainM (CR Commands.OptionsPrintResult) := do
+    return .ok (← get).options
   proof_start (args: Commands.ProofStart): MainM (CR Commands.ProofStartResult) := do
     let state ← get
     let env ← Lean.MonadEnv.getEnv

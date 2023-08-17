@@ -42,13 +42,13 @@ also accept lean options of the form `--key=value` e.g. `--pp.raw=true`.
 Example: (~5k symbols)
 ```
 $ build/bin/Pantograph Init
-catalog
-inspect {"name": "Nat.le_add_left"}
+lib.catalog
+lib.inspect {"name": "Nat.le_add_left"}
 ```
 Example with `mathlib4` (~90k symbols, may stack overflow, see troubleshooting)
 ```
 $ lake env build/bin/Pantograph Mathlib.Analysis.Seminorm
-catalog
+lib.catalog
 ```
 Example proving a theorem: (alternatively use `proof.start {"copyFrom": "Nat.add_comm"}`) to prime the proof
 ```
@@ -65,15 +65,15 @@ where the application of `assumption` should lead to a failure.
 ## Commands
 
 See `Pantograph/Commands.lean` for a description of the parameters and return values in Json.
-- `options.set { key: value, ... }`: Set one or more options (not Lean options; those
-  have to be set via command line arguments.)
-- `options.print`: Display the current set of options
-- `catalog`: Display a list of all safe Lean symbols in the current context
-- `inspect {"name": <name>, "value": <bool>}`: Show the type and package of a
+- `reset`: Delete all cached expressions and proof trees
+- `expr.echo {"expr": <expr>}`: Determine the type of an expression and round-trip it
+- `lib.catalog`: Display a list of all safe Lean symbols in the current context
+- `lib.inspect {"name": <name>, "value": <bool>}`: Show the type and package of a
   given symbol; If value flag is set, the value is printed or hidden. By default
   only the values of definitions are printed.
-- `clear`: Delete all cached expressions and proof trees
-- `expr.echo {"expr": <expr>}`: Determine the type of an expression and round-trip it
+- `options.set { key: value, ... }`: Set one or more options (not Lean options; those
+  have to be set via command line arguments.), for options, see `Pantograph/Commands.lean`
+- `options.print`: Display the current set of options
 - `proof.start {["name": <name>], ["expr": <expr>], ["copyFrom": <symbol>]}`: Start a new proof state from a given expression or symbol
 - `proof.tactic {"treeId": <id>, "stateId": <id>, "goalId": <id>, "tactic": string}`: Execute a tactic on a given proof state
 - `proof.printTree {"treeId": <id>}`: Print the topological structure of a proof tree

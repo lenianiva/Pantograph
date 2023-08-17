@@ -11,6 +11,9 @@ namespace Pantograph.Commands
 
 /-- Main Option structure, placed here to avoid name collision -/
 structure Options where
+  -- When false, suppress newlines in Json objects. Useful for machine-to-machine interaction.
+  -- This should be  false` by default to avoid any surprises with parsing.
+  printJsonPretty: Bool    := false
   -- When enabled, pretty print every expression
   printExprPretty: Bool    := true
   -- When enabled, print the raw AST of expressions
@@ -74,45 +77,10 @@ structure InteractionError where
 
 --- Individual command and return types ---
 
-/-- Set options; See `Options` struct above for meanings -/
-structure OptionsSet where
-  printExprPretty?: Option Bool
-  printExprAST?: Option Bool
-  proofVariableDelta?: Option Bool
-  printAuxDecls?: Option Bool
-  printImplementationDetailHyps?: Option Bool
-  deriving Lean.FromJson
-structure OptionsSetResult where
-  deriving Lean.ToJson
 
-structure OptionsPrint where
+structure Reset where
   deriving Lean.FromJson
-abbrev OptionsPrintResult := Options
-
-
--- Print all symbols in environment
-structure Catalog where
-  deriving Lean.FromJson
-structure CatalogResult where
-  symbols: Array String
-  deriving Lean.ToJson
-
--- Print the type of a symbol
-structure Inspect where
-  name: String
-  -- If true/false, show/hide the value expressions; By default definitions
-  -- values are shown and theorem values are hidden.
-  value?: Option Bool := .some false
-  deriving Lean.FromJson
-structure InspectResult where
-  type: Expression
-  value?: Option Expression := .none
-  module?: Option String
-  deriving Lean.ToJson
-
-structure Clear where
-  deriving Lean.FromJson
-structure ClearResult where
+structure ResetResult where
   nTrees: Nat
   deriving Lean.ToJson
 
@@ -125,6 +93,40 @@ structure ExprEchoResult where
   type: Expression
   deriving Lean.ToJson
 
+-- Print all symbols in environment
+structure LibCatalog where
+  deriving Lean.FromJson
+structure LibCatalogResult where
+  symbols: Array String
+  deriving Lean.ToJson
+-- Print the type of a symbol
+structure LibInspect where
+  name: String
+  -- If true/false, show/hide the value expressions; By default definitions
+  -- values are shown and theorem values are hidden.
+  value?: Option Bool := .some false
+  deriving Lean.FromJson
+structure LibInspectResult where
+  type: Expression
+  value?: Option Expression := .none
+  module?: Option String
+  deriving Lean.ToJson
+
+/-- Set options; See `Options` struct above for meanings -/
+structure OptionsSet where
+  printJsonPretty?: Option Bool
+  printExprPretty?: Option Bool
+  printExprAST?: Option Bool
+  proofVariableDelta?: Option Bool
+  printAuxDecls?: Option Bool
+  printImplementationDetailHyps?: Option Bool
+  deriving Lean.FromJson
+structure OptionsSetResult where
+  deriving Lean.ToJson
+structure OptionsPrint where
+  deriving Lean.FromJson
+abbrev OptionsPrintResult := Options
+
 structure ProofStart where
   name: Option String     -- Identifier of the proof
   -- Only one of the fields below may be populated.
@@ -134,7 +136,6 @@ structure ProofStart where
 structure ProofStartResult where
   treeId: Nat := 0 -- Proof tree id
   deriving Lean.ToJson
-
 structure ProofTactic where
   -- Identifiers for tree, state, and goal
   treeId: Nat
@@ -150,7 +151,6 @@ structure ProofTacticResult where
   -- Existence of this field shows failure
   tacticErrors?: Option (Array String) := .none
   deriving Lean.ToJson
-
 structure ProofPrintTree where
   treeId: Nat
   deriving Lean.FromJson

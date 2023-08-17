@@ -47,20 +47,20 @@ def test_option_print : IO LSpec.TestSeq :=
   let module? := Option.some "Init.Data.Nat.Basic"
   let options: Commands.Options := {}
   subroutine_runner [
-    subroutine_step "inspect"
+    subroutine_step "lib.inspect"
       [("name", .str "Nat.add_one")]
      (Lean.toJson ({
        type := { pp? }, module? }:
-      Commands.InspectResult)),
+      Commands.LibInspectResult)),
     subroutine_step "options.set"
       [("printExprAST", .bool true)]
      (Lean.toJson ({ }:
       Commands.OptionsSetResult)),
-    subroutine_step "inspect"
+    subroutine_step "lib.inspect"
       [("name", .str "Nat.add_one")]
      (Lean.toJson ({
        type := { pp?, sexp? }, module? }:
-      Commands.InspectResult)),
+      Commands.LibInspectResult)),
     subroutine_step "options.print"
       []
      (Lean.toJson ({ options with printExprAST := true }:

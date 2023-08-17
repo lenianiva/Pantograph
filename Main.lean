@@ -8,15 +8,20 @@ import Pantograph
 open Pantograph
 
 unsafe def loop : MainM Unit := do
+  let state ← get
   let command ← (← IO.getStdin).getLine
   if command.trim.length = 0 then return ()
   match parse_command command with
   | .error error =>
     let error  := Lean.toJson ({ error := "json", desc := error }: Commands.InteractionError)
-    IO.println (toString error)
+    -- Using `Lean.Json.compress` here to prevent newline
+    IO.println error.compress
   | .ok command =>
     let ret ← execute command
-    IO.println <| toString <| ret
+    let str := match state.options.printJsonPretty with
+      | true => ret.pretty
+      | false => ret.compress
+    IO.println str
   loop
 
 namespace Lean
