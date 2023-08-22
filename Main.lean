@@ -7,6 +7,21 @@ import Pantograph
 -- Main IO functions
 open Pantograph
 
+/-- Parse a command either in `{ "cmd": ..., "payload": ... }` form or `cmd { ... }` form. -/
+def parse_command (s: String): Except String Commands.Command := do
+  let s := s.trim
+  match s.get? 0 with
+  | .some '{' => -- Parse in Json mode
+    Lean.fromJson? (← Lean.Json.parse s)
+  | .some _ => -- Parse in line mode
+    let offset := s.posOf ' ' |> s.offsetOfPos
+    if offset = s.length then
+      return { cmd := s.take offset, payload := Lean.Json.null }
+    else
+      let payload ← s.drop offset |> Lean.Json.parse
+      return { cmd := s.take offset, payload := payload }
+  | .none => throw "Command is empty"
+
 unsafe def loop : MainM Unit := do
   let state ← get
   let command ← (← IO.getStdin).getLine
