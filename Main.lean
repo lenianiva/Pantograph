@@ -13,7 +13,7 @@ unsafe def loop : MainM Unit := do
   if command.trim.length = 0 then return ()
   match parse_command command with
   | .error error =>
-    let error  := Lean.toJson ({ error := "json", desc := error }: Commands.InteractionError)
+    let error  := Lean.toJson ({ error := "command", desc := error }: Commands.InteractionError)
     -- Using `Lean.Json.compress` here to prevent newline
     IO.println error.compress
   | .ok command =>

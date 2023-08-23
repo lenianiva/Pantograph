@@ -41,7 +41,7 @@ def subroutine_runner (steps: List (MainM LSpec.TestSeq)): IO LSpec.TestSeq := d
   catch ex =>
     return LSpec.check s!"Uncaught IO exception: {ex.toString}" false
 
-def test_option_print : IO LSpec.TestSeq :=
+def test_option_modify : IO LSpec.TestSeq :=
   let pp? := Option.some "∀ (n : Nat), n + 1 = Nat.succ n"
   let sexp? := Option.some "(:forall n (:c Nat) ((((:c Eq) (:c Nat)) (((((((:c HAdd.hAdd) (:c Nat)) (:c Nat)) (:c Nat)) (((:c instHAdd) (:c Nat)) (:c instAddNat))) 0) ((((:c OfNat.ofNat) (:c Nat)) (:lit 1)) ((:c instOfNatNat) (:lit 1))))) ((:c Nat.succ) 0)))"
   let module? := Option.some "Init.Data.Nat.Basic"
@@ -66,11 +66,21 @@ def test_option_print : IO LSpec.TestSeq :=
      (Lean.toJson ({ options with printExprAST := true }:
       Commands.OptionsPrintResult))
   ]
+def test_malformed_command : IO LSpec.TestSeq :=
+  let invalid := "invalid"
+  subroutine_runner [
+    subroutine_step invalid
+      [("name", .str "Nat.add_one")]
+     (Lean.toJson ({
+       error := "command", desc := s!"Unknown command {invalid}"}:
+      Commands.InteractionError))
+  ]
 
 def test_integration: IO LSpec.TestSeq := do
 
   return LSpec.group "Integration" $
-    (LSpec.group "Option modify" (← test_option_print))
+    (LSpec.group "Option modify" (← test_option_modify)) ++
+    (LSpec.group "Malformed command" (← test_malformed_command))
 
 
 end Pantograph.Test
