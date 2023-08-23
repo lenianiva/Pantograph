@@ -40,7 +40,7 @@ def execute (command: Commands.Command): MainM Lean.Json := do
   | "proof.printTree" => run proof_print_tree
   | cmd =>
     let error: Commands.InteractionError :=
-      { error := "unknown", desc := s!"Unknown command {cmd}" }
+      { error := "command", desc := s!"Unknown command {cmd}" }
     return Lean.toJson error
   where
   errorI (type desc: String): Commands.InteractionError := { error := type, desc := desc }
