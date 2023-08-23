@@ -128,7 +128,6 @@ structure OptionsPrint where
 abbrev OptionsPrintResult := Options
 
 structure ProofStart where
-  name: Option String     -- Identifier of the proof
   -- Only one of the fields below may be populated.
   expr: Option String     -- Proof expression
   copyFrom: Option String -- Theorem name
@@ -140,7 +139,7 @@ structure ProofTactic where
   -- Identifiers for tree, state, and goal
   treeId: Nat
   stateId: Nat
-  goalId: Option Nat
+  goalId: Option Nat -- Defaults to 0
   tactic: String
   deriving Lean.FromJson
 structure ProofTacticResult where

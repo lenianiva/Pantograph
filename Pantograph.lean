@@ -134,7 +134,7 @@ def execute (command: Commands.Command): MainM Lean.Json := do
     match expr? with
     | .error error => return .error error
     | .ok expr =>
-      let tree ← ProofTree.create (str_to_name <| args.name.getD "Untitled") expr
+      let tree ← ProofTree.create expr
       -- Put the new tree in the environment
       let nextTreeId := state.proofTrees.size
       set { state with proofTrees := state.proofTrees.push tree }
