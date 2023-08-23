@@ -53,21 +53,73 @@ def type_expr_to_bound (expr: Expr): MetaM Commands.BoundExpression := do
       return (toString (← fvar.fvarId!.getUserName), toString (← Meta.ppExpr (← fvar.fvarId!.getType)))
     return { binders, target := toString (← Meta.ppExpr body) }
 
+private def name_to_ast: Lean.Name → String
+  | .anonymous
+  | .num _ _ => ":anon"
+  | n@(.str _ _) => toString n
+
+private def level_depth: Level → Nat
+  | .zero => 0
+  | .succ l => 1 + (level_depth l)
+  | .max u v | .imax u v => 1 + max (level_depth u) (level_depth v)
+  | .param _ | .mvar _ => 0
+
+theorem level_depth_max_imax (u v: Level): (level_depth (Level.max u v) = level_depth (Level.imax u v)) := by
+  constructor
+theorem level_max_depth_decrease (u v: Level): (level_depth u < level_depth (Level.max u v)) := by
+  have h1: level_depth (Level.max u v) = 1 + Nat.max (level_depth u) (level_depth v) := by constructor
+  rewrite [h1]
+  simp_arith
+  conv =>
+    rhs
+    apply Nat.max_def
+  sorry
+theorem level_offset_decrease (u v: Level): (level_depth u ≤ level_depth (Level.max u v).getLevelOffset) := sorry
+
+/-- serialize a sort level. Expression is optimized to be compact e.g. `(+ u 2)` -/
+def serialize_sort_level_ast (level: Level): String :=
+  let k := level.getOffset
+  let u := level.getLevelOffset
+  let u_str := match u with
+    | .zero => "0"
+    | .succ _ => panic! "getLevelOffset should not return .succ"
+    | .max v w | .imax v w =>
+      let v := serialize_sort_level_ast v
+      let w := serialize_sort_level_ast w
+      s!"(max {v} {w})"
+    | .param name =>
+      let name := name_to_ast name
+      s!"{name}"
+    | .mvar id =>
+      let name := name_to_ast id.name
+      s!"(:mvar {name})"
+  match k, u with
+  | 0, _ => u_str
+  | _, .zero => s!"{k}"
+  | _, _ => s!"(+ {u_str} {k})"
+  termination_by serialize_sort_level_ast level => level_depth level
+  decreasing_by
+  . sorry
+
 /--
- Completely serialises an expression tree. Json not used due to compactness
+ Completely serializes an expression tree. Json not used due to compactness
 -/
 def serialize_expression_ast (expr: Expr): MetaM String := do
   match expr with
   | .bvar deBruijnIndex =>
     -- This is very common so the index alone is shown. Literals are handled below.
+    -- The raw de Bruijn index should never appear in an unbound setting. In
+    -- Lean these are handled using a `#` prefix.
     return s!"{deBruijnIndex}"
   | .fvar fvarId =>
     let name := (← fvarId.getDecl).userName
     return s!"(:fv {name})"
-  | .mvar _ =>
-    -- mvarId is ignored.
-    return s!":mv"
-  | .sort u => return s!"(:sort {u.depth})"
+  | .mvar mvarId =>
+    let name := name_to_ast mvarId.name
+    return s!"(:mv {name})"
+  | .sort level =>
+    let level := serialize_sort_level_ast level
+    return s!"(:sort {level})"
   | .const declName _ =>
     -- The universe level of the const expression is elided since it should be
     -- inferrable from surrounding expression
@@ -77,20 +129,20 @@ def serialize_expression_ast (expr: Expr): MetaM String := do
     let arg' ← serialize_expression_ast arg
     return s!"({fn'} {arg'})"
   | .lam binderName binderType body binderInfo =>
-    let binderName' := nameToAst binderName
+    let binderName' := name_to_ast binderName
     let binderType' ← serialize_expression_ast binderType
     let body' ← serialize_expression_ast body
-    let binderInfo' := binderInfoToAst binderInfo
+    let binderInfo' := binder_info_to_ast binderInfo
     return s!"(:lambda {binderName'} {binderType'} {body'}{binderInfo'})"
   | .forallE binderName binderType body binderInfo =>
-    let binderName' := nameToAst binderName
+    let binderName' := name_to_ast binderName
     let binderType' ← serialize_expression_ast binderType
     let body' ← serialize_expression_ast body
-    let binderInfo' := binderInfoToAst binderInfo
+    let binderInfo' := binder_info_to_ast binderInfo
     return s!"(:forall {binderName'} {binderType'} {body'}{binderInfo'})"
   | .letE name type value body _ =>
     -- Dependent boolean flag diacarded
-    let name' := nameToAst name
+    let name' := name_to_ast name
     let type' ← serialize_expression_ast type
     let value' ← serialize_expression_ast value
     let body' ← serialize_expression_ast body
@@ -112,11 +164,7 @@ def serialize_expression_ast (expr: Expr): MetaM String := do
 
   where
   -- Elides all unhygenic names
-  nameToAst: Lean.Name → String
-    | .anonymous
-    | .num _ _ => ":anon"
-    | n@(.str _ _) => toString n
-  binderInfoToAst : Lean.BinderInfo → String
+  binder_info_to_ast : Lean.BinderInfo → String
     | .default => ""
     | .implicit => " :implicit"
     | .strictImplicit => " :strictImplicit"

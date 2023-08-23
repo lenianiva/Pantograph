@@ -20,21 +20,6 @@ abbrev MainM := ReaderT Context (StateT State Lean.Elab.TermElabM)
 -- monadic features in `MainM`
 abbrev CR α := Except Commands.InteractionError α
 
-/-- Parse a command either in `{ "cmd": ..., "payload": ... }` form or `cmd { ... }` form. -/
-def parse_command (s: String): Except String Commands.Command := do
-  let s := s.trim
-  match s.get? 0 with
-  | .some '{' => -- Parse in Json mode
-    Lean.fromJson? (← Lean.Json.parse s)
-  | .some _ => -- Parse in line mode
-    let offset := s.posOf ' ' |> s.offsetOfPos
-    if offset = s.length then
-      return { cmd := s.take offset, payload := Lean.Json.null }
-    else
-      let payload ← s.drop offset |> Lean.Json.parse
-      return { cmd := s.take offset, payload := payload }
-  | .none => throw "Command is empty"
-
 def execute (command: Commands.Command): MainM Lean.Json := do
   let run { α β: Type } [Lean.FromJson α] [Lean.ToJson β] (comm: α → MainM (CR β)): MainM Lean.Json :=
     match Lean.fromJson? command.payload with
