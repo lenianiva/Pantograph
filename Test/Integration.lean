@@ -5,10 +5,12 @@ import Pantograph
 namespace Pantograph.Test
 open Pantograph
 
-def subroutine_step (cmd: String) (payload: List (String × Lean.Json))
+def subroutine_named_step (name cmd: String) (payload: List (String × Lean.Json))
     (expected: Lean.Json): MainM LSpec.TestSeq := do
   let result ← execute { cmd := cmd, payload := Lean.Json.mkObj payload }
-  return LSpec.test s!"{cmd}" (toString result = toString expected)
+  return LSpec.test name (toString result = toString expected)
+def subroutine_step (cmd: String) (payload: List (String × Lean.Json))
+    (expected: Lean.Json): MainM LSpec.TestSeq := subroutine_named_step cmd cmd payload expected
 
 def subroutine_runner (steps: List (MainM LSpec.TestSeq)): IO LSpec.TestSeq := do
   -- Setup the environment for execution
@@ -69,10 +71,15 @@ def test_option_modify : IO LSpec.TestSeq :=
 def test_malformed_command : IO LSpec.TestSeq :=
   let invalid := "invalid"
   subroutine_runner [
-    subroutine_step invalid
+    subroutine_named_step "Invalid command" invalid
       [("name", .str "Nat.add_one")]
      (Lean.toJson ({
        error := "command", desc := s!"Unknown command {invalid}"}:
+      Commands.InteractionError)),
+    subroutine_named_step "JSON Deserialization" "expr.echo"
+      [(invalid, .str "Random garbage data")]
+     (Lean.toJson ({
+       error := "command", desc := s!"Unable to parse json: Pantograph.Commands.ExprEcho.expr: String expected"}:
       Commands.InteractionError))
   ]
 
