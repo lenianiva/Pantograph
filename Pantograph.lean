@@ -27,7 +27,7 @@ def execute (command: Commands.Command): MainM Lean.Json := do
       match (← comm args) with
       | .ok result =>  return Lean.toJson result
       | .error ierror => return Lean.toJson ierror
-    | .error error => pure $ error
+    | .error error => return Lean.toJson $ errorCommand s!"Unable to parse json: {error}"
   match command.cmd with
   | "reset"           => run reset
   | "expr.echo"       => run expr_echo
@@ -40,10 +40,11 @@ def execute (command: Commands.Command): MainM Lean.Json := do
   | "proof.printTree" => run proof_print_tree
   | cmd =>
     let error: Commands.InteractionError :=
-      { error := "command", desc := s!"Unknown command {cmd}" }
+      errorCommand s!"Unknown command {cmd}"
     return Lean.toJson error
   where
   errorI (type desc: String): Commands.InteractionError := { error := type, desc := desc }
+  errorCommand := errorI "command"
   errorIndex := errorI "index"
   -- Command Functions
   reset (_: Commands.Reset): MainM (CR Commands.ResetResult) := do

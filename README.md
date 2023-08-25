@@ -27,7 +27,7 @@ build/bin/pantograph MODULES|LEAN_OPTIONS
 ```
 
 The REPL loop accepts commands as single-line JSON inputs and outputs either an
-`Error:` (indicating malformed command) or a json return value indicating the
+`Error:` (indicating malformed command) or a JSON return value indicating the
 result of a command execution.  The command can be passed in one of two formats
 ```
 command { ... }
@@ -64,7 +64,7 @@ where the application of `assumption` should lead to a failure.
 
 ## Commands
 
-See `Pantograph/Commands.lean` for a description of the parameters and return values in Json.
+See `Pantograph/Commands.lean` for a description of the parameters and return values in JSON.
 - `reset`: Delete all cached expressions and proof trees
 - `expr.echo {"expr": <expr>}`: Determine the type of an expression and round-trip it
 - `lib.catalog`: Display a list of all safe Lean symbols in the current context
@@ -77,6 +77,21 @@ See `Pantograph/Commands.lean` for a description of the parameters and return va
 - `proof.start {["name": <name>], ["expr": <expr>], ["copyFrom": <symbol>]}`: Start a new proof state from a given expression or symbol
 - `proof.tactic {"treeId": <id>, "stateId": <id>, "goalId": <id>, "tactic": string}`: Execute a tactic on a given proof state
 - `proof.printTree {"treeId": <id>}`: Print the topological structure of a proof tree
+
+## Errors
+
+When an error pertaining to the execution of a command happens, the returning JSON structure is
+
+``` json
+{ error: "type", desc: "description" }
+```
+Common error forms:
+* `command`: Indicates malformed command structure which results from either
+  invalid command or a malformed JSON structure that cannot be fed to an
+  individual command.
+* `index`: Indicates an invariant maintained by the output of one command and
+  input of another is broken. For example, attempting to query a symbol not
+  existing in the library or indexing into a non-existent proof state.
 
 ## Troubleshooting
 
