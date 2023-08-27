@@ -30,21 +30,17 @@ structure ProofState where
   parent : Option Nat := none
   parentGoalId : Nat  := 0
 structure ProofTree where
-  -- All parameters needed to run a `TermElabM` monad
-  name: Name
-
   -- Set of proof states
   states : Array ProofState := #[]
 
 abbrev M := Elab.TermElabM
 
-def ProofTree.create (name: Name) (expr: Expr): M ProofTree := do
+def ProofTree.create (expr: Expr): M ProofTree := do
   let expr ← instantiateMVars expr
   let goal := (← Meta.mkFreshExprMVar expr (kind := MetavarKind.synthetic))
   let savedStateMonad: Elab.Tactic.TacticM Elab.Tactic.SavedState := MonadBacktrack.saveState
   let savedState ← savedStateMonad { elaborator := .anonymous } |>.run' { goals := [goal.mvarId!]}
   return {
-    name := name,
     states := #[{
       savedState := savedState,
       goals := [goal.mvarId!]

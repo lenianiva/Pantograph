@@ -22,7 +22,6 @@ def start_proof (start: Start): M (LSpec.TestSeq × Option ProofTree) := do
     match cInfo? with
     | .some cInfo =>
       let state ← ProofTree.create
-        (name := str_to_name "TestExample")
         (expr := cInfo.type)
       return (testSeq, Option.some state)
     | .none =>
@@ -43,7 +42,6 @@ def start_proof (start: Start): M (LSpec.TestSeq × Option ProofTree) := do
         return (testSeq, Option.none)
       | .ok expr =>
         let state ← ProofTree.create
-          (name := str_to_name "TestExample")
           (expr := expr)
         return (testSeq, Option.some state)
 
