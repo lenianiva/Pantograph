@@ -80,8 +80,11 @@ structure InteractionError where
 
 structure Reset where
   deriving Lean.FromJson
-structure ResetResult where
-  nStates: Nat
+structure Stat where
+  deriving Lean.FromJson
+structure StatResult where
+  -- Number of goals states
+  nGoals: Nat
   deriving Lean.ToJson
 
 -- Return the type of an expression
@@ -149,11 +152,5 @@ structure ProofTacticResult where
   tacticErrors?: Option (Array String) := .none
   deriving Lean.ToJson
 
-structure ProofPrintTree where
-  deriving Lean.FromJson
-structure ProofPrintTreeResult where
-  -- Total number of goals
-  nGoals: Nat
-  deriving Lean.ToJson
 
 end Pantograph.Commands

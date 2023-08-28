@@ -29,15 +29,15 @@ def execute (command: Commands.Command): MainM Lean.Json := do
       | .error ierror => return Lean.toJson ierror
     | .error error => return Lean.toJson $ errorCommand s!"Unable to parse json: {error}"
   match command.cmd with
-  | "reset"           => run reset
-  | "expr.echo"       => run expr_echo
-  | "lib.catalog"     => run lib_catalog
-  | "lib.inspect"     => run lib_inspect
-  | "options.set"     => run options_set
-  | "options.print"   => run options_print
-  | "proof.start"     => run proof_start
-  | "proof.tactic"    => run proof_tactic
-  | "proof.printTree" => run proof_print_tree
+  | "reset"          => run reset
+  | "stat"           => run stat
+  | "expr.echo"      => run expr_echo
+  | "lib.catalog"    => run lib_catalog
+  | "lib.inspect"    => run lib_inspect
+  | "options.set"    => run options_set
+  | "options.print"  => run options_print
+  | "goal.start"     => run goal_start
+  | "goal.tactic"    => run goal_tactic
   | cmd =>
     let error: Commands.InteractionError :=
       errorCommand s!"Unknown command {cmd}"
@@ -47,11 +47,15 @@ def execute (command: Commands.Command): MainM Lean.Json := do
   errorCommand := errorI "command"
   errorIndex := errorI "index"
   -- Command Functions
-  reset (_: Commands.Reset): MainM (CR Commands.ResetResult) := do
+  reset (_: Commands.Reset): MainM (CR Commands.StatResult) := do
     let state ← get
-    let nStates := state.goalStates.size
+    let nGoals := state.goalStates.size
     set { state with goalStates := SemihashMap.empty }
-    return .ok { nStates := nStates }
+    return .ok { nGoals }
+  stat (_: Commands.Stat): MainM (CR Commands.StatResult) := do
+    let state ← get
+    let nGoals := state.goalStates.size
+    return .ok { nGoals }
   lib_catalog (_: Commands.LibCatalog): MainM (CR Commands.LibCatalogResult) := do
     let env ← Lean.MonadEnv.getEnv
     let names := env.constants.fold (init := #[]) (λ acc name info =>
@@ -113,7 +117,7 @@ def execute (command: Commands.Command): MainM Lean.Json := do
     return .ok {  }
   options_print (_: Commands.OptionsPrint): MainM (CR Commands.OptionsPrintResult) := do
     return .ok (← get).options
-  proof_start (args: Commands.ProofStart): MainM (CR Commands.ProofStartResult) := do
+  goal_start (args: Commands.ProofStart): MainM (CR Commands.ProofStartResult) := do
     let state ← get
     let env ← Lean.MonadEnv.getEnv
     let expr?: Except _ Lean.Expr ← (match args.expr, args.copyFrom with
@@ -138,7 +142,7 @@ def execute (command: Commands.Command): MainM Lean.Json := do
       let (goalStates, goalId) := state.goalStates.insert goalState
       set { state with goalStates }
       return .ok { goalId }
-  proof_tactic (args: Commands.ProofTactic): MainM (CR Commands.ProofTacticResult) := do
+  goal_tactic (args: Commands.ProofTactic): MainM (CR Commands.ProofTacticResult) := do
     let state ← get
     match state.goalStates.get? args.goalId with
     | .none => return .error $ errorIndex "Invalid goal index {args.goalId}"
@@ -160,8 +164,5 @@ def execute (command: Commands.Command): MainM Lean.Json := do
           return .ok { goals? := .some sGoals.reverse.toArray, goalIds? := .some goalIds.reverse.toArray }
       | .failure messages =>
         return .ok { tacticErrors? := .some messages }
-  proof_print_tree (_: Commands.ProofPrintTree): MainM (CR Commands.ProofPrintTreeResult) := do
-    let state ← get
-    return .ok { nGoals := state.goalStates.size }
 
 end Pantograph

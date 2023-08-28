@@ -50,15 +50,15 @@ Example with `mathlib4` (~90k symbols, may stack overflow, see troubleshooting)
 $ lake env build/bin/Pantograph Mathlib.Analysis.Seminorm
 lib.catalog
 ```
-Example proving a theorem: (alternatively use `proof.start {"copyFrom": "Nat.add_comm"}`) to prime the proof
+Example proving a theorem: (alternatively use `goal.start {"copyFrom": "Nat.add_comm"}`) to prime the proof
 ```
 $ env build/bin/Pantograph Init
-proof.start {"expr": "∀ (n m : Nat), n + m = m + n"}
-proof.tactic {"goalId": 0, "tactic": "intro n m"}
-proof.tactic {"goalId": 1, "tactic": "assumption"}
-proof.printTree {}
-proof.tactic {"goalId": 1, "tactic": "rw [Nat.add_comm]"}
-proof.printTree
+goal.start {"expr": "∀ (n m : Nat), n + m = m + n"}
+goal.tactic {"goalId": 0, "tactic": "intro n m"}
+goal.tactic {"goalId": 1, "tactic": "assumption"}
+stat {}
+goal.tactic {"goalId": 1, "tactic": "rw [Nat.add_comm]"}
+stat
 ```
 where the application of `assumption` should lead to a failure.
 
@@ -74,9 +74,9 @@ See `Pantograph/Commands.lean` for a description of the parameters and return va
 - `options.set { key: value, ... }`: Set one or more options (not Lean options; those
   have to be set via command line arguments.), for options, see `Pantograph/Commands.lean`
 - `options.print`: Display the current set of options
-- `proof.start {["name": <name>], ["expr": <expr>], ["copyFrom": <symbol>]}`: Start a new proof state from a given expression or symbol
-- `proof.tactic {"goalId": <id>, "tactic": <tactic>}`: Execute a tactic string on a given proof state
-- `proof.printTree`: Print the number of goals
+- `goal.start {["name": <name>], ["expr": <expr>], ["copyFrom": <symbol>]}`: Start a new goal from a given expression or symbol
+- `goal.tactic {"goalId": <id>, "tactic": <tactic>}`: Execute a tactic string on a given goal
+- `stat`: Display resource usage
 
 ## Errors
 
