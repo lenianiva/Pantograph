@@ -83,16 +83,20 @@ def serialize_sort_level_ast (level: Level): String :=
   let u_str := match u with
     | .zero => "0"
     | .succ _ => panic! "getLevelOffset should not return .succ"
-    | .max v w | .imax v w =>
+    | .max v w =>
       let v := serialize_sort_level_ast v
       let w := serialize_sort_level_ast w
-      s!"(max {v} {w})"
+      s!"(:max {v} {w})"
+    | .imax v w =>
+      let v := serialize_sort_level_ast v
+      let w := serialize_sort_level_ast w
+      s!"(:imax {v} {w})"
     | .param name =>
       let name := name_to_ast name
       s!"{name}"
     | .mvar id =>
       let name := name_to_ast id.name
-      s!"(:mvar {name})"
+      s!"(:mv {name})"
   match k, u with
   | 0, _ => u_str
   | _, .zero => s!"{k}"
