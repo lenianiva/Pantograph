@@ -24,34 +24,21 @@ def Lean.MessageLog.getErrorMessages (log : MessageLog) : MessageLog :=
 namespace Pantograph
 open Lean
 
-structure ProofState where
-  goals : List MVarId
+structure GoalState where
+  mvarId: MVarId
   savedState : Elab.Tactic.SavedState
-  parent : Option Nat := none
-  parentGoalId : Nat  := 0
-structure ProofTree where
-  -- Set of proof states
-  states : Array ProofState := #[]
 
 abbrev M := Elab.TermElabM
 
-def ProofTree.create (expr: Expr): M ProofTree := do
+def GoalState.create (expr: Expr): M GoalState := do
   let expr ← instantiateMVars expr
   let goal := (← Meta.mkFreshExprMVar expr (kind := MetavarKind.synthetic))
   let savedStateMonad: Elab.Tactic.TacticM Elab.Tactic.SavedState := MonadBacktrack.saveState
   let savedState ← savedStateMonad { elaborator := .anonymous } |>.run' { goals := [goal.mvarId!]}
   return {
-    states := #[{
-      savedState := savedState,
-      goals := [goal.mvarId!]
-    }]
+    savedState := savedState,
+    mvarId := goal.mvarId!
   }
-
--- Print the tree structures in readable form
-def ProofTree.structure_array (tree: ProofTree): Array String :=
-  tree.states.map λ state => match state.parent with
-    | .none => ""
-    | .some parent => s!"{parent}.{state.parentGoalId}"
 
 def execute_tactic (state: Elab.Tactic.SavedState) (goal: MVarId) (tactic: String) :
     M (Except (Array String) (Elab.Tactic.SavedState × List MVarId)):= do
@@ -78,44 +65,38 @@ def execute_tactic (state: Elab.Tactic.SavedState) (goal: MVarId) (tactic: Strin
 
 /-- Response for executing a tactic -/
 inductive TacticResult where
-  -- Invalid id
-  | invalid (message: String): TacticResult
   -- Goes to next state
-  | success (nextId?: Option Nat) (goals: Array Commands.Goal)
+  | success (goals: Array (GoalState × Commands.Goal))
   -- Fails with messages
   | failure (messages: Array String)
 
+namespace TacticResult
+
+def is_success: TacticResult → Bool
+  | .success _ => true
+  | .failure _ => false
+
+end TacticResult
+
 /-- Execute tactic on given state -/
-def ProofTree.execute (stateId: Nat) (goalId: Nat) (tactic: String):
-    Commands.OptionsT StateRefT ProofTree M TacticResult := do
+def GoalState.execute (goal: GoalState) (tactic: String):
+    Commands.OptionsT M TacticResult := do
   let options ← read
-  let tree ← get
-  match tree.states.get? stateId with
-  | .none => return .invalid s!"Invalid state id {stateId}"
-  | .some state =>
-    match state.goals.get? goalId with
-    | .none => return .invalid s!"Invalid goal id {goalId}"
-    | .some goal =>
-      match (← execute_tactic (state := state.savedState) (goal := goal) (tactic := tactic)) with
-      | .error errors =>
-        return .failure errors
-      | .ok (nextState, nextGoals) =>
-        let nextId := tree.states.size
-        if nextGoals.isEmpty then
-          return .success .none #[]
-        else
-          let proofState: ProofState := {
-            savedState := nextState,
-            goals := nextGoals,
-            parent := stateId,
-            parentGoalId := goalId
-          }
-          modify fun s => { s with states := s.states.push proofState }
-        let parentDecl? := (← MonadMCtx.getMCtx).findDecl? goal
-        let goals ← nextGoals.mapM fun mvarId => do
-          match (← MonadMCtx.getMCtx).findDecl? mvarId with
-          | .some mvarDecl => serialize_goal options mvarDecl (parentDecl? := parentDecl?)
-          | .none => throwError mvarId
-        return .success (.some nextId) goals.toArray
+  match (← execute_tactic (state := goal.savedState) (goal := goal.mvarId) (tactic := tactic)) with
+  | .error errors =>
+    return .failure errors
+  | .ok (nextState, nextGoals) =>
+    if nextGoals.isEmpty then
+      return .success #[]
+    else
+      let nextGoals: List GoalState := nextGoals.map fun mvarId => { mvarId, savedState := nextState }
+      let parentDecl? := (← MonadMCtx.getMCtx).findDecl? goal.mvarId
+      let goals ← nextGoals.mapM fun nextGoal => do
+        match (← MonadMCtx.getMCtx).findDecl? nextGoal.mvarId with
+        | .some mvarDecl =>
+          let serializedGoal ← serialize_goal options mvarDecl (parentDecl? := parentDecl?)
+          return (nextGoal, serializedGoal)
+        | .none => throwError nextGoal.mvarId
+      return .success goals.toArray
 
 end Pantograph

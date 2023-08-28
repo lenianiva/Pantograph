@@ -2,6 +2,7 @@ import Pantograph.Commands
 import Pantograph.Serial
 import Pantograph.Symbols
 import Pantograph.Tactic
+import Pantograph.SemihashMap
 
 namespace Pantograph
 
@@ -11,8 +12,7 @@ structure Context where
 /-- Stores state of the REPL -/
 structure State where
   options: Commands.Options := {}
-  --environments: Array Lean.Environment := #[]
-  proofTrees:   Array ProofTree := #[]
+  goalStates: SemihashMap GoalState := SemihashMap.empty
 
 -- State monad
 abbrev MainM := ReaderT Context (StateT State Lean.Elab.TermElabM)
@@ -49,9 +49,9 @@ def execute (command: Commands.Command): MainM Lean.Json := do
   -- Command Functions
   reset (_: Commands.Reset): MainM (CR Commands.ResetResult) := do
     let state ← get
-    let nTrees := state.proofTrees.size
-    set { state with proofTrees := #[] }
-    return .ok { nTrees := nTrees }
+    let nStates := state.goalStates.size
+    set { state with goalStates := SemihashMap.empty }
+    return .ok { nStates := nStates }
   lib_catalog (_: Commands.LibCatalog): MainM (CR Commands.LibCatalogResult) := do
     let env ← Lean.MonadEnv.getEnv
     let names := env.constants.fold (init := #[]) (λ acc name info =>
@@ -134,32 +134,34 @@ def execute (command: Commands.Command): MainM Lean.Json := do
     match expr? with
     | .error error => return .error error
     | .ok expr =>
-      let tree ← ProofTree.create expr
-      -- Put the new tree in the environment
-      let nextTreeId := state.proofTrees.size
-      set { state with proofTrees := state.proofTrees.push tree }
-      return .ok { treeId := nextTreeId }
+      let goalState ← GoalState.create expr
+      let (goalStates, goalId) := state.goalStates.insert goalState
+      set { state with goalStates }
+      return .ok { goalId }
   proof_tactic (args: Commands.ProofTactic): MainM (CR Commands.ProofTacticResult) := do
     let state ← get
-    match state.proofTrees.get? args.treeId with
-    | .none => return .error $ errorIndex "Invalid tree index {args.treeId}"
-    | .some tree =>
-      let (result, nextTree) ← ProofTree.execute
-        (stateId := args.stateId)
-        (goalId := args.goalId.getD 0)
-        (tactic := args.tactic) |>.run state.options |>.run tree
+    match state.goalStates.get? args.goalId with
+    | .none => return .error $ errorIndex "Invalid goal index {args.goalId}"
+    | .some goalState =>
+      let result ← GoalState.execute goalState args.tactic |>.run state.options
       match result with
-      | .invalid message => return .error $  errorIndex message
-      | .success nextId? goals =>
-        set { state with proofTrees := state.proofTrees.set! args.treeId nextTree }
-        return .ok { nextId? := nextId?, goals? := .some goals }
+      | .success goals =>
+        if goals.isEmpty then
+          return .ok {}
+        else
+          -- Append all goals
+          let (goalStates, goalIds, sGoals) := Array.foldl (λ acc itr =>
+            let (map, indices, serializedGoals) := acc
+            let (goalState, sGoal) := itr
+            let (map, index) := map.insert goalState
+            (map, index :: indices, sGoal :: serializedGoals)
+            ) (state.goalStates, [], []) goals
+          set { state with goalStates }
+          return .ok { goals? := .some sGoals.reverse.toArray, goalIds? := .some goalIds.reverse.toArray }
       | .failure messages =>
         return .ok { tacticErrors? := .some messages }
-  proof_print_tree (args: Commands.ProofPrintTree): MainM (CR Commands.ProofPrintTreeResult) := do
+  proof_print_tree (_: Commands.ProofPrintTree): MainM (CR Commands.ProofPrintTreeResult) := do
     let state ← get
-    match state.proofTrees.get? args.treeId with
-    | .none => return .error $ errorIndex "Invalid tree index {args.treeId}"
-    | .some tree =>
-      return .ok { parents := tree.structure_array }
+    return .ok { nGoals := state.goalStates.size }
 
 end Pantograph

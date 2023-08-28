@@ -54,11 +54,11 @@ Example proving a theorem: (alternatively use `proof.start {"copyFrom": "Nat.add
 ```
 $ env build/bin/Pantograph Init
 proof.start {"expr": "∀ (n m : Nat), n + m = m + n"}
-proof.tactic {"treeId": 0, "stateId": 0, "goalId": 0, "tactic": "intro n m"}
-proof.tactic {"treeId": 0, "stateId": 1, "goalId": 0, "tactic": "assumption"}
-proof.printTree {"treeId": 0}
-proof.tactic {"treeId": 0, "stateId": 1, "goalId": 0, "tactic": "rw [Nat.add_comm]"}
-proof.printTree {"treeId": 0}
+proof.tactic {"goalId": 0, "tactic": "intro n m"}
+proof.tactic {"goalId": 1, "tactic": "assumption"}
+proof.printTree {}
+proof.tactic {"goalId": 1, "tactic": "rw [Nat.add_comm]"}
+proof.printTree
 ```
 where the application of `assumption` should lead to a failure.
 
@@ -75,8 +75,8 @@ See `Pantograph/Commands.lean` for a description of the parameters and return va
   have to be set via command line arguments.), for options, see `Pantograph/Commands.lean`
 - `options.print`: Display the current set of options
 - `proof.start {["name": <name>], ["expr": <expr>], ["copyFrom": <symbol>]}`: Start a new proof state from a given expression or symbol
-- `proof.tactic {"treeId": <id>, "stateId": <id>, "goalId": <id>, "tactic": string}`: Execute a tactic on a given proof state
-- `proof.printTree {"treeId": <id>}`: Print the topological structure of a proof tree
+- `proof.tactic {"goalId": <id>, "tactic": <tactic>}`: Execute a tactic string on a given proof state
+- `proof.printTree`: Print the number of goals
 
 ## Errors
 

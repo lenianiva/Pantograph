@@ -81,7 +81,7 @@ structure InteractionError where
 structure Reset where
   deriving Lean.FromJson
 structure ResetResult where
-  nTrees: Nat
+  nStates: Nat
   deriving Lean.ToJson
 
 -- Return the type of an expression
@@ -133,29 +133,27 @@ structure ProofStart where
   copyFrom: Option String -- Theorem name
   deriving Lean.FromJson
 structure ProofStartResult where
-  treeId: Nat := 0 -- Proof tree id
+  goalId: Nat := 0 -- Proof tree id
   deriving Lean.ToJson
 structure ProofTactic where
   -- Identifiers for tree, state, and goal
-  treeId: Nat
-  stateId: Nat
-  goalId: Option Nat -- Defaults to 0
+  goalId: Nat
   tactic: String
   deriving Lean.FromJson
 structure ProofTacticResult where
   -- Existence of this field shows success
   goals?: Option (Array Goal)          := .none
   -- Next proof state id, if successful
-  nextId?: Option Nat                  := .none
+  goalIds?: Option (Array Nat)          := .none
   -- Existence of this field shows failure
   tacticErrors?: Option (Array String) := .none
   deriving Lean.ToJson
+
 structure ProofPrintTree where
-  treeId: Nat
   deriving Lean.FromJson
 structure ProofPrintTreeResult where
-  -- "" if no parents, otherwise "parentId.goalId"
-  parents: Array String
+  -- Total number of goals
+  nGoals: Nat
   deriving Lean.ToJson
 
 end Pantograph.Commands
