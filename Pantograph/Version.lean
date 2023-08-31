@@ -1,5 +1,5 @@
 namespace Pantograph
 
-def version := "0.2.3"
+def version := "0.2.4"
 
 end Pantograph

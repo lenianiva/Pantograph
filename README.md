@@ -50,15 +50,16 @@ Example with `mathlib4` (~90k symbols, may stack overflow, see troubleshooting)
 $ lake env build/bin/Pantograph Mathlib.Analysis.Seminorm
 lib.catalog
 ```
-Example proving a theorem: (alternatively use `proof.start {"copyFrom": "Nat.add_comm"}`) to prime the proof
+Example proving a theorem: (alternatively use `goal.start {"copyFrom": "Nat.add_comm"}`) to prime the proof
 ```
 $ env build/bin/Pantograph Init
-proof.start {"expr": "∀ (n m : Nat), n + m = m + n"}
-proof.tactic {"treeId": 0, "stateId": 0, "goalId": 0, "tactic": "intro n m"}
-proof.tactic {"treeId": 0, "stateId": 1, "goalId": 0, "tactic": "assumption"}
-proof.printTree {"treeId": 0}
-proof.tactic {"treeId": 0, "stateId": 1, "goalId": 0, "tactic": "rw [Nat.add_comm]"}
-proof.printTree {"treeId": 0}
+goal.start {"expr": "∀ (n m : Nat), n + m = m + n"}
+goal.tactic {"goalId": 0, "tactic": "intro n m"}
+goal.tactic {"goalId": 1, "tactic": "assumption"}
+goal.delete {"goalIds": [0]}
+stat {}
+goal.tactic {"goalId": 1, "tactic": "rw [Nat.add_comm]"}
+stat
 ```
 where the application of `assumption` should lead to a failure.
 
@@ -74,9 +75,10 @@ See `Pantograph/Commands.lean` for a description of the parameters and return va
 - `options.set { key: value, ... }`: Set one or more options (not Lean options; those
   have to be set via command line arguments.), for options, see `Pantograph/Commands.lean`
 - `options.print`: Display the current set of options
-- `proof.start {["name": <name>], ["expr": <expr>], ["copyFrom": <symbol>]}`: Start a new proof state from a given expression or symbol
-- `proof.tactic {"treeId": <id>, "stateId": <id>, "goalId": <id>, "tactic": string}`: Execute a tactic on a given proof state
-- `proof.printTree {"treeId": <id>}`: Print the topological structure of a proof tree
+- `goal.start {["name": <name>], ["expr": <expr>], ["copyFrom": <symbol>]}`: Start a new goal from a given expression or symbol
+- `goal.tactic {"goalId": <id>, "tactic": <tactic>}`: Execute a tactic string on a given goal
+- `goal.remove {"goalIds": [<id>]}"`: Remove a bunch of stored goals.
+- `stat`: Display resource usage
 
 ## Errors
 
