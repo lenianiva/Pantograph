@@ -56,6 +56,7 @@ $ env build/bin/Pantograph Init
 goal.start {"expr": "∀ (n m : Nat), n + m = m + n"}
 goal.tactic {"goalId": 0, "tactic": "intro n m"}
 goal.tactic {"goalId": 1, "tactic": "assumption"}
+goal.delete {"goalIds": [0]}
 stat {}
 goal.tactic {"goalId": 1, "tactic": "rw [Nat.add_comm]"}
 stat
@@ -76,6 +77,7 @@ See `Pantograph/Commands.lean` for a description of the parameters and return va
 - `options.print`: Display the current set of options
 - `goal.start {["name": <name>], ["expr": <expr>], ["copyFrom": <symbol>]}`: Start a new goal from a given expression or symbol
 - `goal.tactic {"goalId": <id>, "tactic": <tactic>}`: Execute a tactic string on a given goal
+- `goal.remove {"goalIds": [<id>]}"`: Remove a bunch of stored goals.
 - `stat`: Display resource usage
 
 ## Errors

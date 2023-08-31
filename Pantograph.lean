@@ -38,6 +38,7 @@ def execute (command: Commands.Command): MainM Lean.Json := do
   | "options.print"  => run options_print
   | "goal.start"     => run goal_start
   | "goal.tactic"    => run goal_tactic
+  | "goal.delete"    => run goal_delete
   | cmd =>
     let error: Commands.InteractionError :=
       errorCommand s!"Unknown command {cmd}"
@@ -117,7 +118,7 @@ def execute (command: Commands.Command): MainM Lean.Json := do
     return .ok {  }
   options_print (_: Commands.OptionsPrint): MainM (CR Commands.OptionsPrintResult) := do
     return .ok (← get).options
-  goal_start (args: Commands.ProofStart): MainM (CR Commands.ProofStartResult) := do
+  goal_start (args: Commands.GoalStart): MainM (CR Commands.GoalStartResult) := do
     let state ← get
     let env ← Lean.MonadEnv.getEnv
     let expr?: Except _ Lean.Expr ← (match args.expr, args.copyFrom with
@@ -142,10 +143,10 @@ def execute (command: Commands.Command): MainM Lean.Json := do
       let (goalStates, goalId) := state.goalStates.insert goalState
       set { state with goalStates }
       return .ok { goalId }
-  goal_tactic (args: Commands.ProofTactic): MainM (CR Commands.ProofTacticResult) := do
+  goal_tactic (args: Commands.GoalTactic): MainM (CR Commands.GoalTacticResult) := do
     let state ← get
     match state.goalStates.get? args.goalId with
-    | .none => return .error $ errorIndex "Invalid goal index {args.goalId}"
+    | .none => return .error $ errorIndex s!"Invalid goal index {args.goalId}"
     | .some goalState =>
       let result ← GoalState.execute goalState args.tactic |>.run state.options
       match result with
@@ -164,5 +165,10 @@ def execute (command: Commands.Command): MainM Lean.Json := do
           return .ok { goals? := .some sGoals.reverse.toArray, goalIds? := .some goalIds.reverse.toArray }
       | .failure messages =>
         return .ok { tacticErrors? := .some messages }
+  goal_delete (args: Commands.GoalDelete): MainM (CR Commands.GoalDeleteResult) := do
+    let state ← get
+    let goalStates := args.goalIds.foldl (λ map id => map.remove id) state.goalStates
+    set { state with goalStates }
+    return .ok {}
 
 end Pantograph

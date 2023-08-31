@@ -130,26 +130,33 @@ structure OptionsPrint where
   deriving Lean.FromJson
 abbrev OptionsPrintResult := Options
 
-structure ProofStart where
+structure GoalStart where
   -- Only one of the fields below may be populated.
   expr: Option String     -- Proof expression
   copyFrom: Option String -- Theorem name
   deriving Lean.FromJson
-structure ProofStartResult where
+structure GoalStartResult where
   goalId: Nat := 0 -- Proof tree id
   deriving Lean.ToJson
-structure ProofTactic where
+structure GoalTactic where
   -- Identifiers for tree, state, and goal
   goalId: Nat
   tactic: String
   deriving Lean.FromJson
-structure ProofTacticResult where
+structure GoalTacticResult where
   -- Existence of this field shows success
   goals?: Option (Array Goal)          := .none
   -- Next proof state id, if successful
   goalIds?: Option (Array Nat)          := .none
   -- Existence of this field shows failure
   tacticErrors?: Option (Array String) := .none
+  deriving Lean.ToJson
+
+-- Remove a bunch of goals.
+structure GoalDelete where
+  goalIds: List Nat
+  deriving Lean.FromJson
+structure GoalDeleteResult where
   deriving Lean.ToJson
 
 
