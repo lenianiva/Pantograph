@@ -1,6 +1,6 @@
 LIB := build/lib/Pantograph.olean
 EXE := build/bin/pantograph
-SOURCE := $(wildcard Pantograph/*.lean) Main.lean Pantograph.lean
+SOURCE := $(wildcard Pantograph/*.lean) $(wildcard *.lean) lean-toolchain
 
 TEST_EXE := build/bin/test
 TEST_SOURCE := $(wildcard Test/*.lean)
