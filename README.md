@@ -6,11 +6,11 @@ An interaction system for Lean 4.
 
 ## Installation
 
-Install `elan` and `lean4`. Then, execute
+Install `elan` and `lake`. Execute
 ``` sh
-lake build
+make build/bin/pantograph
 ```
-Then, setup the `LEAN_PATH` environment variable so it contains the library path of lean libraries. The libraries must be built in advance. For example, if `mathlib4` is stored at `../lib/mathlib4`,
+setup the `LEAN_PATH` environment variable so it contains the library path of lean libraries. The libraries must be built in advance. For example, if `mathlib4` is stored at `../lib/mathlib4`,
 ``` sh
 LIB="../lib"
 LIB_MATHLIB="$LIB/mathlib4/lake-packages"
@@ -18,12 +18,11 @@ export LEAN_PATH="$LIB/mathlib4/build/lib:$LIB_MATHLIB/aesop/build/lib:$LIB_MATH
 
 LEAN_PATH=$LEAN_PATH build/bin/pantograph $@
 ```
-Note that `lean-toolchain` must be present in the `$PWD` in order to run Pantograph! This is because Pantograph taps into Lean's internals.
 
 ## Usage
 
 ``` sh
-build/bin/pantograph MODULES|LEAN_OPTIONS
+pantograph MODULES|LEAN_OPTIONS
 ```
 
 The REPL loop accepts commands as single-line JSON inputs and outputs either an
@@ -36,23 +35,23 @@ command { ... }
 The list of available commands can be found in `Pantograph/Commands.lean` and below. An
 empty command aborts the REPL.
 
-The `Pantograph` executable must be run with a list of modules to import. It can
+The `pantograph` executable must be run with a list of modules to import. It can
 also accept lean options of the form `--key=value` e.g. `--pp.raw=true`.
 
 Example: (~5k symbols)
 ```
-$ build/bin/Pantograph Init
+$ pantograph Init
 lib.catalog
 lib.inspect {"name": "Nat.le_add_left"}
 ```
 Example with `mathlib4` (~90k symbols, may stack overflow, see troubleshooting)
 ```
-$ lake env build/bin/Pantograph Mathlib.Analysis.Seminorm
+$ pantograph Mathlib.Analysis.Seminorm
 lib.catalog
 ```
 Example proving a theorem: (alternatively use `goal.start {"copyFrom": "Nat.add_comm"}`) to prime the proof
 ```
-$ env build/bin/Pantograph Init
+$ pantograph Init
 goal.start {"expr": "∀ (n m : Nat), n + m = m + n"}
 goal.tactic {"goalId": 0, "tactic": "intro n m"}
 goal.tactic {"goalId": 1, "tactic": "assumption"}
@@ -106,5 +105,5 @@ ulimit -s unlimited
 
 The tests are based on `LSpec`. To run tests,
 ``` sh
-test/all.sh
+make test
 ```
