@@ -108,6 +108,7 @@ unsafe def main (args: List String): IO Unit := do
       errToSorry := false
     })
     let coreM := metaM.run'
+    IO.println "ready."
     discard <| coreM.toIO coreContext { env := env }
   catch ex =>
     IO.println "Uncaught IO exception"
