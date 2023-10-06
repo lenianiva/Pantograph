@@ -15,7 +15,7 @@ def subroutine_step (cmd: String) (payload: List (String × Lean.Json))
 def subroutine_runner (steps: List (MainM LSpec.TestSeq)): IO LSpec.TestSeq := do
   -- Setup the environment for execution
   let env ← Lean.importModules
-    (imports := [{module := Lean.Name.str .anonymous "Init", runtimeOnly := false }])
+    (imports := #[{module := Lean.Name.str .anonymous "Init", runtimeOnly := false }])
     (opts := {})
     (trustLevel := 1)
   let context: Context := {

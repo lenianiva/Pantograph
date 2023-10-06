@@ -64,7 +64,7 @@ def test_sexp_of_symbol (env: Environment): IO LSpec.TestSeq := do
 
 def test_serial: IO LSpec.TestSeq := do
   let env: Environment ← importModules
-    (imports := ["Init"].map (λ str => { module := str_to_name str, runtimeOnly := false }))
+    (imports := #["Init"].map (λ str => { module := str_to_name str, runtimeOnly := false }))
     (opts := {})
     (trustLevel := 1)
 

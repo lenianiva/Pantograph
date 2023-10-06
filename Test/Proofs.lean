@@ -231,7 +231,7 @@ def proof_runner (env: Lean.Environment) (tests: TestM Unit): IO LSpec.TestSeq :
 
 def test_proofs : IO LSpec.TestSeq := do
   let env: Lean.Environment ← Lean.importModules
-    (imports := ["Init"].map (λ str => { module := str_to_name str, runtimeOnly := false }))
+    (imports := #["Init"].map (λ str => { module := str_to_name str, runtimeOnly := false }))
     (opts := {})
     (trustLevel := 1)
   let tests := [
