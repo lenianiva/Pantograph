@@ -88,7 +88,7 @@ unsafe def main (args: List String): IO Unit := do
   let imports:= args.filter (λ s => ¬ (s.startsWith "--"))
 
   let env ← Lean.importModules
-    (imports := imports.map (λ str => { module := str_to_name str, runtimeOnly := false }))
+    (imports := imports.toArray.map (λ str => { module := str_to_name str, runtimeOnly := false }))
     (opts := {})
     (trustLevel := 1)
   let context: Context := {
