@@ -2,7 +2,7 @@ import LSpec
 import Pantograph.Serial
 import Pantograph.Symbols
 
-namespace Pantograph.Test
+namespace Pantograph.Test.Serial
 
 open Pantograph
 open Lean
@@ -62,15 +62,15 @@ def test_sexp_of_symbol (env: Environment): IO LSpec.TestSeq := do
   | .ok a            => return a
 
 
-def test_serial: IO LSpec.TestSeq := do
+def suite: IO LSpec.TestSeq := do
   let env: Environment ← importModules
     (imports := #["Init"].map (λ str => { module := str_to_name str, runtimeOnly := false }))
     (opts := {})
     (trustLevel := 1)
 
-  return LSpec.group "Serialisation" $
+  return LSpec.group "Serialization" $
     (LSpec.group "str_to_name" test_str_to_name) ++
     (LSpec.group "Expression binder" (← test_expr_to_binder env)) ++
     (LSpec.group "Sexp from symbol" (← test_sexp_of_symbol env))
 
-end Pantograph.Test
+end Pantograph.Test.Serial

@@ -2,7 +2,7 @@ import LSpec
 import Pantograph.Tactic
 import Pantograph.Serial
 
-namespace Pantograph.Test
+namespace Pantograph.Test.Proofs
 open Pantograph
 open Lean
 
@@ -229,7 +229,8 @@ def proof_runner (env: Lean.Environment) (tests: TestM Unit): IO LSpec.TestSeq :
   | .ok (_, a) =>
     return a
 
-def test_proofs : IO LSpec.TestSeq := do
+/-- Tests the most basic form of proofs whose goals do not relate to each other -/
+def suite: IO LSpec.TestSeq := do
   let env: Lean.Environment ← Lean.importModules
     (imports := #["Init"].map (λ str => { module := str_to_name str, runtimeOnly := false }))
     (opts := {})
@@ -248,5 +249,4 @@ def test_proofs : IO LSpec.TestSeq := do
 
   return LSpec.group "Proofs" tests
 
-end Pantograph.Test
-
+end Pantograph.Test.Proofs

@@ -2,7 +2,7 @@
  -/
 import LSpec
 import Pantograph
-namespace Pantograph.Test
+namespace Pantograph.Test.Integration
 open Pantograph
 
 def subroutine_named_step (name cmd: String) (payload: List (String × Lean.Json))
@@ -83,11 +83,11 @@ def test_malformed_command : IO LSpec.TestSeq :=
       Commands.InteractionError))
   ]
 
-def test_integration: IO LSpec.TestSeq := do
+def suite: IO LSpec.TestSeq := do
 
   return LSpec.group "Integration" $
     (LSpec.group "Option modify" (← test_option_modify)) ++
     (LSpec.group "Malformed command" (← test_malformed_command))
 
 
-end Pantograph.Test
+end Pantograph.Test.Integration
