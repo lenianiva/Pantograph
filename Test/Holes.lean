@@ -1,5 +1,5 @@
 import LSpec
-import Pantograph.Tactic
+import Pantograph.Goal
 import Pantograph.Serial
 
 namespace Pantograph.Test.Holes

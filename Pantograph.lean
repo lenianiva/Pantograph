@@ -1,7 +1,7 @@
 import Pantograph.Commands
 import Pantograph.Serial
 import Pantograph.Symbols
-import Pantograph.Tactic
+import Pantograph.Goal
 import Pantograph.SemihashMap
 
 namespace Pantograph

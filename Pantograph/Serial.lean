@@ -28,19 +28,11 @@ def syntax_from_str (env: Environment) (s: String): Except String Syntax :=
 def syntax_to_expr_type (syn: Syntax): Elab.TermElabM (Except String Expr) := do
   try
     let expr ← Elab.Term.elabType syn
-    -- Immediately synthesise all metavariables if we need to leave the elaboration context.
-    -- See https://leanprover.zulipchat.com/#narrow/stream/270676-lean4/topic/Unknown.20universe.20metavariable/near/360130070
-    --Elab.Term.synthesizeSyntheticMVarsNoPostponing
-    let expr ← instantiateMVars expr
     return .ok expr
   catch ex => return .error (← ex.toMessageData.toString)
 def syntax_to_expr (syn: Syntax): Elab.TermElabM (Except String Expr) := do
   try
     let expr ← Elab.Term.elabTerm (stx := syn) (expectedType? := .none)
-    -- Immediately synthesise all metavariables if we need to leave the elaboration context.
-    -- See https://leanprover.zulipchat.com/#narrow/stream/270676-lean4/topic/Unknown.20universe.20metavariable/near/360130070
-    --Elab.Term.synthesizeSyntheticMVarsNoPostponing
-    let expr ← instantiateMVars expr
     return .ok expr
   catch ex => return .error (← ex.toMessageData.toString)
 
@@ -249,7 +241,7 @@ def serialize_goal (options: Commands.Options) (mvarDecl: MetavarDecl) (parentDe
       caseName? := match mvarDecl.userName with
         | Name.anonymous => .none
         | name => .some <| toString name,
-      isConversion := "| " == (Meta.getGoalPrefix mvarDecl)
+      isConversion := isLHSGoal? mvarDecl.type |>.isSome,
       target := (← serialize_expression options (← instantiateMVars mvarDecl.type)),
       vars := vars.reverse.toArray
     }

@@ -1,5 +1,5 @@
 import LSpec
-import Pantograph.Tactic
+import Pantograph.Goal
 import Pantograph.Serial
 
 namespace Pantograph.Test.Proofs
@@ -39,7 +39,7 @@ def start_proof (start: Start): TestM (Option GoalState) := do
       IO.println error
       return Option.none
     | .ok syn =>
-      let expr? ← syntax_to_expr syn
+      let expr? ← syntax_to_expr_type syn
       add_test $ LSpec.check s!"Elaborating" expr?.isOk
       match expr? with
       | .error error =>
@@ -213,7 +213,7 @@ def proof_runner (env: Lean.Environment) (tests: TestM Unit): IO LSpec.TestSeq :
   let termElabM := tests.run LSpec.TestSeq.done |>.run {} -- with default options
 
   let coreContext: Lean.Core.Context := {
-    currNamespace := str_to_name "Aniva",
+    currNamespace := Name.append .anonymous "Aniva",
     openDecls := [],     -- No 'open' directives needed
     fileName := "<Pantograph>",
     fileMap := { source := "", positions := #[0], lines := #[1] }
@@ -232,7 +232,7 @@ def proof_runner (env: Lean.Environment) (tests: TestM Unit): IO LSpec.TestSeq :
 /-- Tests the most basic form of proofs whose goals do not relate to each other -/
 def suite: IO LSpec.TestSeq := do
   let env: Lean.Environment ← Lean.importModules
-    (imports := #["Init"].map (λ str => { module := str_to_name str, runtimeOnly := false }))
+    (imports := #[{ module := Name.append .anonymous "Init", runtimeOnly := false}])
     (opts := {})
     (trustLevel := 1)
   let tests := [

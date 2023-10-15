@@ -31,12 +31,15 @@ structure GoalState where
 abbrev M := Elab.TermElabM
 
 def GoalState.create (expr: Expr): M GoalState := do
+  -- Immediately synthesise all metavariables if we need to leave the elaboration context.
+  -- See https://leanprover.zulipchat.com/#narrow/stream/270676-lean4/topic/Unknown.20universe.20metavariable/near/360130070
+  --Elab.Term.synthesizeSyntheticMVarsNoPostponing
   let expr ← instantiateMVars expr
-  let goal := (← Meta.mkFreshExprMVar expr (kind := MetavarKind.synthetic))
+  let goal := (← Meta.mkFreshExprMVar expr (kind := MetavarKind.synthetic) (userName := .anonymous))
   let savedStateMonad: Elab.Tactic.TacticM Elab.Tactic.SavedState := MonadBacktrack.saveState
   let savedState ← savedStateMonad { elaborator := .anonymous } |>.run' { goals := [goal.mvarId!]}
   return {
-    savedState := savedState,
+    savedState,
     mvarId := goal.mvarId!
   }
 
@@ -52,7 +55,9 @@ def execute_tactic (state: Elab.Tactic.SavedState) (goal: MVarId) (tactic: Strin
         let errors ← (messages.map Message.data).mapM fun md => md.toString
         return .error errors
       else
-        return .ok (← MonadBacktrack.saveState, ← Elab.Tactic.getUnsolvedGoals)
+        let unsolved ← Elab.Tactic.getUnsolvedGoals
+        -- The order of evaluation is important here
+        return .ok (← MonadBacktrack.saveState, unsolved)
     catch exception =>
       return .error #[← exception.toMessageData.toString]
   match Parser.runParserCategory

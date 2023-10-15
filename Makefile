@@ -6,7 +6,7 @@ TEST_EXE := build/bin/test
 TEST_SOURCE := $(wildcard Test/*.lean)
 
 $(LIB) $(EXE): $(SOURCE)
-	lake build
+	lake build pantograph
 
 $(TEST_EXE): $(LIB) $(TEST_SOURCE)
 	lake build test
@@ -14,4 +14,7 @@ $(TEST_EXE): $(LIB) $(TEST_SOURCE)
 test: $(TEST_EXE)
 	lake env $(TEST_EXE)
 
-.PHONY: test
+clean:
+	lake clean
+
+.PHONY: test clean
