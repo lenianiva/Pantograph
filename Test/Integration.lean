@@ -47,26 +47,26 @@ def test_option_modify : IO LSpec.TestSeq :=
   let pp? := Option.some "∀ (n : Nat), n + 1 = Nat.succ n"
   let sexp? := Option.some "(:forall n (:c Nat) ((((:c Eq) (:c Nat)) (((((((:c HAdd.hAdd) (:c Nat)) (:c Nat)) (:c Nat)) (((:c instHAdd) (:c Nat)) (:c instAddNat))) 0) ((((:c OfNat.ofNat) (:c Nat)) (:lit 1)) ((:c instOfNatNat) (:lit 1))))) ((:c Nat.succ) 0)))"
   let module? := Option.some "Init.Data.Nat.Basic"
-  let options: Commands.Options := {}
+  let options: Protocol.Options := {}
   subroutine_runner [
     subroutine_step "lib.inspect"
       [("name", .str "Nat.add_one")]
      (Lean.toJson ({
        type := { pp? }, module? }:
-      Commands.LibInspectResult)),
+      Protocol.LibInspectResult)),
     subroutine_step "options.set"
       [("printExprAST", .bool true)]
      (Lean.toJson ({ }:
-      Commands.OptionsSetResult)),
+      Protocol.OptionsSetResult)),
     subroutine_step "lib.inspect"
       [("name", .str "Nat.add_one")]
      (Lean.toJson ({
        type := { pp?, sexp? }, module? }:
-      Commands.LibInspectResult)),
+      Protocol.LibInspectResult)),
     subroutine_step "options.print"
       []
      (Lean.toJson ({ options with printExprAST := true }:
-      Commands.OptionsPrintResult))
+      Protocol.OptionsPrintResult))
   ]
 def test_malformed_command : IO LSpec.TestSeq :=
   let invalid := "invalid"
@@ -75,12 +75,12 @@ def test_malformed_command : IO LSpec.TestSeq :=
       [("name", .str "Nat.add_one")]
      (Lean.toJson ({
        error := "command", desc := s!"Unknown command {invalid}"}:
-      Commands.InteractionError)),
+      Protocol.InteractionError)),
     subroutine_named_step "JSON Deserialization" "expr.echo"
       [(invalid, .str "Random garbage data")]
      (Lean.toJson ({
-       error := "command", desc := s!"Unable to parse json: Pantograph.Commands.ExprEcho.expr: String expected"}:
-      Commands.InteractionError))
+       error := "command", desc := s!"Unable to parse json: Pantograph.Protocol.ExprEcho.expr: String expected"}:
+      Protocol.InteractionError))
   ]
 
 def suite: IO LSpec.TestSeq := do

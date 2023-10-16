@@ -3,7 +3,7 @@ All serialisation functions
 -/
 import Lean
 
-import Pantograph.Commands
+import Pantograph.Protocol
 
 namespace Pantograph
 open Lean
@@ -39,7 +39,7 @@ def syntax_to_expr (syn: Syntax): Elab.TermElabM (Except String Expr) := do
 
 --- Output Functions ---
 
-def type_expr_to_bound (expr: Expr): MetaM Commands.BoundExpression := do
+def type_expr_to_bound (expr: Expr): MetaM Protocol.BoundExpression := do
   Meta.forallTelescope expr fun arr body => do
     let binders ← arr.mapM fun fvar => do
       return (toString (← fvar.fvarId!.getUserName), toString (← Meta.ppExpr (← fvar.fvarId!.getType)))
@@ -108,7 +108,7 @@ def serialize_expression_ast (expr: Expr): MetaM String := do
     -- Lean these are handled using a `#` prefix.
     return s!"{deBruijnIndex}"
   | .fvar fvarId =>
-    let name := (← fvarId.getDecl).userName
+    let name := name_to_ast fvarId.name
     return s!"(:fv {name})"
   | .mvar mvarId =>
     let name := name_to_ast mvarId.name
@@ -166,7 +166,7 @@ def serialize_expression_ast (expr: Expr): MetaM String := do
     | .strictImplicit => " :strictImplicit"
     | .instImplicit => " :instImplicit"
 
-def serialize_expression (options: Commands.Options) (e: Expr): MetaM Commands.Expression := do
+def serialize_expression (options: Protocol.Options) (e: Expr): MetaM Protocol.Expression := do
   let pp := toString (← Meta.ppExpr e)
   let pp?: Option String := match options.printExprPretty with
       | true => .some pp
@@ -181,8 +181,8 @@ def serialize_expression (options: Commands.Options) (e: Expr): MetaM Commands.E
   }
 
 /-- Adapted from ppGoal -/
-def serialize_goal (options: Commands.Options) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl)
-      : MetaM Commands.Goal := do
+def serialize_goal (options: Protocol.Options) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl)
+      : MetaM Protocol.Goal := do
   -- Options for printing; See Meta.ppGoal for details
   let showLetValues  := true
   let ppAuxDecls     := options.printAuxDecls
@@ -190,7 +190,7 @@ def serialize_goal (options: Commands.Options) (mvarDecl: MetavarDecl) (parentDe
   let lctx           := mvarDecl.lctx
   let lctx           := lctx.sanitizeNames.run' { options := (← getOptions) }
   Meta.withLCtx lctx mvarDecl.localInstances do
-    let ppVarNameOnly (localDecl: LocalDecl): MetaM Commands.Variable := do
+    let ppVarNameOnly (localDecl: LocalDecl): MetaM Protocol.Variable := do
       match localDecl with
       | .cdecl _ _ varName _ _ _ =>
         let varName := varName.simpMacroScopes
@@ -201,7 +201,7 @@ def serialize_goal (options: Commands.Options) (mvarDecl: MetavarDecl) (parentDe
         return {
           name := toString varName,
         }
-    let ppVar (localDecl : LocalDecl) : MetaM Commands.Variable := do
+    let ppVar (localDecl : LocalDecl) : MetaM Protocol.Variable := do
       match localDecl with
       | .cdecl _ _ varName type _ _ =>
         let varName := varName.simpMacroScopes

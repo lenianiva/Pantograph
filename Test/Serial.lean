@@ -1,19 +1,19 @@
 import LSpec
 import Pantograph.Serial
-import Pantograph.Symbols
+import Pantograph.Symbol
 
 namespace Pantograph.Test.Serial
 
 open Pantograph
 open Lean
 
-deriving instance Repr, DecidableEq for Commands.BoundExpression
+deriving instance Repr, DecidableEq for Protocol.BoundExpression
 
 def test_str_to_name: LSpec.TestSeq :=
     LSpec.test "Symbol parsing" (Name.str (.str (.str .anonymous "Lean") "Meta") "run" = Pantograph.str_to_name "Lean.Meta.run")
 
 def test_expr_to_binder (env: Environment): IO LSpec.TestSeq := do
-  let entries: List (String × Commands.BoundExpression) := [
+  let entries: List (String × Protocol.BoundExpression) := [
     ("Nat.add_comm", { binders := #[("n", "Nat"), ("m", "Nat")], target := "n + m = m + n" }),
     ("Nat.le_of_succ_le", { binders := #[("n", "Nat"), ("m", "Nat"), ("h", "Nat.succ n ≤ m")], target := "n ≤ m" })
   ]

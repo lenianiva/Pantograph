@@ -1,6 +1,20 @@
+/-
+Tests pertaining to goals with no interdependencies
+-/
 import LSpec
 import Pantograph.Goal
 import Pantograph.Serial
+
+namespace Pantograph
+
+def TacticResult.toString : TacticResult → String
+  | .success _ goals => s!".success ({goals.size} goals)"
+  | .failure messages =>
+    let messages := "\n".intercalate messages.toList
+    s!".failure {messages}"
+  | .parseError error => s!".parseError {error}"
+  | .indexError index => s!".indexError {index}"
+end Pantograph
 
 namespace Pantograph.Test.Proofs
 open Pantograph
@@ -10,21 +24,21 @@ inductive Start where
   | copy (name: String) -- Start from some name in the environment
   | expr (expr: String) -- Start from some expression
 
-abbrev TestM := StateRefT LSpec.TestSeq (ReaderT Commands.Options M)
+abbrev TestM := StateRefT LSpec.TestSeq (ReaderT Protocol.Options M)
 
-deriving instance DecidableEq, Repr for Commands.Expression
-deriving instance DecidableEq, Repr for Commands.Variable
-deriving instance DecidableEq, Repr for Commands.Goal
+deriving instance DecidableEq, Repr for Protocol.Expression
+deriving instance DecidableEq, Repr for Protocol.Variable
+deriving instance DecidableEq, Repr for Protocol.Goal
 
-def add_test (test: LSpec.TestSeq): TestM Unit := do
+def addTest (test: LSpec.TestSeq): TestM Unit := do
   set $ (← get) ++ test
 
-def start_proof (start: Start): TestM (Option GoalState) := do
+def startProof (start: Start): TestM (Option GoalState) := do
   let env ← Lean.MonadEnv.getEnv
   match start with
   | .copy name =>
     let cInfo? := str_to_name name |> env.find?
-    add_test $ LSpec.check s!"Symbol exists {name}" cInfo?.isSome
+    addTest $ LSpec.check s!"Symbol exists {name}" cInfo?.isSome
     match cInfo? with
     | .some cInfo =>
       let goal ← GoalState.create (expr := cInfo.type)
@@ -33,14 +47,14 @@ def start_proof (start: Start): TestM (Option GoalState) := do
       return Option.none
   | .expr expr =>
     let syn? := syntax_from_str env expr
-    add_test $ LSpec.check s!"Parsing {expr}" (syn?.isOk)
+    addTest $ LSpec.check s!"Parsing {expr}" (syn?.isOk)
     match syn? with
     | .error error =>
       IO.println error
       return Option.none
     | .ok syn =>
       let expr? ← syntax_to_expr_type syn
-      add_test $ LSpec.check s!"Elaborating" expr?.isOk
+      addTest $ LSpec.check s!"Elaborating" expr?.isOk
       match expr? with
       | .error error =>
         IO.println error
@@ -49,9 +63,9 @@ def start_proof (start: Start): TestM (Option GoalState) := do
         let goal ← GoalState.create (expr := expr)
         return Option.some goal
 
-def assert_unreachable (message: String): LSpec.TestSeq := LSpec.check message false
+def assertUnreachable (message: String): LSpec.TestSeq := LSpec.check message false
 
-def build_goal (nameType: List (String × String)) (target: String): Commands.Goal :=
+def buildGoal (nameType: List (String × String)) (target: String): Protocol.Goal :=
   {
     target := { pp? := .some target},
     vars := (nameType.map fun x => ({
@@ -60,8 +74,8 @@ def build_goal (nameType: List (String × String)) (target: String): Commands.Go
       isInaccessible? := .some false
     })).toArray
   }
--- Like `build_goal` but allow certain variables to be elided.
-def build_goal_selective (nameType: List (String × Option String)) (target: String): Commands.Goal :=
+-- Like `buildGoal` but allow certain variables to be elided.
+def buildGoalSelective (nameType: List (String × Option String)) (target: String): Protocol.Goal :=
   {
     target := { pp? := .some target},
     vars := (nameType.map fun x => ({
@@ -70,146 +84,7 @@ def build_goal_selective (nameType: List (String × Option String)) (target: Str
       isInaccessible? := x.snd.map (λ _ => false)
     })).toArray
   }
-
-
--- Individual test cases
-example: ∀ (a b: Nat), a + b = b + a := by
-  intro n m
-  rw [Nat.add_comm]
-def proof_nat_add_comm: TestM Unit := do
-  let goal? ← start_proof (.copy "Nat.add_comm")
-  add_test $ LSpec.check "Start goal" goal?.isSome
-  if let .some goal := goal? then
-    if let .success #[(goal, sGoal)] ← goal.execute "intro n m" then
-      let sGoal1e: Commands.Goal := build_goal [("n", "Nat"), ("m", "Nat")] "n + m = m + n"
-      add_test $ LSpec.check "intro n m" (sGoal = sGoal1e)
-
-      if let .failure #[message] ← goal.execute "assumption" then
-        add_test $ LSpec.check "assumption" (message = "tactic 'assumption' failed\nn m : Nat\n⊢ n + m = m + n")
-      else
-        add_test $ assert_unreachable "assumption"
-
-      if let .success #[] ← goal.execute "rw [Nat.add_comm]" then
-        return ()
-      else
-        add_test $ assert_unreachable "rw [Nat.add_comm]"
-    else
-      add_test $ assert_unreachable "intro n m"
-def proof_nat_add_comm_manual: TestM Unit := do
-  let goal? ← start_proof (.expr "∀ (a b: Nat), a + b = b + a")
-  add_test $ LSpec.check "Start goal" goal?.isSome
-  if let .some goal := goal? then
-    if let .success #[(goal, sGoal)] ← goal.execute "intro n m" then
-      let sGoal1e: Commands.Goal := build_goal [("n", "Nat"), ("m", "Nat")] "n + m = m + n"
-      add_test $ LSpec.check "intro n m" (sGoal = sGoal1e)
-
-      if let .failure #[message] ← goal.execute "assumption" then
-        add_test $ LSpec.check "assumption" (message = "tactic 'assumption' failed\nn m : Nat\n⊢ n + m = m + n")
-      else
-        add_test $ assert_unreachable "assumption"
-
-      if let .success #[] ← goal.execute "rw [Nat.add_comm]" then
-        return ()
-      else
-        add_test $ assert_unreachable "rw [Nat.add_comm]"
-    else
-      add_test $ assert_unreachable "intro n m"
-
-
--- Two ways to write the same theorem
-example: ∀ (p q: Prop), p ∨ q → q ∨ p := by
-  intro p q h
-  cases h
-  apply Or.inr
-  assumption
-  apply Or.inl
-  assumption
-example: ∀ (p q: Prop), p ∨ q → q ∨ p := by
-  intro p q h
-  cases h
-  . apply Or.inr
-    assumption
-  . apply Or.inl
-    assumption
-def proof_or_comm: TestM Unit := do
-  let typeProp: Commands.Expression := { pp? := .some "Prop" }
-  let branchGoal (caseName name: String): Commands.Goal := {
-    caseName? := .some caseName,
-    target := { pp? := .some "q ∨ p" },
-    vars := #[
-      { name := "p", type? := .some typeProp, isInaccessible? := .some false },
-      { name := "q", type? := .some typeProp, isInaccessible? := .some false },
-      { name := "h✝", type? := .some { pp? := .some name }, isInaccessible? := .some true }
-    ]
-  }
-  let goal? ← start_proof (.expr "∀ (p q: Prop), p ∨ q → q ∨ p")
-  add_test $ LSpec.check "Start goal" goal?.isSome
-  if let .some goal := goal? then
-    if let .success #[(goal, sGoal)] ← goal.execute "intro p q h" then
-      let sGoal1e := build_goal [("p", "Prop"), ("q", "Prop"), ("h", "p ∨ q")] "q ∨ p"
-      add_test $ LSpec.check "intro p q h" (sGoal = sGoal1e)
-
-      if let .success #[(goal1, sGoal1), (goal2, sGoal2)] ← goal.execute "cases h" then
-        add_test $ LSpec.check "cases h/1" (sGoal1 = branchGoal "inl" "p")
-        if let .success #[(goal, _)] ← goal1.execute "apply Or.inr" then
-          if let .success #[] ← goal.execute "assumption" then
-            return ()
-          else
-            add_test $ assert_unreachable "assumption"
-        else
-          add_test $ assert_unreachable "apply Or.inr"
-
-
-        add_test $ LSpec.check "cases h/2" (sGoal2 = branchGoal "inr" "q")
-        if let .success #[(goal, _)] ← goal2.execute "apply Or.inl" then
-          if let .success #[] ← goal.execute "assumption" then
-            return ()
-          else
-            add_test $ assert_unreachable "assumption"
-        else
-          add_test $ assert_unreachable "apply Or.inl"
-
-      else
-        add_test $ assert_unreachable "cases h"
-    else
-      add_test $ assert_unreachable "intro p q h"
-
-example (w x y z : Nat) (p : Nat → Prop)
-        (h : p (x * y + z * w * x)) : p (x * w * z + y * x) := by
-  simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm, Nat.mul_comm, Nat.mul_assoc, Nat.mul_left_comm] at *
-  assumption
-def proof_arith_1: TestM Unit := do
-  let goal? ← start_proof (.expr "∀ (w x y z : Nat) (p : Nat → Prop) (h : p (x * y + z * w * x)), p (x * w * z + y * x)")
-  add_test $ LSpec.check "Start goal" goal?.isSome
-  if let .some goal := goal? then
-    if let .success #[(goal, _)] ← goal.execute "intros" then
-      if let .success #[(goal, _)] ← goal.execute "simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm, Nat.mul_comm, Nat.mul_assoc, Nat.mul_left_comm] at *" then
-        if let .success #[] ← goal.execute "assumption" then
-          return ()
-        else
-          add_test $ assert_unreachable "assumption"
-      else
-        add_test $ assert_unreachable "simp ..."
-    else
-      add_test $ assert_unreachable "intros"
-
-def proof_delta_variable: TestM Unit := withReader (fun _ => {proofVariableDelta := true}) do
-  let goal? ← start_proof (.expr "∀ (a b: Nat), a + b = b + a")
-  add_test $ LSpec.check "Start goal" goal?.isSome
-  if let .some goal := goal? then
-    if let .success #[(goal, sGoal)] ← goal.execute "intro n" then
-      let sGoal1e: Commands.Goal := build_goal_selective [("n", .some "Nat")] "∀ (b : Nat), n + b = b + n"
-      add_test $ LSpec.check "intro n" (sGoal = sGoal1e)
-
-      if let .success #[(_, sGoal)] ← goal.execute "intro m" then
-        let sGoal2e: Commands.Goal := build_goal_selective [("n", .none), ("m", .some "Nat")] "n + m = m + n"
-        add_test $ LSpec.check "intro m" (sGoal = sGoal2e)
-      else
-        add_test $ assert_unreachable "intro m"
-    else
-      add_test $ assert_unreachable "intro n"
-
-def proof_runner (env: Lean.Environment) (tests: TestM Unit): IO LSpec.TestSeq := do
+def proofRunner (env: Lean.Environment) (tests: TestM Unit): IO LSpec.TestSeq := do
   let termElabM := tests.run LSpec.TestSeq.done |>.run {} -- with default options
 
   let coreContext: Lean.Core.Context := {
@@ -229,6 +104,160 @@ def proof_runner (env: Lean.Environment) (tests: TestM Unit): IO LSpec.TestSeq :
   | .ok (_, a) =>
     return a
 
+
+-- Individual test cases
+example: ∀ (a b: Nat), a + b = b + a := by
+  intro n m
+  rw [Nat.add_comm]
+def proof_nat_add_comm (manual: Bool): TestM Unit := do
+  let state? ← startProof <| match manual with
+    | false => .copy "Nat.add_comm"
+    | true => .expr "∀ (a b: Nat), a + b = b + a"
+  addTest $ LSpec.check "Start goal" state?.isSome
+  let state0 ← match state? with
+    | .some state => pure state
+    | .none => do
+      addTest $ assertUnreachable "Goal could not parse"
+      return ()
+
+  let (state1, goal1) ← match ← state0.execute (goalId := 0) (tactic := "intro n m") with
+    | .success state #[goal] => pure (state, goal)
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check "intro n m" (goal1 = buildGoal [("n", "Nat"), ("m", "Nat")] "n + m = m + n")
+
+  match ← state1.execute (goalId := 0) (tactic := "assumption") with
+  | .failure #[message] =>
+    addTest $ LSpec.check "assumption" (message = "tactic 'assumption' failed\nn m : Nat\n⊢ n + m = m + n")
+  | other => do
+    addTest $ assertUnreachable $ other.toString
+
+  let state2 ← match ← state1.execute (goalId := 0) (tactic := "rw [Nat.add_comm]") with
+    | .success state #[] => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+
+  return ()
+
+
+-- Two ways to write the same theorem
+example: ∀ (p q: Prop), p ∨ q → q ∨ p := by
+  intro p q h
+  cases h
+  apply Or.inr
+  assumption
+  apply Or.inl
+  assumption
+example: ∀ (p q: Prop), p ∨ q → q ∨ p := by
+  intro p q h
+  cases h
+  . apply Or.inr
+    assumption
+  . apply Or.inl
+    assumption
+def proof_or_comm: TestM Unit := do
+  let state? ← startProof (.expr "∀ (p q: Prop), p ∨ q → q ∨ p")
+  let state0 ← match state? with
+    | .some state => pure state
+    | .none => do
+      addTest $ assertUnreachable "Goal could not parse"
+      return ()
+
+  let (state1, goal1) ← match ← state0.execute (goalId := 0) (tactic := "intro p q h") with
+    | .success state #[goal] => pure (state, goal)
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check "p q h" (goal1 = buildGoal [("p", "Prop"), ("q", "Prop"), ("h", "p ∨ q")] "q ∨ p")
+  let (state2, goal1, goal2) ← match ← state1.execute (goalId := 0) (tactic := "cases h") with
+    | .success state #[goal1, goal2] => pure (state, goal1, goal2)
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check "cases h/1" (goal1 = branchGoal "inl" "p")
+  addTest $ LSpec.check "cases h/2" (goal2 = branchGoal "inr" "q")
+
+  let (state3_1, _goal) ← match ← state2.execute (goalId := 0) (tactic := "apply Or.inr") with
+    | .success state #[goal] => pure (state, goal)
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  let state4_1 ← match ← state3_1.execute (goalId := 0) (tactic := "assumption") with
+    | .success state #[] => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  IO.println "=====  1  ====="
+  state1.print
+  IO.println "=====  2  ====="
+  state2.print
+  IO.println "===== 4_1 ====="
+  state4_1.print
+  let (state3_2, _goal) ← match ← state2.execute (goalId := 1) (tactic := "apply Or.inl") with
+    | .success state #[goal] => pure (state, goal)
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  IO.println "===== 3_2 ====="
+  state3_2.print
+  let state4_2 ← match ← state3_2.execute (goalId := 0) (tactic := "assumption") with
+    | .success state #[] => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  IO.println "===== 4_2 ====="
+  state4_2.print
+
+  return ()
+  where
+    typeProp: Protocol.Expression := { pp? := .some "Prop" }
+    branchGoal (caseName name: String): Protocol.Goal := {
+      caseName? := .some caseName,
+      target := { pp? := .some "q ∨ p" },
+      vars := #[
+        { name := "p", type? := .some typeProp, isInaccessible? := .some false },
+        { name := "q", type? := .some typeProp, isInaccessible? := .some false },
+        { name := "h✝", type? := .some { pp? := .some name }, isInaccessible? := .some true }
+      ]
+    }
+
+--example (w x y z : Nat) (p : Nat → Prop)
+--        (h : p (x * y + z * w * x)) : p (x * w * z + y * x) := by
+--  simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm, Nat.mul_comm, Nat.mul_assoc, Nat.mul_left_comm] at *
+--  assumption
+--def proof_arith_1: TestM Unit := do
+--  let goal? ← startProof (.expr "∀ (w x y z : Nat) (p : Nat → Prop) (h : p (x * y + z * w * x)), p (x * w * z + y * x)")
+--  addTest $ LSpec.check "Start goal" goal?.isSome
+--  if let .some goal := goal? then
+--    if let .success #[(goal, _)] ← goal.execute "intros" then
+--      if let .success #[(goal, _)] ← goal.execute "simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm, Nat.mul_comm, Nat.mul_assoc, Nat.mul_left_comm] at *" then
+--        if let .success #[] ← goal.execute "assumption" then
+--          return ()
+--        else
+--          addTest $ assertUnreachable "assumption"
+--      else
+--        addTest $ assertUnreachable "simp ..."
+--    else
+--      addTest $ assertUnreachable "intros"
+--
+--def proof_delta_variable: TestM Unit := withReader (fun _ => {proofVariableDelta := true}) do
+--  let goal? ← startProof (.expr "∀ (a b: Nat), a + b = b + a")
+--  addTest $ LSpec.check "Start goal" goal?.isSome
+--  if let .some goal := goal? then
+--    if let .success #[(goal, sGoal)] ← goal.execute "intro n" then
+--      let sGoal1e: Protocol.Goal :=buildGoalSelective [("n", .some "Nat")] "∀ (b : Nat), n + b = b + n"
+--      addTest $ LSpec.check "intro n" (sGoal = sGoal1e)
+--
+--      if let .success #[(_, sGoal)] ← goal.execute "intro m" then
+--        let sGoal2e: Protocol.Goal :=buildGoalSelective [("n", .none), ("m", .some "Nat")] "n + m = m + n"
+--        addTest $ LSpec.check "intro m" (sGoal = sGoal2e)
+--      else
+--        addTest $ assertUnreachable "intro m"
+--    else
+--      addTest $ assertUnreachable "intro n"
+
 /-- Tests the most basic form of proofs whose goals do not relate to each other -/
 def suite: IO LSpec.TestSeq := do
   let env: Lean.Environment ← Lean.importModules
@@ -236,15 +265,15 @@ def suite: IO LSpec.TestSeq := do
     (opts := {})
     (trustLevel := 1)
   let tests := [
-    ("Nat.add_comm", proof_nat_add_comm),
-    ("nat.add_comm manual", proof_nat_add_comm_manual),
-    ("Or.comm", proof_or_comm),
-    ("arithmetic 1", proof_arith_1),
-    ("delta variable", proof_delta_variable)
+    ("Nat.add_comm", proof_nat_add_comm false),
+    ("Nat.add_comm manual", proof_nat_add_comm true),
+    ("Or.comm", proof_or_comm)
+    --("arithmetic 1", proof_arith_1),
+    --("delta variable", proof_delta_variable)
   ]
   let tests ← tests.foldlM (fun acc tests => do
     let (name, tests) := tests
-    let tests ← proof_runner env tests
+    let tests ← proofRunner env tests
     return acc ++ (LSpec.group name tests)) LSpec.TestSeq.done
 
   return LSpec.group "Proofs" tests

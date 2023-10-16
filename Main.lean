@@ -8,7 +8,7 @@ import Pantograph
 open Pantograph
 
 /-- Parse a command either in `{ "cmd": ..., "payload": ... }` form or `cmd { ... }` form. -/
-def parse_command (s: String): Except String Commands.Command := do
+def parseCommand (s: String): Except String Protocol.Command := do
   let s := s.trim
   match s.get? 0 with
   | .some '{' => -- Parse in Json mode
@@ -26,9 +26,9 @@ unsafe def loop : MainM Unit := do
   let state ← get
   let command ← (← IO.getStdin).getLine
   if command.trim.length = 0 then return ()
-  match parse_command command with
+  match parseCommand command with
   | .error error =>
-    let error  := Lean.toJson ({ error := "command", desc := error }: Commands.InteractionError)
+    let error  := Lean.toJson ({ error := "command", desc := error }: Protocol.InteractionError)
     -- Using `Lean.Json.compress` here to prevent newline
     IO.println error.compress
   | .ok command =>
