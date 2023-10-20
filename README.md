@@ -18,6 +18,7 @@ export LEAN_PATH="$LIB/mathlib4/build/lib:$LIB_MATHLIB/aesop/build/lib:$LIB_MATH
 
 LEAN_PATH=$LEAN_PATH build/bin/pantograph $@
 ```
+The provided `flake.nix` has a develop environment with Lean already setup.
 
 ## Usage
 
