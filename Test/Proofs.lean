@@ -189,26 +189,36 @@ def proof_or_comm: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  IO.println "=====  1  ====="
-  state1.print
-  IO.println "=====  2  ====="
-  state2.print
-  IO.println "===== 4_1 ====="
-  state4_1.print
   let (state3_2, _goal) ← match ← state2.execute (goalId := 1) (tactic := "apply Or.inl") with
     | .success state #[goal] => pure (state, goal)
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  IO.println "===== 3_2 ====="
-  state3_2.print
   let state4_2 ← match ← state3_2.execute (goalId := 0) (tactic := "assumption") with
     | .success state #[] => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  IO.println "===== 4_2 ====="
-  state4_2.print
+
+  -- Ensure the proof can continue from `state4_2`.
+  let state2b ← match state2.continue state4_2 with
+    | .error msg => do
+      addTest $ assertUnreachable $ msg
+      return ()
+    | .ok state => pure state
+  addTest $ LSpec.test "state2b" (state2b.goals == [state2.goals.get! 0])
+  let (state3_1, _goal) ← match ← state2b.execute (goalId := 0) (tactic := "apply Or.inr") with
+    | .success state #[goal] => pure (state, goal)
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  let state4_1 ← match ← state3_1.execute (goalId := 0) (tactic := "assumption") with
+    | .success state #[] => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  IO.println "=====  4_1  ====="
+  state4_1.print ({ printNonVisible := false })
 
   return ()
   where

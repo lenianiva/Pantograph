@@ -167,7 +167,8 @@ structure GoalDeleteResult where
 structure GoalPrint where
   printContext: Bool := true
   printValue: Bool := true
-  printNonVisible: Bool := true
+  printNewMVars: Bool := false
+  printNonVisible: Bool := false
 
 
 end Pantograph.Protocol

@@ -45,9 +45,11 @@ def type_expr_to_bound (expr: Expr): MetaM Protocol.BoundExpression := do
       return (toString (← fvar.fvarId!.getUserName), toString (← Meta.ppExpr (← fvar.fvarId!.getType)))
     return { binders, target := toString (← Meta.ppExpr body) }
 
-private def name_to_ast: Lean.Name → String
-  | .anonymous
-  | .num _ _ => ":anon"
+private def name_to_ast (name: Lean.Name) (sanitize: Bool := true): String := match name with
+  | .anonymous => ":anon"
+  | .num n i => match sanitize with
+    | false => s!"{toString n} {i}"
+    | true => ":anon"
   | n@(.str _ _) => toString n
 
 private def level_depth: Level → Nat
@@ -100,71 +102,73 @@ def serialize_sort_level_ast (level: Level): String :=
 /--
  Completely serializes an expression tree. Json not used due to compactness
 -/
-def serialize_expression_ast (expr: Expr): MetaM String := do
-  match expr with
-  | .bvar deBruijnIndex =>
-    -- This is very common so the index alone is shown. Literals are handled below.
-    -- The raw de Bruijn index should never appear in an unbound setting. In
-    -- Lean these are handled using a `#` prefix.
-    return s!"{deBruijnIndex}"
-  | .fvar fvarId =>
-    let name := name_to_ast fvarId.name
-    return s!"(:fv {name})"
-  | .mvar mvarId =>
-    let name := name_to_ast mvarId.name
-    return s!"(:mv {name})"
-  | .sort level =>
-    let level := serialize_sort_level_ast level
-    return s!"(:sort {level})"
-  | .const declName _ =>
-    -- The universe level of the const expression is elided since it should be
-    -- inferrable from surrounding expression
-    return s!"(:c {declName})"
-  | .app fn arg =>
-    let fn' ← serialize_expression_ast fn
-    let arg' ← serialize_expression_ast arg
-    return s!"({fn'} {arg'})"
-  | .lam binderName binderType body binderInfo =>
-    let binderName' := name_to_ast binderName
-    let binderType' ← serialize_expression_ast binderType
-    let body' ← serialize_expression_ast body
-    let binderInfo' := binder_info_to_ast binderInfo
-    return s!"(:lambda {binderName'} {binderType'} {body'}{binderInfo'})"
-  | .forallE binderName binderType body binderInfo =>
-    let binderName' := name_to_ast binderName
-    let binderType' ← serialize_expression_ast binderType
-    let body' ← serialize_expression_ast body
-    let binderInfo' := binder_info_to_ast binderInfo
-    return s!"(:forall {binderName'} {binderType'} {body'}{binderInfo'})"
-  | .letE name type value body _ =>
-    -- Dependent boolean flag diacarded
-    let name' := name_to_ast name
-    let type' ← serialize_expression_ast type
-    let value' ← serialize_expression_ast value
-    let body' ← serialize_expression_ast body
-    return s!"(:let {name'} {type'} {value'} {body'})"
-  | .lit v =>
-    -- To not burden the downstream parser who needs to handle this, the literal
-    -- is wrapped in a :lit sexp.
-    let v' := match v with
-      | .natVal val => toString val
-      | .strVal val => s!"\"{val}\""
-    return s!"(:lit {v'})"
-  | .mdata _ expr =>
-    -- NOTE: Equivalent to expr itself, but mdata influences the prettyprinter
-    -- It may become necessary to incorporate the metadata.
-    return (← serialize_expression_ast expr)
-  | .proj typeName idx struct =>
-    let struct' ← serialize_expression_ast struct
-    return s!"(:proj {typeName} {idx} {struct'})"
-
+def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): MetaM String := do
+  return self expr
   where
+  self (e: Expr): String :=
+    match e with
+    | .bvar deBruijnIndex =>
+      -- This is very common so the index alone is shown. Literals are handled below.
+      -- The raw de Bruijn index should never appear in an unbound setting. In
+      -- Lean these are handled using a `#` prefix.
+      s!"{deBruijnIndex}"
+    | .fvar fvarId =>
+      let name := of_name fvarId.name
+      s!"(:fv {name})"
+    | .mvar mvarId =>
+      let name := of_name mvarId.name
+      s!"(:mv {name})"
+    | .sort level =>
+      let level := serialize_sort_level_ast level
+      s!"(:sort {level})"
+    | .const declName _ =>
+      -- The universe level of the const expression is elided since it should be
+      -- inferrable from surrounding expression
+      s!"(:c {declName})"
+    | .app fn arg =>
+      let fn' := self fn
+      let arg' := self arg
+      s!"({fn'} {arg'})"
+    | .lam binderName binderType body binderInfo =>
+      let binderName' := of_name binderName
+      let binderType' := self binderType
+      let body' := self body
+      let binderInfo' := binder_info_to_ast binderInfo
+      s!"(:lambda {binderName'} {binderType'} {body'}{binderInfo'})"
+    | .forallE binderName binderType body binderInfo =>
+      let binderName' := of_name binderName
+      let binderType' := self binderType
+      let body' := self body
+      let binderInfo' := binder_info_to_ast binderInfo
+      s!"(:forall {binderName'} {binderType'} {body'}{binderInfo'})"
+    | .letE name type value body _ =>
+      -- Dependent boolean flag diacarded
+      let name' := name_to_ast name
+      let type' := self type
+      let value' := self value
+      let body' := self body
+      s!"(:let {name'} {type'} {value'} {body'})"
+    | .lit v =>
+      -- To not burden the downstream parser who needs to handle this, the literal
+      -- is wrapped in a :lit sexp.
+      let v' := match v with
+        | .natVal val => toString val
+        | .strVal val => s!"\"{val}\""
+      s!"(:lit {v'})"
+    | .mdata _ inner =>
+      -- NOTE: Equivalent to expr itself, but mdata influences the prettyprinter
+      -- It may become necessary to incorporate the metadata.
+      self inner
+    | .proj typeName idx struct =>
+      let struct' := self struct
+      s!"(:proj {typeName} {idx} {struct'})"
   -- Elides all unhygenic names
   binder_info_to_ast : Lean.BinderInfo → String
     | .default => ""
     | .implicit => " :implicit"
     | .strictImplicit => " :strictImplicit"
     | .instImplicit => " :instImplicit"
+  of_name (name: Name) := name_to_ast name sanitize
 
 def serialize_expression (options: Protocol.Options) (e: Expr): MetaM Protocol.Expression := do
   let pp := toString (← Meta.ppExpr e)

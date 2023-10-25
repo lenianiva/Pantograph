@@ -31,13 +31,19 @@ protected def GoalState.create (expr: Expr): M GoalState := do
   --let expr ← instantiateMVars expr
   let goal := (← Meta.mkFreshExprMVar expr (kind := MetavarKind.synthetic) (userName := .anonymous))
   let savedStateMonad: Elab.Tactic.TacticM Elab.Tactic.SavedState := MonadBacktrack.saveState
-  let savedState ← savedStateMonad { elaborator := .anonymous } |>.run' { goals := [goal.mvarId!]}
+  let root := goal.mvarId!
+  let savedState ← savedStateMonad { elaborator := .anonymous } |>.run' { goals := [root]}
   return {
     savedState,
-    root := goal.mvarId!,
-    newMVars := SSet.empty,
+    root,
+    newMVars := SSet.insert .empty root,
   }
 protected def GoalState.goals (goalState: GoalState): List MVarId := goalState.savedState.tactic.goals
+
+private def GoalState.mctx (state: GoalState): MetavarContext :=
+  state.savedState.term.meta.meta.mctx
+private def GoalState.mvars (state: GoalState): SSet MVarId :=
+  state.mctx.decls.foldl (init := .empty) fun acc k _ => acc.insert k
 
 def executeTactic (state: Elab.Tactic.SavedState) (goal: MVarId) (tactic: Syntax) :
     M (Except (Array String) (Elab.Tactic.SavedState × List MVarId)):= do
@@ -93,13 +99,13 @@ protected def GoalState.execute (state: GoalState) (goalId: Nat) (tactic: String
     let prevMCtx := state.savedState.term.meta.meta.mctx
     -- Generate a list of mvarIds that exist in the parent state; Also test the
     -- assertion that the types have not changed on any mvars.
-    let newMVars := (← nextMCtx.decls.foldlM (fun acc mvarId mvarDecl => do
+    let newMVars ← nextMCtx.decls.foldlM (fun acc mvarId mvarDecl => do
       if let .some prevMVarDecl := prevMCtx.decls.find? mvarId then
         assert! prevMVarDecl.type == mvarDecl.type
         return acc
       else
-        return mvarId :: acc
-      ) []).toSSet
+        return acc.insert mvarId
+      ) SSet.empty
     let nextState: GoalState := {
       savedState := nextSavedState
       root := state.root,
@@ -115,38 +121,70 @@ protected def GoalState.execute (state: GoalState) (goalId: Nat) (tactic: String
       | .none => throwError s!"Parent mvar id does not exist {nextGoal.name}"
     return .success nextState goals.toArray
 
+/-- After finishing one branch of a proof (`graftee`), pick up from the point where the proof was left off (`target`) -/
+protected def GoalState.continue (target: GoalState) (graftee: GoalState): Except String GoalState :=
+  if target.root != graftee.root then
+    .error s!"Roots of two continued goal states do not match: {target.root.name} != {graftee.root.name}"
+  -- Ensure goals are not dangling
+  else if ¬ (target.goals.all (λ goal => graftee.mvars.contains goal)) then
+    .error s!"Some goals in target are not present in the graftee"
+  else
+    -- Set goals to the goals that have not been assigned yet, similar to the `focus` tactic.
+    let unassigned := target.goals.filter (λ goal =>
+      let mctx := graftee.mctx
+      ¬(mctx.eAssignment.contains goal || mctx.dAssignment.contains goal))
+    .ok {
+      savedState := {
+        term := graftee.savedState.term,
+        tactic := { goals := unassigned },
+      },
+      root := target.root,
+      newMVars := graftee.newMVars,
+    }
+
+protected def GoalState.rootExpr (goalState: GoalState): Option Expr :=
+  goalState.mctx.eAssignment.find? goalState.root |>.filter (λ e => ¬ e.hasMVar)
+
 -- Diagnostics functions
 
 /-- Print the metavariables in a readable format -/
-protected def GoalState.print (goalState: GoalState) (options: Protocol.GoalPrint := {}): Elab.TermElabM Unit := do
+protected def GoalState.print (goalState: GoalState) (options: Protocol.GoalPrint := {}): M Unit := do
   let savedState := goalState.savedState
   savedState.term.restore
   let goals := savedState.tactic.goals
   let mctx ← getMCtx
+  let root := goalState.root
+  -- Print the root
+  match mctx.decls.find? root with
+  | .some decl => printMVar ">" root decl
+  | .none => IO.println s!">{root.name}: ??"
   goals.forM (fun mvarId => do
-    let pref := "⊢"
-    match mctx.decls.find? mvarId with
-    | .some decl => printMVar pref mvarId decl
-    | .none => IO.println s!"{pref}{mvarId.name}: ??"
+    if mvarId != root then
+      match mctx.decls.find? mvarId with
+      | .some decl => printMVar "⊢" mvarId decl
+      | .none => IO.println s!"⊢{mvarId.name}: ??"
   )
   let goals := goals.toSSet
   mctx.decls.forM (fun mvarId decl => do
-    if goals.contains mvarId then
+    if goals.contains mvarId || mvarId == root then
       pure ()
+    -- Always print the root goal
     else if mvarId == goalState.root then
       printMVar (pref := ">") mvarId decl
-    else if ¬(goalState.newMVars.contains mvarId) then
-      printMVar (pref := " ") mvarId decl
+    -- Print the remainig ones that users don't see in Lean
     else if options.printNonVisible then
-      printMVar (pref := "~") mvarId decl
+      let pref := if goalState.newMVars.contains mvarId then "~" else " "
+      printMVar pref mvarId decl
     else
-      IO.println s!" {mvarId.name}{userNameToString decl.userName}"
+      pure ()
+      --IO.println s!" {mvarId.name}{userNameToString decl.userName}"
   )
   where
     printMVar (pref: String) (mvarId: MVarId) (decl: MetavarDecl): Elab.TermElabM Unit := do
       if options.printContext then
         decl.lctx.fvarIdToDecl.forM printFVar
-      IO.println s!"{pref}{mvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type} {← serialize_expression_ast decl.type}"
+      let type_sexp ← serialize_expression_ast (← instantiateMVars decl.type) (sanitize := false)
+      IO.println s!"{pref}{mvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type} {type_sexp}"
       if options.printValue then
         if let Option.some value := (← getMCtx).eAssignment.find? mvarId then
           IO.println s!"  = {← Meta.ppExpr value}"
