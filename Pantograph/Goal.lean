@@ -38,9 +38,13 @@ protected def GoalState.create (expr: Expr): M GoalState := do
     root,
     newMVars := SSet.insert .empty root,
   }
-protected def GoalState.goals (goalState: GoalState): List MVarId := goalState.savedState.tactic.goals
+protected def GoalState.goals (state: GoalState): List MVarId := state.savedState.tactic.goals
 
-private def GoalState.mctx (state: GoalState): MetavarContext :=
+protected def GoalState.runM {α: Type} (state: GoalState) (m: Elab.TermElabM α) : M α := do
+  state.savedState.term.restore
+  m
+
+protected def GoalState.mctx (state: GoalState): MetavarContext :=
   state.savedState.term.meta.meta.mctx
 private def GoalState.mvars (state: GoalState): SSet MVarId :=
   state.mctx.decls.foldl (init := .empty) fun acc k _ => acc.insert k

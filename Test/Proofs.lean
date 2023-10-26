@@ -141,6 +141,37 @@ def proof_nat_add_comm (manual: Bool): TestM Unit := do
 
   return ()
 
+example (w x y z : Nat) (p : Nat → Prop)
+        (h : p (x * y + z * w * x)) : p (x * w * z + y * x) := by
+  simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm, Nat.mul_comm, Nat.mul_assoc, Nat.mul_left_comm] at *
+  assumption
+def proof_arith: TestM Unit := do
+  let state? ← startProof (.expr "∀ (w x y z : Nat) (p : Nat → Prop) (h : p (x * y + z * w * x)), p (x * w * z + y * x)")
+  let state0 ← match state? with
+    | .some state => pure state
+    | .none => do
+      addTest $ assertUnreachable "Goal could not parse"
+      return ()
+
+  let (state1, goal) ← match ← state0.execute (goalId := 0) (tactic := "intros") with
+    | .success state #[goal] => pure (state, goal)
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check "1 root" state1.rootExpr.isNone
+  let (state2, goal) ← match ← state1.execute (goalId := 0) (tactic := "simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm, Nat.mul_comm, Nat.mul_assoc, Nat.mul_left_comm] at *") with
+    | .success state #[goal] => pure (state, goal)
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check "2 root" state2.rootExpr.isNone
+  let state3 ← match ← state2.execute (goalId := 0) (tactic := "assumption") with
+    | .success state #[] => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check "3 root" state3.rootExpr.isSome
+  return ()
 
 -- Two ways to write the same theorem
 example: ∀ (p q: Prop), p ∨ q → q ∨ p := by
@@ -218,7 +249,6 @@ def proof_or_comm: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  state4_1.print
   addTest $ LSpec.check "4_1 root" state4_1.rootExpr.isSome
 
   return ()
@@ -234,25 +264,35 @@ def proof_or_comm: TestM Unit := do
       ]
     }
 
---example (w x y z : Nat) (p : Nat → Prop)
---        (h : p (x * y + z * w * x)) : p (x * w * z + y * x) := by
---  simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm, Nat.mul_comm, Nat.mul_assoc, Nat.mul_left_comm] at *
---  assumption
---def proof_arith_1: TestM Unit := do
---  let goal? ← startProof (.expr "∀ (w x y z : Nat) (p : Nat → Prop) (h : p (x * y + z * w * x)), p (x * w * z + y * x)")
---  addTest $ LSpec.check "Start goal" goal?.isSome
---  if let .some goal := goal? then
---    if let .success #[(goal, _)] ← goal.execute "intros" then
---      if let .success #[(goal, _)] ← goal.execute "simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm, Nat.mul_comm, Nat.mul_assoc, Nat.mul_left_comm] at *" then
---        if let .success #[] ← goal.execute "assumption" then
---          return ()
---        else
---          addTest $ assertUnreachable "assumption"
---      else
---        addTest $ assertUnreachable "simp ..."
---    else
---      addTest $ assertUnreachable "intros"
---
+/-- M-coupled goals -/
+def proof_m_couple: TestM Unit := do
+  let state? ← startProof (.expr "(2: Nat) ≤ 5")
+  let state0 ← match state? with
+    | .some state => pure state
+    | .none => do
+      addTest $ assertUnreachable "Goal could not parse"
+      return ()
+
+  let (state1, goalL, goalR, goalM) ← match ← state0.execute (goalId := 0) (tactic := "apply Nat.le_trans") with
+    | .success state #[goalL, goalR, goalM] => pure (state, goalL, goalR, goalM)
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.test "2 ≤ ?m" (goalL.target.pp? = .some "2 ≤ ?m")
+  addTest $ LSpec.test "?m ≤ 5" (goalR.target.pp? = .some "?m ≤ 5")
+  addTest $ LSpec.test "Nat" (goalM.target.pp? = .some "Nat")
+  -- Set m to 3
+  let state2 ← match ← state1.execute (goalId := 2) (tactic := "exact 3") with
+    | .success state #[] => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  let state1b ← match state1.continue state2 with
+    | .ok state => pure state
+    | .error error => do
+      addTest $ assertUnreachable $ error
+      return ()
+  state1b.print
 --def proof_delta_variable: TestM Unit := withReader (fun _ => {proofVariableDelta := true}) do
 --  let goal? ← startProof (.expr "∀ (a b: Nat), a + b = b + a")
 --  addTest $ LSpec.check "Start goal" goal?.isSome
@@ -278,8 +318,9 @@ def suite: IO LSpec.TestSeq := do
   let tests := [
     ("Nat.add_comm", proof_nat_add_comm false),
     ("Nat.add_comm manual", proof_nat_add_comm true),
-    ("Or.comm", proof_or_comm)
-    --("arithmetic 1", proof_arith_1),
+    ("arithmetic", proof_arith),
+    ("Or.comm", proof_or_comm),
+    ("2 < 5", proof_m_couple)
     --("delta variable", proof_delta_variable)
   ]
   let tests ← tests.foldlM (fun acc tests => do
