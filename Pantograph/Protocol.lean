@@ -43,7 +43,10 @@ structure Expression where
   deriving Lean.ToJson
 
 structure Variable where
-  name: String
+  /-- The internal name used in raw expressions -/
+  name: String := ""
+  /-- The name displayed to the user -/
+  userName: String
   /-- Does the name contain a dagger -/
   isInaccessible?: Option Bool := .none
   type?: Option Expression  := .none

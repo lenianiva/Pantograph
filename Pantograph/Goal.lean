@@ -143,7 +143,12 @@ protected def GoalState.continue (target: GoalState) (graftee: GoalState): Excep
     }
 
 protected def GoalState.rootExpr (goalState: GoalState): Option Expr :=
-  goalState.mctx.eAssignment.find? goalState.root |>.filter (λ e => ¬ e.hasMVar)
+  let expr := goalState.mctx.eAssignment.find! goalState.root
+  let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
+  if expr.hasMVar then
+    .none
+  else
+    .some expr
 
 -- Diagnostics functions
 
@@ -183,7 +188,7 @@ protected def GoalState.print (goalState: GoalState) (options: Protocol.GoalPrin
     printMVar (pref: String) (mvarId: MVarId) (decl: MetavarDecl): Elab.TermElabM Unit := do
       if options.printContext then
         decl.lctx.fvarIdToDecl.forM printFVar
-      let type_sexp ← serialize_expression_ast (← instantiateMVars decl.type) (sanitize := false)
+      let type_sexp := serialize_expression_ast (← instantiateMVars decl.type) (sanitize := false)
       IO.println s!"{pref}{mvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type} {type_sexp}"
       if options.printValue then
         if let Option.some value := (← getMCtx).eAssignment.find? mvarId then

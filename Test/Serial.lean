@@ -47,8 +47,8 @@ def test_sexp_of_symbol (env: Environment): IO LSpec.TestSeq := do
   let metaM: MetaM LSpec.TestSeq := entries.foldlM (λ suites (symbol, target) => do
     let env ← MonadEnv.getEnv
     let expr := str_to_name symbol |> env.find? |>.get! |>.type
-    let test := LSpec.check symbol ((← serialize_expression_ast expr) = target)
-    return LSpec.TestSeq.append suites test) LSpec.TestSeq.done |>.run'
+    let test := LSpec.check symbol ((serialize_expression_ast expr) = target)
+    return LSpec.TestSeq.append suites test) LSpec.TestSeq.done
   let coreM := metaM.run'
   let coreContext: Core.Context := {
     currNamespace := Lean.Name.str .anonymous "Aniva"

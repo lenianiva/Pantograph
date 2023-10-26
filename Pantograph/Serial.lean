@@ -102,8 +102,8 @@ def serialize_sort_level_ast (level: Level): String :=
 /--
  Completely serializes an expression tree. Json not used due to compactness
 -/
-def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): MetaM String := do
-  return self expr
+def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): String :=
+  self expr
   where
   self (e: Expr): String :=
     match e with
@@ -175,7 +175,7 @@ def serialize_expression (options: Protocol.Options) (e: Expr): MetaM Protocol.E
   let pp?: Option String := match options.printExprPretty with
       | true => .some pp
       | false => .none
-  let sexp: String := (← serialize_expression_ast e)
+  let sexp: String := serialize_expression_ast e
   let sexp?: Option String := match options.printExprAST with
       | true => .some sexp
       | false => .none
@@ -196,27 +196,30 @@ def serialize_goal (options: Protocol.Options) (mvarDecl: MetavarDecl) (parentDe
   Meta.withLCtx lctx mvarDecl.localInstances do
     let ppVarNameOnly (localDecl: LocalDecl): MetaM Protocol.Variable := do
       match localDecl with
-      | .cdecl _ _ varName _ _ _ =>
-        let varName := varName.simpMacroScopes
+      | .cdecl _ fvarId userName _ _ _ =>
+        let userName := userName.simpMacroScopes
         return {
-          name := toString varName,
+          name := of_name fvarId.name,
+          userName:= of_name userName.simpMacroScopes,
         }
-      | .ldecl _ _ varName _ _ _ _ => do
+      | .ldecl _ fvarId userName _ _ _ _ => do
         return {
-          name := toString varName,
+          name := of_name fvarId.name,
+          userName := toString userName.simpMacroScopes,
         }
     let ppVar (localDecl : LocalDecl) : MetaM Protocol.Variable := do
       match localDecl with
-      | .cdecl _ _ varName type _ _ =>
-        let varName := varName.simpMacroScopes
+      | .cdecl _ fvarId userName type _ _ =>
+        let userName := userName.simpMacroScopes
         let type ← instantiateMVars type
         return {
-          name := toString varName,
-          isInaccessible? := .some varName.isInaccessibleUserName
+          name := of_name fvarId.name,
+          userName:= of_name userName,
+          isInaccessible? := .some userName.isInaccessibleUserName
           type? := .some (← serialize_expression options type)
         }
-      | .ldecl _ _ varName type val _ _ => do
-        let varName := varName.simpMacroScopes
+      | .ldecl _ fvarId userName type val _ _ => do
+        let userName := userName.simpMacroScopes
         let type ← instantiateMVars type
         let value? ← if showLetValues then
           let val ← instantiateMVars val
@@ -224,8 +227,9 @@ def serialize_goal (options: Protocol.Options) (mvarDecl: MetavarDecl) (parentDe
         else
           pure $ .none
         return {
-          name := toString varName,
-          isInaccessible? := .some varName.isInaccessibleUserName
+          name := of_name fvarId.name,
+          userName:= of_name userName,
+          isInaccessible? := .some userName.isInaccessibleUserName
           type? := .some (← serialize_expression options type)
           value? := value?
         }
@@ -242,13 +246,13 @@ def serialize_goal (options: Protocol.Options) (mvarDecl: MetavarDecl) (parentDe
           | false => ppVar localDecl
         return var::acc
     return {
-      caseName? := match mvarDecl.userName with
-        | Name.anonymous => .none
-        | name => .some <| toString name,
+      caseName? := if mvarDecl.userName == .anonymous then .none else .some (of_name mvarDecl.userName),
       isConversion := isLHSGoal? mvarDecl.type |>.isSome,
       target := (← serialize_expression options (← instantiateMVars mvarDecl.type)),
       vars := vars.reverse.toArray
     }
+  where
+  of_name (n: Name) := name_to_ast n (sanitize := false)
 
 
 

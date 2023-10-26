@@ -4,6 +4,7 @@ Tests pertaining to goals with no interdependencies
 import LSpec
 import Pantograph.Goal
 import Pantograph.Serial
+import Test.Common
 
 namespace Pantograph
 
@@ -69,7 +70,7 @@ def buildGoal (nameType: List (String × String)) (target: String): Protocol.Goa
   {
     target := { pp? := .some target},
     vars := (nameType.map fun x => ({
-      name := x.fst,
+      userName := x.fst,
       type? := .some { pp? := .some x.snd },
       isInaccessible? := .some false
     })).toArray
@@ -79,7 +80,7 @@ def buildGoalSelective (nameType: List (String × Option String)) (target: Strin
   {
     target := { pp? := .some target},
     vars := (nameType.map fun x => ({
-      name := x.fst,
+      userName := x.fst,
       type? := x.snd.map (λ type => { pp? := type }),
       isInaccessible? := x.snd.map (λ _ => false)
     })).toArray
@@ -104,7 +105,6 @@ def proofRunner (env: Lean.Environment) (tests: TestM Unit): IO LSpec.TestSeq :=
   | .ok (_, a) =>
     return a
 
-
 -- Individual test cases
 example: ∀ (a b: Nat), a + b = b + a := by
   intro n m
@@ -125,7 +125,7 @@ def proof_nat_add_comm (manual: Bool): TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.check "intro n m" (goal1 = buildGoal [("n", "Nat"), ("m", "Nat")] "n + m = m + n")
+  addTest $ LSpec.check "intro n m" (goal1.devolatilize = buildGoal [("n", "Nat"), ("m", "Nat")] "n + m = m + n")
 
   match ← state1.execute (goalId := 0) (tactic := "assumption") with
   | .failure #[message] =>
@@ -170,14 +170,14 @@ def proof_or_comm: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.check "p q h" (goal1 = buildGoal [("p", "Prop"), ("q", "Prop"), ("h", "p ∨ q")] "q ∨ p")
+  addTest $ LSpec.check "p q h" (goal1.devolatilize = buildGoal [("p", "Prop"), ("q", "Prop"), ("h", "p ∨ q")] "q ∨ p")
   let (state2, goal1, goal2) ← match ← state1.execute (goalId := 0) (tactic := "cases h") with
     | .success state #[goal1, goal2] => pure (state, goal1, goal2)
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.check "cases h/1" (goal1 = branchGoal "inl" "p")
-  addTest $ LSpec.check "cases h/2" (goal2 = branchGoal "inr" "q")
+  addTest $ LSpec.check "cases h/1" (goal1.devolatilize = branchGoal "inl" "p")
+  addTest $ LSpec.check "cases h/2" (goal2.devolatilize = branchGoal "inr" "q")
 
   let (state3_1, _goal) ← match ← state2.execute (goalId := 0) (tactic := "apply Or.inr") with
     | .success state #[goal] => pure (state, goal)
@@ -200,6 +200,7 @@ def proof_or_comm: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
 
+  addTest $ LSpec.check "4_2 root" state4_2.rootExpr.isNone
   -- Ensure the proof can continue from `state4_2`.
   let state2b ← match state2.continue state4_2 with
     | .error msg => do
@@ -217,8 +218,8 @@ def proof_or_comm: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  IO.println "=====  4_1  ====="
-  state4_1.print ({ printNonVisible := false })
+  state4_1.print
+  addTest $ LSpec.check "4_1 root" state4_1.rootExpr.isSome
 
   return ()
   where
@@ -227,9 +228,9 @@ def proof_or_comm: TestM Unit := do
       caseName? := .some caseName,
       target := { pp? := .some "q ∨ p" },
       vars := #[
-        { name := "p", type? := .some typeProp, isInaccessible? := .some false },
-        { name := "q", type? := .some typeProp, isInaccessible? := .some false },
-        { name := "h✝", type? := .some { pp? := .some name }, isInaccessible? := .some true }
+        { userName := "p", type? := .some typeProp, isInaccessible? := .some false },
+        { userName := "q", type? := .some typeProp, isInaccessible? := .some false },
+        { userName := "h✝", type? := .some { pp? := .some name }, isInaccessible? := .some true }
       ]
     }
 
