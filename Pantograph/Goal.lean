@@ -1,8 +1,6 @@
 import Lean
 
 import Pantograph.Symbol
-import Pantograph.Serial
-import Pantograph.Protocol
 
 def Lean.MessageLog.getErrorMessages (log : MessageLog) : MessageLog :=
   {
@@ -20,6 +18,9 @@ structure GoalState where
   root: MVarId
   -- New metavariables acquired in this state
   newMVars: SSet MVarId
+
+  -- The id of the goal in the parent
+  parentGoalId: Nat := 0
 
 abbrev M := Elab.TermElabM
 
@@ -49,6 +50,7 @@ protected def GoalState.mctx (state: GoalState): MetavarContext :=
 private def GoalState.mvars (state: GoalState): SSet MVarId :=
   state.mctx.decls.foldl (init := .empty) fun acc k _ => acc.insert k
 
+/-- Inner function for executing tactic on goal state -/
 def executeTactic (state: Elab.Tactic.SavedState) (goal: MVarId) (tactic: Syntax) :
     M (Except (Array String) (Elab.Tactic.SavedState × List MVarId)):= do
   let tacticM (stx: Syntax):  Elab.Tactic.TacticM (Except (Array String) (Elab.Tactic.SavedState × List MVarId)) := do
@@ -71,7 +73,7 @@ def executeTactic (state: Elab.Tactic.SavedState) (goal: MVarId) (tactic: Syntax
 /-- Response for executing a tactic -/
 inductive TacticResult where
   -- Goes to next state
-  | success (state: GoalState) (goals: Array Protocol.Goal)
+  | success (state: GoalState)
   -- Tactic failed with messages
   | failure (messages: Array String)
   -- Could not parse tactic
@@ -81,7 +83,7 @@ inductive TacticResult where
 
 /-- Execute tactic on given state -/
 protected def GoalState.execute (state: GoalState) (goalId: Nat) (tactic: String):
-    Protocol.OptionsT M TacticResult := do
+    M TacticResult := do
   let goal ← match state.savedState.tactic.goals.get? goalId with
     | .some goal => pure $ goal
     | .none => return .indexError goalId
@@ -92,7 +94,6 @@ protected def GoalState.execute (state: GoalState) (goalId: Nat) (tactic: String
     (fileName := "<stdin>") with
     | .ok stx => pure $ stx
     | .error error => return .parseError error
-  let options ← read
   match (← executeTactic (state := state.savedState) (goal := goal) (tactic := tactic)) with
   | .error errors =>
     return .failure errors
@@ -110,20 +111,12 @@ protected def GoalState.execute (state: GoalState) (goalId: Nat) (tactic: String
       else
         return acc.insert mvarId
       ) SSet.empty
-    let nextState: GoalState := {
+    return .success {
       savedState := nextSavedState
       root := state.root,
       newMVars,
+      parentGoalId := goalId,
     }
-    nextSavedState.term.restore
-    let parentDecl? := (← MonadMCtx.getMCtx).findDecl? goal
-    let goals ← nextGoals.mapM fun nextGoal => do
-      match (← MonadMCtx.getMCtx).findDecl? nextGoal with
-      | .some mvarDecl =>
-        let serializedGoal ← serialize_goal options mvarDecl (parentDecl? := parentDecl?)
-        return serializedGoal
-      | .none => throwError s!"Parent mvar id does not exist {nextGoal.name}"
-    return .success nextState goals.toArray
 
 /-- After finishing one branch of a proof (`graftee`), pick up from the point where the proof was left off (`target`) -/
 protected def GoalState.continue (target: GoalState) (graftee: GoalState): Except String GoalState :=
@@ -150,57 +143,11 @@ protected def GoalState.rootExpr (goalState: GoalState): Option Expr :=
   let expr := goalState.mctx.eAssignment.find! goalState.root
   let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
   if expr.hasMVar then
+    -- Must not assert that the goal state is empty here. We could be in a branch goal.
+    --assert! ¬goalState.goals.isEmpty
     .none
   else
+    assert! goalState.goals.isEmpty
     .some expr
-
--- Diagnostics functions
-
-/-- Print the metavariables in a readable format -/
-protected def GoalState.print (goalState: GoalState) (options: Protocol.GoalPrint := {}): M Unit := do
-  let savedState := goalState.savedState
-  savedState.term.restore
-  let goals := savedState.tactic.goals
-  let mctx ← getMCtx
-  let root := goalState.root
-  -- Print the root
-  match mctx.decls.find? root with
-  | .some decl => printMVar ">" root decl
-  | .none => IO.println s!">{root.name}: ??"
-  goals.forM (fun mvarId => do
-    if mvarId != root then
-      match mctx.decls.find? mvarId with
-      | .some decl => printMVar "⊢" mvarId decl
-      | .none => IO.println s!"⊢{mvarId.name}: ??"
-  )
-  let goals := goals.toSSet
-  mctx.decls.forM (fun mvarId decl => do
-    if goals.contains mvarId || mvarId == root then
-      pure ()
-    -- Always print the root goal
-    else if mvarId == goalState.root then
-      printMVar (pref := ">") mvarId decl
-    -- Print the remainig ones that users don't see in Lean
-    else if options.printNonVisible then
-      let pref := if goalState.newMVars.contains mvarId then "~" else " "
-      printMVar pref mvarId decl
-    else
-      pure ()
-      --IO.println s!" {mvarId.name}{userNameToString decl.userName}"
-  )
-  where
-    printMVar (pref: String) (mvarId: MVarId) (decl: MetavarDecl): Elab.TermElabM Unit := do
-      if options.printContext then
-        decl.lctx.fvarIdToDecl.forM printFVar
-      let type_sexp := serialize_expression_ast (← instantiateMVars decl.type) (sanitize := false)
-      IO.println s!"{pref}{mvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type} {type_sexp}"
-      if options.printValue then
-        if let Option.some value := (← getMCtx).eAssignment.find? mvarId then
-          IO.println s!"  = {← Meta.ppExpr value}"
-    printFVar (fvarId: FVarId) (decl: LocalDecl): Elab.TermElabM Unit := do
-      IO.println s!" | {fvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type}"
-    userNameToString : Name → String
-      | .anonymous => ""
-      | other => s!"[{other}]"
 
 end Pantograph

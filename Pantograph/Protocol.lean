@@ -18,9 +18,10 @@ structure Options where
   printExprPretty: Bool    := true
   -- When enabled, print the raw AST of expressions
   printExprAST: Bool       := false
-  -- When enabled, the types and values of persistent variables in a proof goal
-  -- are not shown unless they are new to the proof step. Reduces overhead
-  proofVariableDelta: Bool := false
+  -- When enabled, the types and values of persistent variables in a goal
+  -- are not shown unless they are new to the proof step. Reduces overhead.
+  -- NOTE: that this assumes the type and assignment of variables can never change.
+  noRepeat: Bool := false
   -- See `pp.auxDecls`
   printAuxDecls: Bool      := false
   -- See `pp.implementationDetailHyps`
@@ -123,7 +124,7 @@ structure OptionsSet where
   printJsonPretty?: Option Bool
   printExprPretty?: Option Bool
   printExprAST?: Option Bool
-  proofVariableDelta?: Option Bool
+  noRepeat?: Option Bool
   printAuxDecls?: Option Bool
   printImplementationDetailHyps?: Option Bool
   deriving Lean.FromJson

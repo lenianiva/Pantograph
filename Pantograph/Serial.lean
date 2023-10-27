@@ -4,6 +4,7 @@ All serialisation functions
 import Lean
 
 import Pantograph.Protocol
+import Pantograph.Goal
 
 namespace Pantograph
 open Lean
@@ -173,12 +174,12 @@ def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): String :=
 def serialize_expression (options: Protocol.Options) (e: Expr): MetaM Protocol.Expression := do
   let pp := toString (← Meta.ppExpr e)
   let pp?: Option String := match options.printExprPretty with
-      | true => .some pp
-      | false => .none
+    | true => .some pp
+    | false => .none
   let sexp: String := serialize_expression_ast e
   let sexp?: Option String := match options.printExprAST with
-      | true => .some sexp
-      | false => .none
+    | true => .some sexp
+    | false => .none
   return {
     pp?,
     sexp?
@@ -239,7 +240,7 @@ def serialize_goal (options: Protocol.Options) (mvarDecl: MetavarDecl) (parentDe
       if skip then
         return acc
       else
-        let nameOnly := options.proofVariableDelta && (parentDecl?.map
+        let nameOnly := options.noRepeat && (parentDecl?.map
           (λ decl => decl.lctx.find? localDecl.fvarId |>.isSome) |>.getD false)
         let var ← match nameOnly with
           | true => ppVarNameOnly localDecl
@@ -254,6 +255,67 @@ def serialize_goal (options: Protocol.Options) (mvarDecl: MetavarDecl) (parentDe
   where
   of_name (n: Name) := name_to_ast n (sanitize := false)
 
+protected def GoalState.serializeGoals (state: GoalState) (parent: Option GoalState := .none) (options: Protocol.Options := {}): MetaM (Array Protocol.Goal):= do
+  let goals := state.goals.toArray
+  state.savedState.term.meta.restore
+  let parentDecl? := parent.bind (λ parentState =>
+    let parentGoal := parentState.goals.get! state.parentGoalId
+    parentState.mctx.findDecl? parentGoal)
+  goals.mapM fun goal => do
+    if options.noRepeat then
+      let key := if parentDecl?.isSome then "is some" else "is none"
+      IO.println s!"goal: {goal.name}, {key}"
+    match state.mctx.findDecl? goal with
+    | .some mvarDecl =>
+      let serializedGoal ← serialize_goal options mvarDecl (parentDecl? := parentDecl?)
+      pure serializedGoal
+    | .none => throwError s!"Metavariable does not exist in context {goal.name}"
 
+/-- Print the metavariables in a readable format -/
+protected def GoalState.print (goalState: GoalState) (options: Protocol.GoalPrint := {}): MetaM Unit := do
+  let savedState := goalState.savedState
+  savedState.term.meta.restore
+  let goals := savedState.tactic.goals
+  let mctx ← getMCtx
+  let root := goalState.root
+  -- Print the root
+  match mctx.decls.find? root with
+  | .some decl => printMVar ">" root decl
+  | .none => IO.println s!">{root.name}: ??"
+  goals.forM (fun mvarId => do
+    if mvarId != root then
+      match mctx.decls.find? mvarId with
+      | .some decl => printMVar "⊢" mvarId decl
+      | .none => IO.println s!"⊢{mvarId.name}: ??"
+  )
+  let goals := goals.toSSet
+  mctx.decls.forM (fun mvarId decl => do
+    if goals.contains mvarId || mvarId == root then
+      pure ()
+    -- Always print the root goal
+    else if mvarId == goalState.root then
+      printMVar (pref := ">") mvarId decl
+    -- Print the remainig ones that users don't see in Lean
+    else if options.printNonVisible then
+      let pref := if goalState.newMVars.contains mvarId then "~" else " "
+      printMVar pref mvarId decl
+    else
+      pure ()
+      --IO.println s!" {mvarId.name}{userNameToString decl.userName}"
+  )
+  where
+    printMVar (pref: String) (mvarId: MVarId) (decl: MetavarDecl): MetaM Unit := do
+      if options.printContext then
+        decl.lctx.fvarIdToDecl.forM printFVar
+      let type_sexp := serialize_expression_ast (← instantiateMVars decl.type) (sanitize := false)
+      IO.println s!"{pref}{mvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type} {type_sexp}"
+      if options.printValue then
+        if let Option.some value := (← getMCtx).eAssignment.find? mvarId then
+          IO.println s!"  = {← Meta.ppExpr value}"
+    printFVar (fvarId: FVarId) (decl: LocalDecl): MetaM Unit := do
+      IO.println s!" | {fvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type}"
+    userNameToString : Name → String
+      | .anonymous => ""
+      | other => s!"[{other}]"
 
 end Pantograph

@@ -110,7 +110,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
         printJsonPretty := args.printJsonPretty?.getD options.printJsonPretty,
         printExprPretty := args.printExprPretty?.getD options.printExprPretty,
         printExprAST := args.printExprAST?.getD options.printExprAST,
-        proofVariableDelta := args.proofVariableDelta?.getD options.proofVariableDelta,
+        noRepeat := args.noRepeat?.getD options.noRepeat,
         printAuxDecls := args.printAuxDecls?.getD options.printAuxDecls,
         printImplementationDetailHyps := args.printImplementationDetailHyps?.getD options.printImplementationDetailHyps
       }
@@ -148,14 +148,14 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     match state.goalStates.get? args.stateId with
     | .none => return .error $ errorIndex s!"Invalid state index {args.stateId}"
     | .some goalState =>
-      let result ← GoalState.execute goalState args.goalId args.tactic |>.run state.options
-      match result with
-      | .success nextGoalState goals =>
+      match ← GoalState.execute goalState args.goalId args.tactic with
+      | .success nextGoalState =>
         let (goalStates, nextStateId) := state.goalStates.insert nextGoalState
         set { state with goalStates }
+        let goals ← nextGoalState.serializeGoals (parent := .some goalState) (options := state.options)
         return .ok {
           nextStateId? := .some nextStateId,
-          goals? := .some goals
+          goals? := .some goals,
         }
       | .parseError message =>
         return .ok { parseError? := .some message }
