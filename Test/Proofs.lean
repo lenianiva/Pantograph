@@ -188,21 +188,21 @@ def proof_arith: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "intros" (state1.goals.length = 1)
-  addTest $ LSpec.test "(1 root)" state1.rootExpr.isNone
+  addTest $ LSpec.test "(1 root)" state1.rootExpr?.isNone
   let state2 ← match ← state1.execute (goalId := 0) (tactic := "simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm, Nat.mul_comm, Nat.mul_assoc, Nat.mul_left_comm] at *") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "simp ..." (state2.goals.length = 1)
-  addTest $ LSpec.check "(2 root)" state2.rootExpr.isNone
+  addTest $ LSpec.check "(2 root)" state2.rootExpr?.isNone
   let state3 ← match ← state2.execute (goalId := 0) (tactic := "assumption") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.test "assumption" state3.goals.isEmpty
-  addTest $ LSpec.check "(3 root)" state3.rootExpr.isSome
+  addTest $ LSpec.check "(3 root)" state3.rootExpr?.isSome
   return ()
 
 -- Two ways to write the same theorem
@@ -255,7 +255,7 @@ def proof_or_comm: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "  assumption" state4_1.goals.isEmpty
-  addTest $ LSpec.check "(4_1 root)" state4_1.rootExpr.isNone
+  addTest $ LSpec.check "(4_1 root)" state4_1.rootExpr?.isNone
   let state3_2 ← match ← state2.execute (goalId := 1) (tactic := "apply Or.inl") with
     | .success state => pure state
     | other => do
@@ -268,7 +268,7 @@ def proof_or_comm: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "  assumption" state4_2.goals.isEmpty
-  addTest $ LSpec.check "(4_2 root)" state4_2.rootExpr.isNone
+  addTest $ LSpec.check "(4_2 root)" state4_2.rootExpr?.isNone
   -- Ensure the proof can continue from `state4_2`.
   let state2b ← match state2.continue state4_2 with
     | .error msg => do
@@ -288,7 +288,7 @@ def proof_or_comm: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "  assumption" state4_1.goals.isEmpty
-  addTest $ LSpec.check "(4_1 root)" state4_1.rootExpr.isSome
+  addTest $ LSpec.check "(4_1 root)" state4_1.rootExpr?.isSome
 
   return ()
   where
@@ -319,14 +319,14 @@ def proof_m_couple: TestM Unit := do
       return ()
   addTest $ LSpec.check "apply Nat.le_trans" ((← state1.serializeGoals (options := ← read)).map (·.target.pp?) =
     #[.some "2 ≤ ?m", .some "?m ≤ 5", .some "Nat"])
-  addTest $ LSpec.test "(1 root)" state1.rootExpr.isNone
+  addTest $ LSpec.test "(1 root)" state1.rootExpr?.isNone
   -- Set m to 3
   let state2 ← match ← state1.execute (goalId := 2) (tactic := "exact 3") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.test "(1b root)" state2.rootExpr.isNone
+  addTest $ LSpec.test "(1b root)" state2.rootExpr?.isNone
   let state1b ← match state1.continue state2 with
     | .error msg => do
       addTest $ assertUnreachable $ msg
@@ -334,7 +334,7 @@ def proof_m_couple: TestM Unit := do
     | .ok state => pure state
   addTest $ LSpec.check "exact 3" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
     #[.some "2 ≤ 3", .some "3 ≤ 5"])
-  addTest $ LSpec.test "(2 root)" state1b.rootExpr.isNone
+  addTest $ LSpec.test "(2 root)" state1b.rootExpr?.isNone
   return ()
 
 def proof_proposition_generation: TestM Unit := do
@@ -355,7 +355,7 @@ def proof_proposition_generation: TestM Unit := do
       buildGoal [] "?fst" (caseName? := .some "snd"),
       buildGoal [] "Prop" (caseName? := .some "fst")
       ])
-  addTest $ LSpec.test "(1 root)" state1.rootExpr.isNone
+  addTest $ LSpec.test "(1 root)" state1.rootExpr?.isNone
 
   let state2 ← match ← state1.tryAssign (goalId := 0) (expr := "λ (x: Nat) => _") with
     | .success state => pure state
@@ -364,7 +364,7 @@ def proof_proposition_generation: TestM Unit := do
       return ()
   addTest $ LSpec.check ":= λ (x: Nat), _" ((← state2.serializeGoals (options := ← read)).map (·.target.pp?) =
     #[.some "Nat → Prop", .some "∀ (x : Nat), ?m.29 x"])
-  addTest $ LSpec.test "(2 root)" state2.rootExpr.isNone
+  addTest $ LSpec.test "(2 root)" state2.rootExpr?.isNone
 
   let state3 ← match ← state2.tryAssign (goalId := 1) (expr := "fun x => Eq.refl x") with
     | .success state => pure state
@@ -373,7 +373,7 @@ def proof_proposition_generation: TestM Unit := do
       return ()
   addTest $ LSpec.check ":= Eq.refl" ((← state3.serializeGoals (options := ← read)).map (·.target.pp?) =
     #[])
-  addTest $ LSpec.test "(3 root)" state3.rootExpr.isSome
+  addTest $ LSpec.test "(3 root)" state3.rootExpr?.isSome
   return ()
 
 def suite: IO LSpec.TestSeq := do

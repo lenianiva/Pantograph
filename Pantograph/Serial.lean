@@ -269,7 +269,7 @@ protected def GoalState.serializeGoals (state: GoalState) (parent: Option GoalSt
     | .none => throwError s!"Metavariable does not exist in context {goal.name}"
 
 /-- Print the metavariables in a readable format -/
-protected def GoalState.print (goalState: GoalState) (options: Protocol.GoalPrint := {}): MetaM Unit := do
+protected def GoalState.print (goalState: GoalState) (options: Protocol.GoalDiag := {}): MetaM Unit := do
   let savedState := goalState.savedState
   savedState.term.meta.restore
   let goals := savedState.tactic.goals

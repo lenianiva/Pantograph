@@ -190,7 +190,7 @@ protected def GoalState.continue (target: GoalState) (graftee: GoalState): Excep
       newMVars := graftee.newMVars,
     }
 
-protected def GoalState.rootExpr (goalState: GoalState): Option Expr :=
+protected def GoalState.rootExpr? (goalState: GoalState): Option Expr :=
   let expr := goalState.mctx.eAssignment.find! goalState.root
   let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
   if expr.hasMVar then

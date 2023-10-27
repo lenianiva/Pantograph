@@ -76,8 +76,9 @@ See `Pantograph/Commands.lean` for a description of the parameters and return va
   have to be set via command line arguments.), for options, see `Pantograph/Commands.lean`
 - `options.print`: Display the current set of options
 - `goal.start {["name": <name>], ["expr": <expr>], ["copyFrom": <symbol>]}`: Start a new goal from a given expression or symbol
-- `goal.tactic {"goalId": <id>, "tactic": <tactic>}`: Execute a tactic string on a given goal
-- `goal.remove {"goalIds": [<id>]}"`: Remove a bunch of stored goals.
+- `goal.tactic {"stateId": <id>, "goalId": <id>, ["tactic": <tactic>], ["expr": <expr>]}`: Execute a tactic string on a given goal
+- `goal.remove {"stateIds": [<id>]}"`: Remove a bunch of stored goals.
+- `goal.print {"stateId": <id>}"`: Print a goal state
 - `stat`: Display resource usage
 
 ## Errors

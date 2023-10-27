@@ -39,6 +39,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   | "goal.start"     => run goal_start
   | "goal.tactic"    => run goal_tactic
   | "goal.delete"    => run goal_delete
+  | "goal.print"    => run goal_print
   | cmd =>
     let error: Protocol.InteractionError :=
       errorCommand s!"Unknown command {cmd}"
@@ -174,5 +175,14 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     let goalStates := args.stateIds.foldl (λ map id => map.remove id) state.goalStates
     set { state with goalStates }
     return .ok {}
+  goal_print (args: Protocol.GoalPrint): MainM (CR Protocol.GoalPrintResult) := do
+    let state ← get
+    match state.goalStates.get? args.stateId with
+    | .none => return .error $ errorIndex s!"Invalid state index {args.stateId}"
+    | .some goalState => do
+      let root? ← goalState.rootExpr?.mapM (λ expr => serialize_expression state.options expr)
+      return .ok {
+        root?,
+      }
 
 end Pantograph

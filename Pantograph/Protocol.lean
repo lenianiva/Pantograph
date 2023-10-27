@@ -171,6 +171,15 @@ structure GoalDeleteResult where
   deriving Lean.ToJson
 
 structure GoalPrint where
+  stateId: Nat
+  deriving Lean.FromJson
+structure GoalPrintResult where
+  -- The root expression
+  root?: Option Expression
+  deriving Lean.ToJson
+
+-- Diagnostic Options, not available in REPL
+structure GoalDiag where
   printContext: Bool := true
   printValue: Bool := true
   printNewMVars: Bool := false
