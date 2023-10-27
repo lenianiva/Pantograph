@@ -133,9 +133,8 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
         (match env.find? <| str_to_name copyFrom with
         | .none => return .error <| errorIndex s!"Symbol not found: {copyFrom}"
         | .some cInfo => return .ok cInfo.type)
-      | .none, .none =>
-        return .error <| errorI "arguments" "At least one of {expr, copyFrom} must be supplied"
-      | _, _ => return .error <| errorI "arguments" "Cannot populate both of {expr, copyFrom}")
+      | _, _ =>
+        return .error <| errorI "arguments" "Exactly one of {expr, copyFrom} must be supplied")
     match expr? with
     | .error error => return .error error
     | .ok expr =>
@@ -147,9 +146,16 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     let state ← get
     match state.goalStates.get? args.stateId with
     | .none => return .error $ errorIndex s!"Invalid state index {args.stateId}"
-    | .some goalState =>
-      match ← GoalState.execute goalState args.goalId args.tactic with
-      | .success nextGoalState =>
+    | .some goalState => do
+      let nextGoalState?: Except _ GoalState ← match args.tactic?, args.expr? with
+        | .some tactic, .none => do
+          pure ( Except.ok (← GoalState.execute goalState args.goalId tactic))
+        | .none, .some expr => do
+          pure ( Except.ok (← GoalState.tryAssign goalState args.goalId expr))
+        | _, _ => pure (Except.error <| errorI "arguments" "Exactly one of {tactic, expr} must be supplied")
+      match nextGoalState? with
+      | .error error => return .error error
+      | .ok (.success nextGoalState) =>
         let (goalStates, nextStateId) := state.goalStates.insert nextGoalState
         set { state with goalStates }
         let goals ← nextGoalState.serializeGoals (parent := .some goalState) (options := state.options)
@@ -157,11 +163,11 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           nextStateId? := .some nextStateId,
           goals? := .some goals,
         }
-      | .parseError message =>
+      | .ok (.parseError message) =>
         return .ok { parseError? := .some message }
-      | .indexError goalId =>
+      | .ok (.indexError goalId) =>
         return .error $ errorIndex s!"Invalid goal id index {goalId}"
-      | .failure messages =>
+      | .ok (.failure messages) =>
         return .ok { tacticErrors? := .some messages }
   goal_delete (args: Protocol.GoalDelete): MainM (CR Protocol.GoalDeleteResult) := do
     let state ← get

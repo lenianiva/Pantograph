@@ -146,7 +146,9 @@ structure GoalTactic where
   -- Identifiers for tree, state, and goal
   stateId: Nat
   goalId: Nat := 0
-  tactic: String
+  -- One of the fields here must be filled
+  tactic?: Option String := .none
+  expr?: Option String := .none
   deriving Lean.FromJson
 structure GoalTacticResult where
   -- The next goal state id. Existence of this field shows success

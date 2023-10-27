@@ -82,12 +82,31 @@ def test_malformed_command : IO LSpec.TestSeq :=
        error := "command", desc := s!"Unable to parse json: Pantograph.Protocol.ExprEcho.expr: String expected"}:
       Protocol.InteractionError))
   ]
+def test_tactic : IO LSpec.TestSeq :=
+  let goal: Protocol.Goal := {
+    target := { pp? := .some "∀ (q : Prop), x ∨ q → q ∨ x" },
+    vars := #[{ name := "_uniq 9", userName := "x", isInaccessible? := .some false, type? := .some { pp? := .some "Prop" }}],
+  }
+  subroutine_runner [
+    subroutine_step "goal.start"
+      [("expr", .str "∀ (p q: Prop), p ∨ q → q ∨ p")]
+     (Lean.toJson ({stateId := 0}:
+      Protocol.GoalStartResult)),
+    subroutine_step "goal.tactic"
+      [("stateId", .num 0), ("goalId", .num 0), ("tactic", .str "intro x")]
+     (Lean.toJson ({
+       nextStateId? := .some 1,
+       goals? := #[goal],
+     }:
+      Protocol.GoalTacticResult))
+  ]
 
 def suite: IO LSpec.TestSeq := do
 
   return LSpec.group "Integration" $
     (LSpec.group "Option modify" (← test_option_modify)) ++
-    (LSpec.group "Malformed command" (← test_malformed_command))
+    (LSpec.group "Malformed command" (← test_malformed_command)) ++
+    (LSpec.group "Tactic" (← test_tactic))
 
 
 end Pantograph.Test.Integration
