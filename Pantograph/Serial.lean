@@ -262,9 +262,6 @@ protected def GoalState.serializeGoals (state: GoalState) (parent: Option GoalSt
     let parentGoal := parentState.goals.get! state.parentGoalId
     parentState.mctx.findDecl? parentGoal)
   goals.mapM fun goal => do
-    if options.noRepeat then
-      let key := if parentDecl?.isSome then "is some" else "is none"
-      IO.println s!"goal: {goal.name}, {key}"
     match state.mctx.findDecl? goal with
     | .some mvarDecl =>
       let serializedGoal ← serialize_goal options mvarDecl (parentDecl? := parentDecl?)
@@ -296,7 +293,7 @@ protected def GoalState.print (goalState: GoalState) (options: Protocol.GoalPrin
     else if mvarId == goalState.root then
       printMVar (pref := ">") mvarId decl
     -- Print the remainig ones that users don't see in Lean
-    else if options.printNonVisible then
+    else if options.printAll then
       let pref := if goalState.newMVars.contains mvarId then "~" else " "
       printMVar pref mvarId decl
     else

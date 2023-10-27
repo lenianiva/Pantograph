@@ -66,8 +66,9 @@ def startProof (start: Start): TestM (Option GoalState) := do
 
 def assertUnreachable (message: String): LSpec.TestSeq := LSpec.check message false
 
-def buildGoal (nameType: List (String × String)) (target: String): Protocol.Goal :=
+def buildGoal (nameType: List (String × String)) (target: String) (caseName?: Option String := .none): Protocol.Goal :=
   {
+    caseName?,
     target := { pp? := .some target},
     vars := (nameType.map fun x => ({
       userName := x.fst,
@@ -187,21 +188,21 @@ def proof_arith: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "intros" (state1.goals.length = 1)
-  addTest $ LSpec.test "1 root" state1.rootExpr.isNone
+  addTest $ LSpec.test "(1 root)" state1.rootExpr.isNone
   let state2 ← match ← state1.execute (goalId := 0) (tactic := "simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm, Nat.mul_comm, Nat.mul_assoc, Nat.mul_left_comm] at *") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "simp ..." (state2.goals.length = 1)
-  addTest $ LSpec.check "2 root" state2.rootExpr.isNone
+  addTest $ LSpec.check "(2 root)" state2.rootExpr.isNone
   let state3 ← match ← state2.execute (goalId := 0) (tactic := "assumption") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.test "assumption" state3.goals.isEmpty
-  addTest $ LSpec.check "3 root" state3.rootExpr.isSome
+  addTest $ LSpec.check "(3 root)" state3.rootExpr.isSome
   return ()
 
 -- Two ways to write the same theorem
@@ -253,7 +254,7 @@ def proof_or_comm: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.check "· assumption" state4_1.goals.isEmpty
+  addTest $ LSpec.check "  assumption" state4_1.goals.isEmpty
   addTest $ LSpec.check "(4_1 root)" state4_1.rootExpr.isNone
   let state3_2 ← match ← state2.execute (goalId := 1) (tactic := "apply Or.inl") with
     | .success state => pure state
@@ -266,7 +267,7 @@ def proof_or_comm: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.check "· assumption" state4_2.goals.isEmpty
+  addTest $ LSpec.check "  assumption" state4_2.goals.isEmpty
   addTest $ LSpec.check "(4_2 root)" state4_2.rootExpr.isNone
   -- Ensure the proof can continue from `state4_2`.
   let state2b ← match state2.continue state4_2 with
@@ -286,8 +287,8 @@ def proof_or_comm: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.check "· assumption" state4_1.goals.isEmpty
-  addTest $ LSpec.check "4_1 root" state4_1.rootExpr.isSome
+  addTest $ LSpec.check "  assumption" state4_1.goals.isEmpty
+  addTest $ LSpec.check "(4_1 root)" state4_1.rootExpr.isSome
 
   return ()
   where
@@ -336,7 +337,45 @@ def proof_m_couple: TestM Unit := do
   addTest $ LSpec.test "(2 root)" state1b.rootExpr.isNone
   return ()
 
-/-- Tests the most basic form of proofs whose goals do not relate to each other -/
+def proof_proposition_generation: TestM Unit := do
+  let state? ← startProof (.expr "Σ' p:Prop, p")
+  let state0 ← match state? with
+    | .some state => pure state
+    | .none => do
+      addTest $ assertUnreachable "Goal could not parse"
+      return ()
+
+  let state1 ← match ← state0.execute (goalId := 0) (tactic := "apply PSigma.mk") with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check "apply PSigma.mk" ((← state1.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[
+      buildGoal [] "?fst" (caseName? := .some "snd"),
+      buildGoal [] "Prop" (caseName? := .some "fst")
+      ])
+  addTest $ LSpec.test "(1 root)" state1.rootExpr.isNone
+
+  let state2 ← match ← state1.tryAssign (goalId := 0) (expr := "λ (x: Nat) => _") with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check ":= λ (x: Nat), _" ((← state2.serializeGoals (options := ← read)).map (·.target.pp?) =
+    #[.some "Nat → Prop", .some "∀ (x : Nat), ?m.29 x"])
+  addTest $ LSpec.test "(2 root)" state2.rootExpr.isNone
+
+  let state3 ← match ← state2.tryAssign (goalId := 1) (expr := "fun x => Eq.refl x") with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check ":= Eq.refl" ((← state3.serializeGoals (options := ← read)).map (·.target.pp?) =
+    #[])
+  addTest $ LSpec.test "(3 root)" state3.rootExpr.isSome
+  return ()
+
 def suite: IO LSpec.TestSeq := do
   let env: Lean.Environment ← Lean.importModules
     (imports := #[{ module := Name.append .anonymous "Init", runtimeOnly := false}])
@@ -348,8 +387,8 @@ def suite: IO LSpec.TestSeq := do
     ("Nat.add_comm delta", proof_delta_variable),
     ("arithmetic", proof_arith),
     ("Or.comm", proof_or_comm),
-    ("2 < 5", proof_m_couple)
-    --("delta variable", proof_delta_variable)
+    ("2 < 5", proof_m_couple),
+    ("Proposition Generation", proof_proposition_generation)
   ]
   let tests ← tests.foldlM (fun acc tests => do
     let (name, tests) := tests

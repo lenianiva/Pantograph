@@ -172,7 +172,8 @@ structure GoalPrint where
   printContext: Bool := true
   printValue: Bool := true
   printNewMVars: Bool := false
-  printNonVisible: Bool := false
+  -- Print all mvars
+  printAll: Bool := false
 
 
 end Pantograph.Protocol

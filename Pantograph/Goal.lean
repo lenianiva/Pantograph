@@ -47,13 +47,15 @@ protected def GoalState.runM {α: Type} (state: GoalState) (m: Elab.TermElabM α
 
 protected def GoalState.mctx (state: GoalState): MetavarContext :=
   state.savedState.term.meta.meta.mctx
+protected def GoalState.env (state: GoalState): Environment :=
+  state.savedState.term.meta.core.env
 private def GoalState.mvars (state: GoalState): SSet MVarId :=
   state.mctx.decls.foldl (init := .empty) fun acc k _ => acc.insert k
 
 /-- Inner function for executing tactic on goal state -/
 def executeTactic (state: Elab.Tactic.SavedState) (goal: MVarId) (tactic: Syntax) :
-    M (Except (Array String) (Elab.Tactic.SavedState × List MVarId)):= do
-  let tacticM (stx: Syntax):  Elab.Tactic.TacticM (Except (Array String) (Elab.Tactic.SavedState × List MVarId)) := do
+    M (Except (Array String) Elab.Tactic.SavedState):= do
+  let tacticM (stx: Syntax):  Elab.Tactic.TacticM (Except (Array String) Elab.Tactic.SavedState) := do
     state.restore
     Elab.Tactic.setGoals [goal]
     try
@@ -63,9 +65,7 @@ def executeTactic (state: Elab.Tactic.SavedState) (goal: MVarId) (tactic: Syntax
         let errors ← (messages.map Message.data).mapM fun md => md.toString
         return .error errors
       else
-        let unsolved ← Elab.Tactic.getUnsolvedGoals
-        -- The order of evaluation is important here, since `getUnsolvedGoals` prunes the goals set
-        return .ok (← MonadBacktrack.saveState, unsolved)
+        return .ok (← MonadBacktrack.saveState)
     catch exception =>
       return .error #[← exception.toMessageData.toString]
   tacticM tactic { elaborator := .anonymous } |>.run' state.tactic
@@ -97,8 +97,7 @@ protected def GoalState.execute (state: GoalState) (goalId: Nat) (tactic: String
   match (← executeTactic (state := state.savedState) (goal := goal) (tactic := tactic)) with
   | .error errors =>
     return .failure errors
-  | .ok (nextSavedState, nextGoals) =>
-    assert! nextSavedState.tactic.goals.length == nextGoals.length
+  | .ok nextSavedState =>
     -- Assert that the definition of metavariables are the same
     let nextMCtx := nextSavedState.term.meta.meta.mctx
     let prevMCtx := state.savedState.term.meta.meta.mctx
@@ -112,11 +111,63 @@ protected def GoalState.execute (state: GoalState) (goalId: Nat) (tactic: String
         return acc.insert mvarId
       ) SSet.empty
     return .success {
+      state with
       savedState := nextSavedState
-      root := state.root,
       newMVars,
       parentGoalId := goalId,
     }
+
+protected def GoalState.tryAssign (state: GoalState) (goalId: Nat) (expr: String): M TacticResult := do
+  let goal ← match state.savedState.tactic.goals.get? goalId with
+    | .some goal => pure goal
+    | .none => return .indexError goalId
+  let expr ← match Parser.runParserCategory
+    (env := state.env)
+    (catName := `term)
+    (input := expr)
+    (fileName := "<stdin>") with
+    | .ok syn => pure syn
+    | .error error => return .parseError error
+  let tacticM:  Elab.Tactic.TacticM TacticResult := do
+    state.savedState.restore
+    Elab.Tactic.setGoals [goal]
+    try
+      let expr ← Elab.Term.elabTerm (stx := expr) (expectedType? := .none)
+      -- Attempt to unify the expression
+      let goalType ← goal.getType
+      let exprType ← Meta.inferType expr
+      if !(← Meta.isDefEq goalType exprType) then
+        return .failure #["Type unification failed", toString (← Meta.ppExpr goalType), toString (← Meta.ppExpr exprType)]
+      goal.checkNotAssigned `GoalState.tryAssign
+      goal.assign expr
+      if (← getThe Core.State).messages.hasErrors then
+        let messages := (← getThe Core.State).messages.getErrorMessages |>.toList.toArray
+        let errors ← (messages.map Message.data).mapM fun md => md.toString
+        return .failure errors
+      else
+        let prevMCtx := state.savedState.term.meta.meta.mctx
+        let nextMCtx ← getMCtx
+        -- Generate a list of mvarIds that exist in the parent state; Also test the
+        -- assertion that the types have not changed on any mvars.
+        let newMVars ← nextMCtx.decls.foldlM (fun acc mvarId mvarDecl => do
+          if let .some prevMVarDecl := prevMCtx.decls.find? mvarId then
+            assert! prevMVarDecl.type == mvarDecl.type
+            return acc
+          else
+            return mvarId :: acc
+          ) []
+        -- The new goals are the newMVars that lack an assignment
+        Elab.Tactic.setGoals (← newMVars.filterM (λ mvar => do pure !(← mvar.isAssigned)))
+        let nextSavedState ← MonadBacktrack.saveState
+        return .success {
+          state with
+          savedState := nextSavedState,
+          newMVars := newMVars.toSSet,
+          parentGoalId := goalId,
+        }
+    catch exception =>
+      return .failure #[← exception.toMessageData.toString]
+  tacticM { elaborator := .anonymous } |>.run' state.savedState.tactic
 
 /-- After finishing one branch of a proof (`graftee`), pick up from the point where the proof was left off (`target`) -/
 protected def GoalState.continue (target: GoalState) (graftee: GoalState): Except String GoalState :=
