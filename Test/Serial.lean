@@ -1,19 +1,19 @@
 import LSpec
 import Pantograph.Serial
-import Pantograph.Symbols
+import Pantograph.Symbol
 
-namespace Pantograph.Test
+namespace Pantograph.Test.Serial
 
 open Pantograph
 open Lean
 
-deriving instance Repr, DecidableEq for Commands.BoundExpression
+deriving instance Repr, DecidableEq for Protocol.BoundExpression
 
 def test_str_to_name: LSpec.TestSeq :=
     LSpec.test "Symbol parsing" (Name.str (.str (.str .anonymous "Lean") "Meta") "run" = Pantograph.str_to_name "Lean.Meta.run")
 
 def test_expr_to_binder (env: Environment): IO LSpec.TestSeq := do
-  let entries: List (String × Commands.BoundExpression) := [
+  let entries: List (String × Protocol.BoundExpression) := [
     ("Nat.add_comm", { binders := #[("n", "Nat"), ("m", "Nat")], target := "n + m = m + n" }),
     ("Nat.le_of_succ_le", { binders := #[("n", "Nat"), ("m", "Nat"), ("h", "Nat.succ n ≤ m")], target := "n ≤ m" })
   ]
@@ -47,8 +47,8 @@ def test_sexp_of_symbol (env: Environment): IO LSpec.TestSeq := do
   let metaM: MetaM LSpec.TestSeq := entries.foldlM (λ suites (symbol, target) => do
     let env ← MonadEnv.getEnv
     let expr := str_to_name symbol |> env.find? |>.get! |>.type
-    let test := LSpec.check symbol ((← serialize_expression_ast expr) = target)
-    return LSpec.TestSeq.append suites test) LSpec.TestSeq.done |>.run'
+    let test := LSpec.check symbol ((serialize_expression_ast expr) = target)
+    return LSpec.TestSeq.append suites test) LSpec.TestSeq.done
   let coreM := metaM.run'
   let coreContext: Core.Context := {
     currNamespace := Lean.Name.str .anonymous "Aniva"
@@ -62,15 +62,15 @@ def test_sexp_of_symbol (env: Environment): IO LSpec.TestSeq := do
   | .ok a            => return a
 
 
-def test_serial: IO LSpec.TestSeq := do
+def suite: IO LSpec.TestSeq := do
   let env: Environment ← importModules
     (imports := #["Init"].map (λ str => { module := str_to_name str, runtimeOnly := false }))
     (opts := {})
     (trustLevel := 1)
 
-  return LSpec.group "Serialisation" $
+  return LSpec.group "Serialization" $
     (LSpec.group "str_to_name" test_str_to_name) ++
     (LSpec.group "Expression binder" (← test_expr_to_binder env)) ++
     (LSpec.group "Sexp from symbol" (← test_sexp_of_symbol env))
 
-end Pantograph.Test
+end Pantograph.Test.Serial

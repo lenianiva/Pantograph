@@ -2,7 +2,7 @@
  -/
 import LSpec
 import Pantograph
-namespace Pantograph.Test
+namespace Pantograph.Test.Integration
 open Pantograph
 
 def subroutine_named_step (name cmd: String) (payload: List (String × Lean.Json))
@@ -47,26 +47,26 @@ def test_option_modify : IO LSpec.TestSeq :=
   let pp? := Option.some "∀ (n : Nat), n + 1 = Nat.succ n"
   let sexp? := Option.some "(:forall n (:c Nat) ((((:c Eq) (:c Nat)) (((((((:c HAdd.hAdd) (:c Nat)) (:c Nat)) (:c Nat)) (((:c instHAdd) (:c Nat)) (:c instAddNat))) 0) ((((:c OfNat.ofNat) (:c Nat)) (:lit 1)) ((:c instOfNatNat) (:lit 1))))) ((:c Nat.succ) 0)))"
   let module? := Option.some "Init.Data.Nat.Basic"
-  let options: Commands.Options := {}
+  let options: Protocol.Options := {}
   subroutine_runner [
     subroutine_step "lib.inspect"
       [("name", .str "Nat.add_one")]
      (Lean.toJson ({
        type := { pp? }, module? }:
-      Commands.LibInspectResult)),
+      Protocol.LibInspectResult)),
     subroutine_step "options.set"
       [("printExprAST", .bool true)]
      (Lean.toJson ({ }:
-      Commands.OptionsSetResult)),
+      Protocol.OptionsSetResult)),
     subroutine_step "lib.inspect"
       [("name", .str "Nat.add_one")]
      (Lean.toJson ({
        type := { pp?, sexp? }, module? }:
-      Commands.LibInspectResult)),
+      Protocol.LibInspectResult)),
     subroutine_step "options.print"
       []
      (Lean.toJson ({ options with printExprAST := true }:
-      Commands.OptionsPrintResult))
+      Protocol.OptionsPrintResult))
   ]
 def test_malformed_command : IO LSpec.TestSeq :=
   let invalid := "invalid"
@@ -75,19 +75,38 @@ def test_malformed_command : IO LSpec.TestSeq :=
       [("name", .str "Nat.add_one")]
      (Lean.toJson ({
        error := "command", desc := s!"Unknown command {invalid}"}:
-      Commands.InteractionError)),
+      Protocol.InteractionError)),
     subroutine_named_step "JSON Deserialization" "expr.echo"
       [(invalid, .str "Random garbage data")]
      (Lean.toJson ({
-       error := "command", desc := s!"Unable to parse json: Pantograph.Commands.ExprEcho.expr: String expected"}:
-      Commands.InteractionError))
+       error := "command", desc := s!"Unable to parse json: Pantograph.Protocol.ExprEcho.expr: String expected"}:
+      Protocol.InteractionError))
+  ]
+def test_tactic : IO LSpec.TestSeq :=
+  let goal: Protocol.Goal := {
+    target := { pp? := .some "∀ (q : Prop), x ∨ q → q ∨ x" },
+    vars := #[{ name := "_uniq 9", userName := "x", isInaccessible? := .some false, type? := .some { pp? := .some "Prop" }}],
+  }
+  subroutine_runner [
+    subroutine_step "goal.start"
+      [("expr", .str "∀ (p q: Prop), p ∨ q → q ∨ p")]
+     (Lean.toJson ({stateId := 0}:
+      Protocol.GoalStartResult)),
+    subroutine_step "goal.tactic"
+      [("stateId", .num 0), ("goalId", .num 0), ("tactic", .str "intro x")]
+     (Lean.toJson ({
+       nextStateId? := .some 1,
+       goals? := #[goal],
+     }:
+      Protocol.GoalTacticResult))
   ]
 
-def test_integration: IO LSpec.TestSeq := do
+def suite: IO LSpec.TestSeq := do
 
   return LSpec.group "Integration" $
     (LSpec.group "Option modify" (← test_option_modify)) ++
-    (LSpec.group "Malformed command" (← test_malformed_command))
+    (LSpec.group "Malformed command" (← test_malformed_command)) ++
+    (LSpec.group "Tactic" (← test_tactic))
 
 
-end Pantograph.Test
+end Pantograph.Test.Integration

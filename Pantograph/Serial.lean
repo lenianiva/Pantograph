@@ -3,7 +3,8 @@ All serialisation functions
 -/
 import Lean
 
-import Pantograph.Commands
+import Pantograph.Protocol
+import Pantograph.Goal
 
 namespace Pantograph
 open Lean
@@ -28,34 +29,28 @@ def syntax_from_str (env: Environment) (s: String): Except String Syntax :=
 def syntax_to_expr_type (syn: Syntax): Elab.TermElabM (Except String Expr) := do
   try
     let expr ← Elab.Term.elabType syn
-    -- Immediately synthesise all metavariables if we need to leave the elaboration context.
-    -- See https://leanprover.zulipchat.com/#narrow/stream/270676-lean4/topic/Unknown.20universe.20metavariable/near/360130070
-    --Elab.Term.synthesizeSyntheticMVarsNoPostponing
-    let expr ← instantiateMVars expr
     return .ok expr
   catch ex => return .error (← ex.toMessageData.toString)
 def syntax_to_expr (syn: Syntax): Elab.TermElabM (Except String Expr) := do
   try
     let expr ← Elab.Term.elabTerm (stx := syn) (expectedType? := .none)
-    -- Immediately synthesise all metavariables if we need to leave the elaboration context.
-    -- See https://leanprover.zulipchat.com/#narrow/stream/270676-lean4/topic/Unknown.20universe.20metavariable/near/360130070
-    --Elab.Term.synthesizeSyntheticMVarsNoPostponing
-    let expr ← instantiateMVars expr
     return .ok expr
   catch ex => return .error (← ex.toMessageData.toString)
 
 
 --- Output Functions ---
 
-def type_expr_to_bound (expr: Expr): MetaM Commands.BoundExpression := do
+def type_expr_to_bound (expr: Expr): MetaM Protocol.BoundExpression := do
   Meta.forallTelescope expr fun arr body => do
     let binders ← arr.mapM fun fvar => do
       return (toString (← fvar.fvarId!.getUserName), toString (← Meta.ppExpr (← fvar.fvarId!.getType)))
     return { binders, target := toString (← Meta.ppExpr body) }
 
-private def name_to_ast: Lean.Name → String
-  | .anonymous
-  | .num _ _ => ":anon"
+private def name_to_ast (name: Lean.Name) (sanitize: Bool := true): String := match name with
+  | .anonymous => ":anon"
+  | .num n i => match sanitize with
+    | false => s!"{toString n} {i}"
+    | true => ":anon"
   | n@(.str _ _) => toString n
 
 private def level_depth: Level → Nat
@@ -108,89 +103,91 @@ def serialize_sort_level_ast (level: Level): String :=
 /--
  Completely serializes an expression tree. Json not used due to compactness
 -/
-def serialize_expression_ast (expr: Expr): MetaM String := do
-  match expr with
-  | .bvar deBruijnIndex =>
-    -- This is very common so the index alone is shown. Literals are handled below.
-    -- The raw de Bruijn index should never appear in an unbound setting. In
-    -- Lean these are handled using a `#` prefix.
-    return s!"{deBruijnIndex}"
-  | .fvar fvarId =>
-    let name := (← fvarId.getDecl).userName
-    return s!"(:fv {name})"
-  | .mvar mvarId =>
-    let name := name_to_ast mvarId.name
-    return s!"(:mv {name})"
-  | .sort level =>
-    let level := serialize_sort_level_ast level
-    return s!"(:sort {level})"
-  | .const declName _ =>
-    -- The universe level of the const expression is elided since it should be
-    -- inferrable from surrounding expression
-    return s!"(:c {declName})"
-  | .app fn arg =>
-    let fn' ← serialize_expression_ast fn
-    let arg' ← serialize_expression_ast arg
-    return s!"({fn'} {arg'})"
-  | .lam binderName binderType body binderInfo =>
-    let binderName' := name_to_ast binderName
-    let binderType' ← serialize_expression_ast binderType
-    let body' ← serialize_expression_ast body
-    let binderInfo' := binder_info_to_ast binderInfo
-    return s!"(:lambda {binderName'} {binderType'} {body'}{binderInfo'})"
-  | .forallE binderName binderType body binderInfo =>
-    let binderName' := name_to_ast binderName
-    let binderType' ← serialize_expression_ast binderType
-    let body' ← serialize_expression_ast body
-    let binderInfo' := binder_info_to_ast binderInfo
-    return s!"(:forall {binderName'} {binderType'} {body'}{binderInfo'})"
-  | .letE name type value body _ =>
-    -- Dependent boolean flag diacarded
-    let name' := name_to_ast name
-    let type' ← serialize_expression_ast type
-    let value' ← serialize_expression_ast value
-    let body' ← serialize_expression_ast body
-    return s!"(:let {name'} {type'} {value'} {body'})"
-  | .lit v =>
-    -- To not burden the downstream parser who needs to handle this, the literal
-    -- is wrapped in a :lit sexp.
-    let v' := match v with
-      | .natVal val => toString val
-      | .strVal val => s!"\"{val}\""
-    return s!"(:lit {v'})"
-  | .mdata _ expr =>
-    -- NOTE: Equivalent to expr itself, but mdata influences the prettyprinter
-    -- It may become necessary to incorporate the metadata.
-    return (← serialize_expression_ast expr)
-  | .proj typeName idx struct =>
-    let struct' ← serialize_expression_ast struct
-    return s!"(:proj {typeName} {idx} {struct'})"
-
+def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): String :=
+  self expr
   where
+  self (e: Expr): String :=
+    match e with
+    | .bvar deBruijnIndex =>
+      -- This is very common so the index alone is shown. Literals are handled below.
+      -- The raw de Bruijn index should never appear in an unbound setting. In
+      -- Lean these are handled using a `#` prefix.
+      s!"{deBruijnIndex}"
+    | .fvar fvarId =>
+      let name := of_name fvarId.name
+      s!"(:fv {name})"
+    | .mvar mvarId =>
+      let name := of_name mvarId.name
+      s!"(:mv {name})"
+    | .sort level =>
+      let level := serialize_sort_level_ast level
+      s!"(:sort {level})"
+    | .const declName _ =>
+      -- The universe level of the const expression is elided since it should be
+      -- inferrable from surrounding expression
+      s!"(:c {declName})"
+    | .app fn arg =>
+      let fn' := self fn
+      let arg' := self arg
+      s!"({fn'} {arg'})"
+    | .lam binderName binderType body binderInfo =>
+      let binderName' := of_name binderName
+      let binderType' := self binderType
+      let body' := self body
+      let binderInfo' := binder_info_to_ast binderInfo
+      s!"(:lambda {binderName'} {binderType'} {body'}{binderInfo'})"
+    | .forallE binderName binderType body binderInfo =>
+      let binderName' := of_name binderName
+      let binderType' := self binderType
+      let body' := self body
+      let binderInfo' := binder_info_to_ast binderInfo
+      s!"(:forall {binderName'} {binderType'} {body'}{binderInfo'})"
+    | .letE name type value body _ =>
+      -- Dependent boolean flag diacarded
+      let name' := name_to_ast name
+      let type' := self type
+      let value' := self value
+      let body' := self body
+      s!"(:let {name'} {type'} {value'} {body'})"
+    | .lit v =>
+      -- To not burden the downstream parser who needs to handle this, the literal
+      -- is wrapped in a :lit sexp.
+      let v' := match v with
+        | .natVal val => toString val
+        | .strVal val => s!"\"{val}\""
+      s!"(:lit {v'})"
+    | .mdata _ inner =>
+      -- NOTE: Equivalent to expr itself, but mdata influences the prettyprinter
+      -- It may become necessary to incorporate the metadata.
+      self inner
+    | .proj typeName idx struct =>
+      let struct' := self struct
+      s!"(:proj {typeName} {idx} {struct'})"
   -- Elides all unhygenic names
   binder_info_to_ast : Lean.BinderInfo → String
     | .default => ""
     | .implicit => " :implicit"
     | .strictImplicit => " :strictImplicit"
     | .instImplicit => " :instImplicit"
+  of_name (name: Name) := name_to_ast name sanitize
 
-def serialize_expression (options: Commands.Options) (e: Expr): MetaM Commands.Expression := do
+def serialize_expression (options: Protocol.Options) (e: Expr): MetaM Protocol.Expression := do
   let pp := toString (← Meta.ppExpr e)
   let pp?: Option String := match options.printExprPretty with
-      | true => .some pp
-      | false => .none
-  let sexp: String := (← serialize_expression_ast e)
+    | true => .some pp
+    | false => .none
+  let sexp: String := serialize_expression_ast e
   let sexp?: Option String := match options.printExprAST with
-      | true => .some sexp
-      | false => .none
+    | true => .some sexp
+    | false => .none
   return {
     pp?,
     sexp?
   }
 
 /-- Adapted from ppGoal -/
-def serialize_goal (options: Commands.Options) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl)
-      : MetaM Commands.Goal := do
+def serialize_goal (options: Protocol.Options) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl)
+      : MetaM Protocol.Goal := do
   -- Options for printing; See Meta.ppGoal for details
   let showLetValues  := true
   let ppAuxDecls     := options.printAuxDecls
@@ -198,29 +195,32 @@ def serialize_goal (options: Commands.Options) (mvarDecl: MetavarDecl) (parentDe
   let lctx           := mvarDecl.lctx
   let lctx           := lctx.sanitizeNames.run' { options := (← getOptions) }
   Meta.withLCtx lctx mvarDecl.localInstances do
-    let ppVarNameOnly (localDecl: LocalDecl): MetaM Commands.Variable := do
+    let ppVarNameOnly (localDecl: LocalDecl): MetaM Protocol.Variable := do
       match localDecl with
-      | .cdecl _ _ varName _ _ _ =>
-        let varName := varName.simpMacroScopes
+      | .cdecl _ fvarId userName _ _ _ =>
+        let userName := userName.simpMacroScopes
         return {
-          name := toString varName,
+          name := of_name fvarId.name,
+          userName:= of_name userName.simpMacroScopes,
         }
-      | .ldecl _ _ varName _ _ _ _ => do
+      | .ldecl _ fvarId userName _ _ _ _ => do
         return {
-          name := toString varName,
+          name := of_name fvarId.name,
+          userName := toString userName.simpMacroScopes,
         }
-    let ppVar (localDecl : LocalDecl) : MetaM Commands.Variable := do
+    let ppVar (localDecl : LocalDecl) : MetaM Protocol.Variable := do
       match localDecl with
-      | .cdecl _ _ varName type _ _ =>
-        let varName := varName.simpMacroScopes
+      | .cdecl _ fvarId userName type _ _ =>
+        let userName := userName.simpMacroScopes
         let type ← instantiateMVars type
         return {
-          name := toString varName,
-          isInaccessible? := .some varName.isInaccessibleUserName
+          name := of_name fvarId.name,
+          userName:= of_name userName,
+          isInaccessible? := .some userName.isInaccessibleUserName
           type? := .some (← serialize_expression options type)
         }
-      | .ldecl _ _ varName type val _ _ => do
-        let varName := varName.simpMacroScopes
+      | .ldecl _ fvarId userName type val _ _ => do
+        let userName := userName.simpMacroScopes
         let type ← instantiateMVars type
         let value? ← if showLetValues then
           let val ← instantiateMVars val
@@ -228,8 +228,9 @@ def serialize_goal (options: Commands.Options) (mvarDecl: MetavarDecl) (parentDe
         else
           pure $ .none
         return {
-          name := toString varName,
-          isInaccessible? := .some varName.isInaccessibleUserName
+          name := of_name fvarId.name,
+          userName:= of_name userName,
+          isInaccessible? := .some userName.isInaccessibleUserName
           type? := .some (← serialize_expression options type)
           value? := value?
         }
@@ -239,21 +240,79 @@ def serialize_goal (options: Commands.Options) (mvarDecl: MetavarDecl) (parentDe
       if skip then
         return acc
       else
-        let nameOnly := options.proofVariableDelta && (parentDecl?.map
+        let nameOnly := options.noRepeat && (parentDecl?.map
           (λ decl => decl.lctx.find? localDecl.fvarId |>.isSome) |>.getD false)
         let var ← match nameOnly with
           | true => ppVarNameOnly localDecl
           | false => ppVar localDecl
         return var::acc
     return {
-      caseName? := match mvarDecl.userName with
-        | Name.anonymous => .none
-        | name => .some <| toString name,
-      isConversion := "| " == (Meta.getGoalPrefix mvarDecl)
+      caseName? := if mvarDecl.userName == .anonymous then .none else .some (of_name mvarDecl.userName),
+      isConversion := isLHSGoal? mvarDecl.type |>.isSome,
       target := (← serialize_expression options (← instantiateMVars mvarDecl.type)),
       vars := vars.reverse.toArray
     }
+  where
+  of_name (n: Name) := name_to_ast n (sanitize := false)
 
+protected def GoalState.serializeGoals (state: GoalState) (parent: Option GoalState := .none) (options: Protocol.Options := {}): MetaM (Array Protocol.Goal):= do
+  let goals := state.goals.toArray
+  state.savedState.term.meta.restore
+  let parentDecl? := parent.bind (λ parentState =>
+    let parentGoal := parentState.goals.get! state.parentGoalId
+    parentState.mctx.findDecl? parentGoal)
+  goals.mapM fun goal => do
+    match state.mctx.findDecl? goal with
+    | .some mvarDecl =>
+      let serializedGoal ← serialize_goal options mvarDecl (parentDecl? := parentDecl?)
+      pure serializedGoal
+    | .none => throwError s!"Metavariable does not exist in context {goal.name}"
 
+/-- Print the metavariables in a readable format -/
+protected def GoalState.print (goalState: GoalState) (options: Protocol.GoalDiag := {}): MetaM Unit := do
+  let savedState := goalState.savedState
+  savedState.term.meta.restore
+  let goals := savedState.tactic.goals
+  let mctx ← getMCtx
+  let root := goalState.root
+  -- Print the root
+  match mctx.decls.find? root with
+  | .some decl => printMVar ">" root decl
+  | .none => IO.println s!">{root.name}: ??"
+  goals.forM (fun mvarId => do
+    if mvarId != root then
+      match mctx.decls.find? mvarId with
+      | .some decl => printMVar "⊢" mvarId decl
+      | .none => IO.println s!"⊢{mvarId.name}: ??"
+  )
+  let goals := goals.toSSet
+  mctx.decls.forM (fun mvarId decl => do
+    if goals.contains mvarId || mvarId == root then
+      pure ()
+    -- Always print the root goal
+    else if mvarId == goalState.root then
+      printMVar (pref := ">") mvarId decl
+    -- Print the remainig ones that users don't see in Lean
+    else if options.printAll then
+      let pref := if goalState.newMVars.contains mvarId then "~" else " "
+      printMVar pref mvarId decl
+    else
+      pure ()
+      --IO.println s!" {mvarId.name}{userNameToString decl.userName}"
+  )
+  where
+    printMVar (pref: String) (mvarId: MVarId) (decl: MetavarDecl): MetaM Unit := do
+      if options.printContext then
+        decl.lctx.fvarIdToDecl.forM printFVar
+      let type_sexp := serialize_expression_ast (← instantiateMVars decl.type) (sanitize := false)
+      IO.println s!"{pref}{mvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type} {type_sexp}"
+      if options.printValue then
+        if let Option.some value := (← getMCtx).eAssignment.find? mvarId then
+          IO.println s!"  = {← Meta.ppExpr value}"
+    printFVar (fvarId: FVarId) (decl: LocalDecl): MetaM Unit := do
+      IO.println s!" | {fvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type}"
+    userNameToString : Name → String
+      | .anonymous => ""
+      | other => s!"[{other}]"
 
 end Pantograph

@@ -1,10 +1,8 @@
-/-
- - Manages the visibility status of symbols
- -/
 import Lean.Declaration
 
 namespace Pantograph
 
+/-- Converts a symbol of the form `aa.bb.cc` to a name -/
 def str_to_name (s: String): Lean.Name :=
   (s.splitOn ".").foldl Lean.Name.str Lean.Name.anonymous
 
