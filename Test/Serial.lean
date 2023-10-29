@@ -10,7 +10,14 @@ open Lean
 deriving instance Repr, DecidableEq for Protocol.BoundExpression
 
 def test_str_to_name: LSpec.TestSeq :=
-    LSpec.test "Symbol parsing" (Name.str (.str (.str .anonymous "Lean") "Meta") "run" = Pantograph.str_to_name "Lean.Meta.run")
+  LSpec.test "Symbol parsing" (Name.str (.str (.str .anonymous "Lean") "Meta") "run" = Pantograph.str_to_name "Lean.Meta.run")
+
+def test_name_to_ast: LSpec.TestSeq :=
+  let quote := "̈̈\""
+  LSpec.test "a.b.1" (name_to_ast (Name.num (.str (.str .anonymous "a") "b") 1) = "a.b.1") ++
+  LSpec.test "seg.«a.b»" (name_to_ast (Name.str (.str .anonymous "seg") "a.b") = s!"{quote}seg.«a.b»{quote}")
+  -- Pathological test case
+  --LSpec.test s!"«̈{escape}{quote}»" (name_to_ast (Name.str .anonymous s!"{escape}{quote}") = s!"{quote}«̈{escape}{quote}»{quote}")
 
 def test_expr_to_binder (env: Environment): IO LSpec.TestSeq := do
   let entries: List (String × Protocol.BoundExpression) := [
@@ -36,10 +43,10 @@ def test_expr_to_binder (env: Environment): IO LSpec.TestSeq := do
 def test_sexp_of_symbol (env: Environment): IO LSpec.TestSeq := do
   let entries: List (String × String) := [
     -- This one contains unhygienic variable names which must be suppressed
-    ("Nat.add", "(:forall :anon (:c Nat) (:forall :anon (:c Nat) (:c Nat)))"),
+    ("Nat.add", "(:forall _ (:c Nat) (:forall _ (:c Nat) (:c Nat)))"),
     -- These ones are normal and easy
-    ("Nat.add_one", "(:forall n (:c Nat) ((((:c Eq) (:c Nat)) (((((((:c HAdd.hAdd) (:c Nat)) (:c Nat)) (:c Nat)) (((:c instHAdd) (:c Nat)) (:c instAddNat))) 0) ((((:c OfNat.ofNat) (:c Nat)) (:lit 1)) ((:c instOfNatNat) (:lit 1))))) ((:c Nat.succ) 0)))"),
-    ("Nat.le_of_succ_le", "(:forall n (:c Nat) (:forall m (:c Nat) (:forall h (((((:c LE.le) (:c Nat)) (:c instLENat)) ((:c Nat.succ) 1)) 0) (((((:c LE.le) (:c Nat)) (:c instLENat)) 2) 1)) :implicit) :implicit)"),
+    ("Nat.add_one", "(:forall n (:c Nat) ((:c Eq) (:c Nat) ((:c HAdd.hAdd) (:c Nat) (:c Nat) (:c Nat) ((:c instHAdd) (:c Nat) (:c instAddNat)) 0 ((:c OfNat.ofNat) (:c Nat) (:lit 1) ((:c instOfNatNat) (:lit 1)))) ((:c Nat.succ) 0)))"),
+    ("Nat.le_of_succ_le", "(:forall n (:c Nat) (:forall m (:c Nat) (:forall h ((:c LE.le) (:c Nat) (:c instLENat) ((:c Nat.succ) 1) 0) ((:c LE.le) (:c Nat) (:c instLENat) 2 1)) :implicit) :implicit)"),
     -- Handling of higher order types
     ("Or", "(:forall a (:sort 0) (:forall b (:sort 0) (:sort 0)))"),
     ("List", "(:forall α (:sort (+ u 1)) (:sort (+ u 1)))")
@@ -70,6 +77,7 @@ def suite: IO LSpec.TestSeq := do
 
   return LSpec.group "Serialization" $
     (LSpec.group "str_to_name" test_str_to_name) ++
+    (LSpec.group "name_to_ast" test_name_to_ast) ++
     (LSpec.group "Expression binder" (← test_expr_to_binder env)) ++
     (LSpec.group "Sexp from symbol" (← test_sexp_of_symbol env))
 
