@@ -46,14 +46,14 @@ def type_expr_to_bound (expr: Expr): MetaM Protocol.BoundExpression := do
       return (toString (← fvar.fvarId!.getUserName), toString (← Meta.ppExpr (← fvar.fvarId!.getType)))
     return { binders, target := toString (← Meta.ppExpr body) }
 
-private def name_to_ast (name: Name) (sanitize: Bool := true): String :=
-  if sanitize && name.isInternal then "_"
-  else name_to_ast_aux name |>.drop 1
+def name_to_ast (name: Name) (sanitize: Bool := true): String :=
+  let internal := name.isInaccessibleUserName || name.hasMacroScopes
+  if sanitize && internal then "_"
+  else toString name |> enclose_if_escaped
   where
-  name_to_ast_aux: Name → String
-    | .anonymous => ""
-    | .num n i => s!"{name_to_ast_aux n} {i}"
-    | .str init last => s!"{name_to_ast_aux init} {last}"
+  enclose_if_escaped (n: String) :=
+    let quote := "̈̈\""
+    if n.contains Lean.idBeginEscape then s!"{quote}{n}{quote}" else n
 
 private def level_depth: Level → Nat
   | .zero => 0

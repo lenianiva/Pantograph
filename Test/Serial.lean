@@ -10,7 +10,14 @@ open Lean
 deriving instance Repr, DecidableEq for Protocol.BoundExpression
 
 def test_str_to_name: LSpec.TestSeq :=
-    LSpec.test "Symbol parsing" (Name.str (.str (.str .anonymous "Lean") "Meta") "run" = Pantograph.str_to_name "Lean.Meta.run")
+  LSpec.test "Symbol parsing" (Name.str (.str (.str .anonymous "Lean") "Meta") "run" = Pantograph.str_to_name "Lean.Meta.run")
+
+def test_name_to_ast: LSpec.TestSeq :=
+  let quote := "̈̈\""
+  LSpec.test "a.b.1" (name_to_ast (Name.num (.str (.str .anonymous "a") "b") 1) = "a.b.1") ++
+  LSpec.test "seg.«a.b»" (name_to_ast (Name.str (.str .anonymous "seg") "a.b") = s!"{quote}seg.«a.b»{quote}")
+  -- Pathological test case
+  --LSpec.test s!"«̈{escape}{quote}»" (name_to_ast (Name.str .anonymous s!"{escape}{quote}") = s!"{quote}«̈{escape}{quote}»{quote}")
 
 def test_expr_to_binder (env: Environment): IO LSpec.TestSeq := do
   let entries: List (String × Protocol.BoundExpression) := [
@@ -70,6 +77,7 @@ def suite: IO LSpec.TestSeq := do
 
   return LSpec.group "Serialization" $
     (LSpec.group "str_to_name" test_str_to_name) ++
+    (LSpec.group "name_to_ast" test_name_to_ast) ++
     (LSpec.group "Expression binder" (← test_expr_to_binder env)) ++
     (LSpec.group "Sexp from symbol" (← test_sexp_of_symbol env))
 
