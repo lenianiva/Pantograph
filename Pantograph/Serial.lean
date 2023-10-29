@@ -46,12 +46,14 @@ def type_expr_to_bound (expr: Expr): MetaM Protocol.BoundExpression := do
       return (toString (← fvar.fvarId!.getUserName), toString (← Meta.ppExpr (← fvar.fvarId!.getType)))
     return { binders, target := toString (← Meta.ppExpr body) }
 
-private def name_to_ast (name: Lean.Name) (sanitize: Bool := true): String := match name with
-  | .anonymous => ":anon"
-  | .num n i => match sanitize with
-    | false => s!"{toString n} {i}"
-    | true => ":anon"
-  | n@(.str _ _) => toString n
+private def name_to_ast (name: Name) (sanitize: Bool := true): String :=
+  if sanitize && name.isInternal then "_"
+  else name_to_ast_aux name |>.drop 1
+  where
+  name_to_ast_aux: Name → String
+    | .anonymous => ""
+    | .num n i => s!"{name_to_ast_aux n} {i}"
+    | .str init last => s!"{name_to_ast_aux init} {last}"
 
 private def level_depth: Level → Nat
   | .zero => 0
