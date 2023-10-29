@@ -56,25 +56,25 @@ def name_to_ast (name: Name) (sanitize: Bool := true): String :=
     if n.contains Lean.idBeginEscape then s!"{quote}{n}{quote}" else n
 
 /-- serialize a sort level. Expression is optimized to be compact e.g. `(+ u 2)` -/
-partial def serialize_sort_level_ast (level: Level): String :=
+partial def serialize_sort_level_ast (level: Level) (sanitize: Bool): String :=
   let k := level.getOffset
   let u := level.getLevelOffset
   let u_str := match u with
     | .zero => "0"
     | .succ _ => panic! "getLevelOffset should not return .succ"
     | .max v w =>
-      let v := serialize_sort_level_ast v
-      let w := serialize_sort_level_ast w
+      let v := serialize_sort_level_ast v sanitize
+      let w := serialize_sort_level_ast w sanitize
       s!"(:max {v} {w})"
     | .imax v w =>
-      let v := serialize_sort_level_ast v
-      let w := serialize_sort_level_ast w
+      let v := serialize_sort_level_ast v sanitize
+      let w := serialize_sort_level_ast w sanitize
       s!"(:imax {v} {w})"
     | .param name =>
-      let name := name_to_ast name
+      let name := name_to_ast name sanitize
       s!"{name}"
     | .mvar id =>
-      let name := name_to_ast id.name
+      let name := name_to_ast id.name sanitize
       s!"(:mv {name})"
   match k, u with
   | 0, _ => u_str
@@ -101,7 +101,7 @@ partial def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): Stri
       let name := of_name mvarId.name
       s!"(:mv {name})"
     | .sort level =>
-      let level := serialize_sort_level_ast level
+      let level := serialize_sort_level_ast level sanitize
       s!"(:sort {level})"
     | .const declName _ =>
       -- The universe level of the const expression is elided since it should be
