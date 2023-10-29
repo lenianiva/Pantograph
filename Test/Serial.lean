@@ -45,8 +45,8 @@ def test_sexp_of_symbol (env: Environment): IO LSpec.TestSeq := do
     -- This one contains unhygienic variable names which must be suppressed
     ("Nat.add", "(:forall _ (:c Nat) (:forall _ (:c Nat) (:c Nat)))"),
     -- These ones are normal and easy
-    ("Nat.add_one", "(:forall n (:c Nat) ((((:c Eq) (:c Nat)) (((((((:c HAdd.hAdd) (:c Nat)) (:c Nat)) (:c Nat)) (((:c instHAdd) (:c Nat)) (:c instAddNat))) 0) ((((:c OfNat.ofNat) (:c Nat)) (:lit 1)) ((:c instOfNatNat) (:lit 1))))) ((:c Nat.succ) 0)))"),
-    ("Nat.le_of_succ_le", "(:forall n (:c Nat) (:forall m (:c Nat) (:forall h (((((:c LE.le) (:c Nat)) (:c instLENat)) ((:c Nat.succ) 1)) 0) (((((:c LE.le) (:c Nat)) (:c instLENat)) 2) 1)) :implicit) :implicit)"),
+    ("Nat.add_one", "(:forall n (:c Nat) ((:c Eq) (:c Nat) ((:c HAdd.hAdd) (:c Nat) (:c Nat) (:c Nat) ((:c instHAdd) (:c Nat) (:c instAddNat)) 0 ((:c OfNat.ofNat) (:c Nat) (:lit 1) ((:c instOfNatNat) (:lit 1)))) ((:c Nat.succ) 0)))"),
+    ("Nat.le_of_succ_le", "(:forall n (:c Nat) (:forall m (:c Nat) (:forall h ((:c LE.le) (:c Nat) (:c instLENat) ((:c Nat.succ) 1) 0) ((:c LE.le) (:c Nat) (:c instLENat) 2 1)) :implicit) :implicit)"),
     -- Handling of higher order types
     ("Or", "(:forall a (:sort 0) (:forall b (:sort 0) (:sort 0)))"),
     ("List", "(:forall α (:sort (+ u 1)) (:sort (+ u 1)))")

@@ -45,7 +45,7 @@ def subroutine_runner (steps: List (MainM LSpec.TestSeq)): IO LSpec.TestSeq := d
 
 def test_option_modify : IO LSpec.TestSeq :=
   let pp? := Option.some "∀ (n : Nat), n + 1 = Nat.succ n"
-  let sexp? := Option.some "(:forall n (:c Nat) ((((:c Eq) (:c Nat)) (((((((:c HAdd.hAdd) (:c Nat)) (:c Nat)) (:c Nat)) (((:c instHAdd) (:c Nat)) (:c instAddNat))) 0) ((((:c OfNat.ofNat) (:c Nat)) (:lit 1)) ((:c instOfNatNat) (:lit 1))))) ((:c Nat.succ) 0)))"
+  let sexp? := Option.some "(:forall n (:c Nat) ((:c Eq) (:c Nat) ((:c HAdd.hAdd) (:c Nat) (:c Nat) (:c Nat) ((:c instHAdd) (:c Nat) (:c instAddNat)) 0 ((:c OfNat.ofNat) (:c Nat) (:lit 1) ((:c instOfNatNat) (:lit 1)))) ((:c Nat.succ) 0)))"
   let module? := Option.some "Init.Data.Nat.Basic"
   let options: Protocol.Options := {}
   subroutine_runner [

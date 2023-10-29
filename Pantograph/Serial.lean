@@ -55,26 +55,8 @@ def name_to_ast (name: Name) (sanitize: Bool := true): String :=
     let quote := "̈̈\""
     if n.contains Lean.idBeginEscape then s!"{quote}{n}{quote}" else n
 
-private def level_depth: Level → Nat
-  | .zero => 0
-  | .succ l => 1 + (level_depth l)
-  | .max u v | .imax u v => 1 + max (level_depth u) (level_depth v)
-  | .param _ | .mvar _ => 0
-
-theorem level_depth_max_imax (u v: Level): (level_depth (Level.max u v) = level_depth (Level.imax u v)) := by
-  constructor
-theorem level_max_depth_decrease (u v: Level): (level_depth u < level_depth (Level.max u v)) := by
-  have h1: level_depth (Level.max u v) = 1 + Nat.max (level_depth u) (level_depth v) := by constructor
-  rewrite [h1]
-  simp_arith
-  conv =>
-    rhs
-    apply Nat.max_def
-  sorry
-theorem level_offset_decrease (u v: Level): (level_depth u ≤ level_depth (Level.max u v).getLevelOffset) := sorry
-
 /-- serialize a sort level. Expression is optimized to be compact e.g. `(+ u 2)` -/
-def serialize_sort_level_ast (level: Level): String :=
+partial def serialize_sort_level_ast (level: Level): String :=
   let k := level.getOffset
   let u := level.getLevelOffset
   let u_str := match u with
@@ -98,14 +80,11 @@ def serialize_sort_level_ast (level: Level): String :=
   | 0, _ => u_str
   | _, .zero => s!"{k}"
   | _, _ => s!"(+ {u_str} {k})"
-  termination_by serialize_sort_level_ast level => level_depth level
-  decreasing_by
-  . sorry
 
 /--
  Completely serializes an expression tree. Json not used due to compactness
 -/
-def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): String :=
+partial def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): String :=
   self expr
   where
   self (e: Expr): String :=
@@ -128,10 +107,11 @@ def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): String :=
       -- The universe level of the const expression is elided since it should be
       -- inferrable from surrounding expression
       s!"(:c {declName})"
-    | .app fn arg =>
-      let fn' := self fn
-      let arg' := self arg
-      s!"({fn'} {arg'})"
+    | .app _ _ =>
+      let fn' := self e.getAppFn
+      let args := e.getAppArgs.map self |>.toList
+      let args := " ".intercalate args
+      s!"({fn'} {args})"
     | .lam binderName binderType body binderInfo =>
       let binderName' := of_name binderName
       let binderType' := self binderType
