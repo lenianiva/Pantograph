@@ -52,7 +52,7 @@ def name_to_ast (name: Name) (sanitize: Bool := true): String :=
   else toString name |> enclose_if_escaped
   where
   enclose_if_escaped (n: String) :=
-    let quote := "̈̈\""
+    let quote := "\""
     if n.contains Lean.idBeginEscape then s!"{quote}{n}{quote}" else n
 
 /-- serialize a sort level. Expression is optimized to be compact e.g. `(+ u 2)` -/
@@ -168,7 +168,7 @@ def serialize_expression (options: Protocol.Options) (e: Expr): MetaM Protocol.E
   }
 
 /-- Adapted from ppGoal -/
-def serialize_goal (options: Protocol.Options) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl)
+def serialize_goal (options: Protocol.Options) (goal: MVarId) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl)
       : MetaM Protocol.Goal := do
   -- Options for printing; See Meta.ppGoal for details
   let showLetValues  := true
@@ -229,7 +229,8 @@ def serialize_goal (options: Protocol.Options) (mvarDecl: MetavarDecl) (parentDe
           | false => ppVar localDecl
         return var::acc
     return {
-      caseName? := if mvarDecl.userName == .anonymous then .none else .some (of_name mvarDecl.userName),
+      name := of_name goal.name,
+      userName? := if mvarDecl.userName == .anonymous then .none else .some (of_name mvarDecl.userName),
       isConversion := isLHSGoal? mvarDecl.type |>.isSome,
       target := (← serialize_expression options (← instantiateMVars mvarDecl.type)),
       vars := vars.reverse.toArray
@@ -246,7 +247,7 @@ protected def GoalState.serializeGoals (state: GoalState) (parent: Option GoalSt
   goals.mapM fun goal => do
     match state.mctx.findDecl? goal with
     | .some mvarDecl =>
-      let serializedGoal ← serialize_goal options mvarDecl (parentDecl? := parentDecl?)
+      let serializedGoal ← serialize_goal options goal mvarDecl (parentDecl? := parentDecl?)
       pure serializedGoal
     | .none => throwError s!"Metavariable does not exist in context {goal.name}"
 

@@ -66,9 +66,9 @@ def startProof (start: Start): TestM (Option GoalState) := do
 
 def assertUnreachable (message: String): LSpec.TestSeq := LSpec.check message false
 
-def buildGoal (nameType: List (String × String)) (target: String) (caseName?: Option String := .none): Protocol.Goal :=
+def buildGoal (nameType: List (String × String)) (target: String) (userName?: Option String := .none): Protocol.Goal :=
   {
-    caseName?,
+    userName?,
     target := { pp? := .some target},
     vars := (nameType.map fun x => ({
       userName := x.fst,
@@ -293,13 +293,13 @@ def proof_or_comm: TestM Unit := do
   return ()
   where
     typeProp: Protocol.Expression := { pp? := .some "Prop" }
-    branchGoal (caseName name: String): Protocol.Goal := {
-      caseName? := .some caseName,
+    branchGoal (caseName varName: String): Protocol.Goal := {
+      userName? := .some caseName,
       target := { pp? := .some "q ∨ p" },
       vars := #[
         { userName := "p", type? := .some typeProp, isInaccessible? := .some false },
         { userName := "q", type? := .some typeProp, isInaccessible? := .some false },
-        { userName := "h✝", type? := .some { pp? := .some name }, isInaccessible? := .some true }
+        { userName := "h✝", type? := .some { pp? := .some varName }, isInaccessible? := .some true }
       ]
     }
 
@@ -352,9 +352,11 @@ def proof_proposition_generation: TestM Unit := do
       return ()
   addTest $ LSpec.check "apply PSigma.mk" ((← state1.serializeGoals (options := ← read)).map (·.devolatilize) =
     #[
-      buildGoal [] "?fst" (caseName? := .some "snd"),
-      buildGoal [] "Prop" (caseName? := .some "fst")
+      buildGoal [] "?fst" (userName? := .some "snd"),
+      buildGoal [] "Prop" (userName? := .some "fst")
       ])
+  if let #[goal1, goal2] := ← state1.serializeGoals (options := { (← read) with printExprAST := true }) then
+    addTest $ LSpec.test "(1 reference)" (goal1.target.sexp? = .some s!"(:mv {goal2.name})")
   addTest $ LSpec.test "(1 root)" state1.rootExpr?.isNone
 
   let state2 ← match ← state1.tryAssign (goalId := 0) (expr := "λ (x: Nat) => _") with

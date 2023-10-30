@@ -84,6 +84,7 @@ def test_malformed_command : IO LSpec.TestSeq :=
   ]
 def test_tactic : IO LSpec.TestSeq :=
   let goal: Protocol.Goal := {
+    name := "_uniq.10",
     target := { pp? := .some "∀ (q : Prop), x ∨ q → q ∨ x" },
     vars := #[{ name := "_uniq.9", userName := "x", isInaccessible? := .some false, type? := .some { pp? := .some "Prop" }}],
   }
