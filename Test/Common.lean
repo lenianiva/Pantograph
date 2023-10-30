@@ -7,6 +7,7 @@ namespace Protocol
 def Goal.devolatilize (goal: Goal): Goal :=
   {
     goal with
+    name := "",
     vars := goal.vars.map removeInternalAux,
   }
   where removeInternalAux (v: Variable): Variable :=

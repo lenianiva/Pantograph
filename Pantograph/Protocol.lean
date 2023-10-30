@@ -54,8 +54,9 @@ structure Variable where
   value?: Option Expression := .none
   deriving Lean.ToJson
 structure Goal where
-  /-- String case id -/
-  caseName?: Option String  := .none
+  name: String := ""
+  /-- Name of the metavariable -/
+  userName?: Option String  := .none
   /-- Is the goal in conversion mode -/
   isConversion: Bool        := false
   /-- target expression type -/
