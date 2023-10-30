@@ -52,7 +52,7 @@ def name_to_ast (name: Name) (sanitize: Bool := true): String :=
   else toString name |> enclose_if_escaped
   where
   enclose_if_escaped (n: String) :=
-    let quote := "̈̈\""
+    let quote := "\""
     if n.contains Lean.idBeginEscape then s!"{quote}{n}{quote}" else n
 
 /-- serialize a sort level. Expression is optimized to be compact e.g. `(+ u 2)` -/
