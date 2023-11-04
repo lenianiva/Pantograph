@@ -169,29 +169,33 @@ protected def GoalState.tryAssign (state: GoalState) (goalId: Nat) (expr: String
       return .failure #[← exception.toMessageData.toString]
   tacticM { elaborator := .anonymous } |>.run' state.savedState.tactic
 
-/-- After finishing one branch of a proof (`graftee`), pick up from the point where the proof was left off (`target`) -/
-protected def GoalState.continue (target: GoalState) (graftee: GoalState) (goals: Option (List MVarId) := .none): Except String GoalState :=
-  let goals := match goals with
-    | .some goals => goals
-    | .none => target.goals
-  if target.root != graftee.root then
-    .error s!"Roots of two continued goal states do not match: {target.root.name} != {graftee.root.name}"
-  -- Ensure goals are not dangling
-  else if ¬ (goals.all (λ goal => graftee.mvars.contains goal)) then
-    .error s!"Some goals in target are not present in the graftee"
+/--
+Brings into scope a list of goals
+-/
+protected def GoalState.resume (state: GoalState) (goals: List MVarId): Except String GoalState :=
+  if ¬ (goals.all (λ goal => state.mvars.contains goal)) then
+    .error s!"Goals not in scope"
   else
     -- Set goals to the goals that have not been assigned yet, similar to the `focus` tactic.
     let unassigned := goals.filter (λ goal =>
-      let mctx := graftee.mctx
+      let mctx := state.mctx
       ¬(mctx.eAssignment.contains goal || mctx.dAssignment.contains goal))
     .ok {
+      state with
       savedState := {
-        term := graftee.savedState.term,
+        term := state.savedState.term,
         tactic := { goals := unassigned },
       },
-      root := target.root,
-      newMVars := graftee.newMVars,
     }
+
+/--
+Brings into scope all goals from `branch`
+-/
+protected def GoalState.continue (target: GoalState) (branch: GoalState): Except String GoalState :=
+  if target.root != branch.root then
+    .error s!"Roots of two continued goal states do not match: {target.root.name} != {branch.root.name}"
+  else
+    target.resume (goals := branch.goals)
 
 protected def GoalState.rootExpr? (goalState: GoalState): Option Expr :=
   let expr := goalState.mctx.eAssignment.find! goalState.root

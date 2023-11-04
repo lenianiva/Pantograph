@@ -253,7 +253,7 @@ def proof_or_comm: TestM Unit := do
   addTest $ LSpec.check "  assumption" state4_2.goals.isEmpty
   addTest $ LSpec.check "(4_2 root)" state4_2.rootExpr?.isNone
   -- Ensure the proof can continue from `state4_2`.
-  let state2b ← match state2.continue state4_2 with
+  let state2b ← match state4_2.continue state2 with
     | .error msg => do
       addTest $ assertUnreachable $ msg
       return ()

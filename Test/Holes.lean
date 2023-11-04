@@ -85,7 +85,7 @@ def test_m_couple: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.test "(1b root)" state2.rootExpr?.isNone
-  let state1b ← match state1.continue state2 with
+  let state1b ← match state2.continue state1 with
     | .error msg => do
       addTest $ assertUnreachable $ msg
       return ()
@@ -136,6 +136,47 @@ def test_proposition_generation: TestM Unit := do
   addTest $ LSpec.test "(3 root)" state3.rootExpr?.isSome
   return ()
 
+def test_partial_continuation: TestM Unit := do
+  let state? ← startProof "(2: Nat) ≤ 5"
+  let state0 ← match state? with
+    | .some state => pure state
+    | .none => do
+      addTest $ assertUnreachable "Goal could not parse"
+      return ()
+
+  let state1 ← match ← state0.execute (goalId := 0) (tactic := "apply Nat.le_trans") with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check "apply Nat.le_trans" ((← state1.serializeGoals (options := ← read)).map (·.target.pp?) =
+    #[.some "2 ≤ ?m", .some "?m ≤ 5", .some "Nat"])
+
+  let state2 ← match ← state1.execute (goalId := 2) (tactic := "apply Nat.succ") with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check "apply Nat.succ" ((← state2.serializeGoals (options := ← read)).map (·.target.pp?) =
+    #[.some "Nat"])
+
+  -- Execute a partial continuation
+  let coupled_goals := state1.goals ++ state2.goals
+  let state1b ← match state2.resume (goals := coupled_goals) with
+    | .error msg => do
+      addTest $ assertUnreachable $ msg
+      return ()
+    | .ok state => pure state
+  addTest $ LSpec.check "(continue)" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
+    #[.some "2 ≤ Nat.succ ?m", .some "Nat.succ ?m ≤ 5", .some "Nat"])
+  addTest $ LSpec.test "(2 root)" state1b.rootExpr?.isNone
+
+  -- Continuation should fail if the state does not exist:
+  match state0.resume coupled_goals with
+  | .error error => addTest $ LSpec.check "(continuation failure message)" (error = "Goals not in scope")
+  | .ok _ => addTest $ assertUnreachable "(continuation failure)"
+  return ()
+
 
 def suite: IO LSpec.TestSeq := do
   let env: Lean.Environment ← Lean.importModules
@@ -144,7 +185,8 @@ def suite: IO LSpec.TestSeq := do
     (trustLevel := 1)
   let tests := [
     ("2 < 5", test_m_couple),
-    ("Proposition Generation", test_proposition_generation)
+    ("Proposition Generation", test_proposition_generation),
+    ("Partial Continuation", test_partial_continuation)
   ]
   let tests ← tests.foldlM (fun acc tests => do
     let (name, tests) := tests
