@@ -6,17 +6,6 @@ import Pantograph.Goal
 import Pantograph.Serial
 import Test.Common
 
-namespace Pantograph
-
-def TacticResult.toString : TacticResult → String
-  | .success state => s!".success ({state.goals.length} goals)"
-  | .failure messages =>
-    let messages := "\n".intercalate messages.toList
-    s!".failure {messages}"
-  | .parseError error => s!".parseError {error}"
-  | .indexError index => s!".indexError {index}"
-end Pantograph
-
 namespace Pantograph.Test.Proofs
 open Pantograph
 open Lean
@@ -26,10 +15,6 @@ inductive Start where
   | expr (expr: String) -- Start from some expression
 
 abbrev TestM := StateRefT LSpec.TestSeq (ReaderT Protocol.Options M)
-
-deriving instance DecidableEq, Repr for Protocol.Expression
-deriving instance DecidableEq, Repr for Protocol.Variable
-deriving instance DecidableEq, Repr for Protocol.Goal
 
 def addTest (test: LSpec.TestSeq): TestM Unit := do
   set $ (← get) ++ test
@@ -63,8 +48,6 @@ def startProof (start: Start): TestM (Option GoalState) := do
       | .ok expr =>
         let goal ← GoalState.create (expr := expr)
         return Option.some goal
-
-def assertUnreachable (message: String): LSpec.TestSeq := LSpec.check message false
 
 def buildGoal (nameType: List (String × String)) (target: String) (userName?: Option String := .none): Protocol.Goal :=
   {
@@ -303,80 +286,6 @@ def proof_or_comm: TestM Unit := do
       ]
     }
 
-/-- M-coupled goals -/
-def proof_m_couple: TestM Unit := do
-  let state? ← startProof (.expr "(2: Nat) ≤ 5")
-  let state0 ← match state? with
-    | .some state => pure state
-    | .none => do
-      addTest $ assertUnreachable "Goal could not parse"
-      return ()
-
-  let state1 ← match ← state0.execute (goalId := 0) (tactic := "apply Nat.le_trans") with
-    | .success state => pure state
-    | other => do
-      addTest $ assertUnreachable $ other.toString
-      return ()
-  addTest $ LSpec.check "apply Nat.le_trans" ((← state1.serializeGoals (options := ← read)).map (·.target.pp?) =
-    #[.some "2 ≤ ?m", .some "?m ≤ 5", .some "Nat"])
-  addTest $ LSpec.test "(1 root)" state1.rootExpr?.isNone
-  -- Set m to 3
-  let state2 ← match ← state1.execute (goalId := 2) (tactic := "exact 3") with
-    | .success state => pure state
-    | other => do
-      addTest $ assertUnreachable $ other.toString
-      return ()
-  addTest $ LSpec.test "(1b root)" state2.rootExpr?.isNone
-  let state1b ← match state1.continue state2 with
-    | .error msg => do
-      addTest $ assertUnreachable $ msg
-      return ()
-    | .ok state => pure state
-  addTest $ LSpec.check "exact 3" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
-    #[.some "2 ≤ 3", .some "3 ≤ 5"])
-  addTest $ LSpec.test "(2 root)" state1b.rootExpr?.isNone
-  return ()
-
-def proof_proposition_generation: TestM Unit := do
-  let state? ← startProof (.expr "Σ' p:Prop, p")
-  let state0 ← match state? with
-    | .some state => pure state
-    | .none => do
-      addTest $ assertUnreachable "Goal could not parse"
-      return ()
-
-  let state1 ← match ← state0.execute (goalId := 0) (tactic := "apply PSigma.mk") with
-    | .success state => pure state
-    | other => do
-      addTest $ assertUnreachable $ other.toString
-      return ()
-  addTest $ LSpec.check "apply PSigma.mk" ((← state1.serializeGoals (options := ← read)).map (·.devolatilize) =
-    #[
-      buildGoal [] "?fst" (userName? := .some "snd"),
-      buildGoal [] "Prop" (userName? := .some "fst")
-      ])
-  if let #[goal1, goal2] := ← state1.serializeGoals (options := { (← read) with printExprAST := true }) then
-    addTest $ LSpec.test "(1 reference)" (goal1.target.sexp? = .some s!"(:mv {goal2.name})")
-  addTest $ LSpec.test "(1 root)" state1.rootExpr?.isNone
-
-  let state2 ← match ← state1.tryAssign (goalId := 0) (expr := "λ (x: Nat) => _") with
-    | .success state => pure state
-    | other => do
-      addTest $ assertUnreachable $ other.toString
-      return ()
-  addTest $ LSpec.check ":= λ (x: Nat), _" ((← state2.serializeGoals (options := ← read)).map (·.target.pp?) =
-    #[.some "Nat → Prop", .some "∀ (x : Nat), ?m.29 x"])
-  addTest $ LSpec.test "(2 root)" state2.rootExpr?.isNone
-
-  let state3 ← match ← state2.tryAssign (goalId := 1) (expr := "fun x => Eq.refl x") with
-    | .success state => pure state
-    | other => do
-      addTest $ assertUnreachable $ other.toString
-      return ()
-  addTest $ LSpec.check ":= Eq.refl" ((← state3.serializeGoals (options := ← read)).map (·.target.pp?) =
-    #[])
-  addTest $ LSpec.test "(3 root)" state3.rootExpr?.isSome
-  return ()
 
 def suite: IO LSpec.TestSeq := do
   let env: Lean.Environment ← Lean.importModules
@@ -388,9 +297,7 @@ def suite: IO LSpec.TestSeq := do
     ("Nat.add_comm manual", proof_nat_add_comm true),
     ("Nat.add_comm delta", proof_delta_variable),
     ("arithmetic", proof_arith),
-    ("Or.comm", proof_or_comm),
-    ("2 < 5", proof_m_couple),
-    ("Proposition Generation", proof_proposition_generation)
+    ("Or.comm", proof_or_comm)
   ]
   let tests ← tests.foldlM (fun acc tests => do
     let (name, tests) := tests
