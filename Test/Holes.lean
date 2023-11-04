@@ -133,6 +133,7 @@ def test_proposition_generation: TestM Unit := do
       return ()
   addTest $ LSpec.check ":= Eq.refl" ((← state3.serializeGoals (options := ← read)).map (·.target.pp?) =
     #[])
+
   addTest $ LSpec.test "(3 root)" state3.rootExpr?.isSome
   return ()
 
@@ -174,6 +175,10 @@ def test_partial_continuation: TestM Unit := do
   -- Continuation should fail if the state does not exist:
   match state0.resume coupled_goals with
   | .error error => addTest $ LSpec.check "(continuation failure message)" (error = "Goals not in scope")
+  | .ok _ => addTest $ assertUnreachable "(continuation failure)"
+  -- Continuation should fail if some goals have not been solved
+  match state2.continue state1 with
+  | .error error => addTest $ LSpec.check "(continuation failure message)" (error = "Target state has unresolved goals")
   | .ok _ => addTest $ assertUnreachable "(continuation failure)"
   return ()
 

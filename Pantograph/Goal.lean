@@ -192,7 +192,9 @@ protected def GoalState.resume (state: GoalState) (goals: List MVarId): Except S
 Brings into scope all goals from `branch`
 -/
 protected def GoalState.continue (target: GoalState) (branch: GoalState): Except String GoalState :=
-  if target.root != branch.root then
+  if !target.goals.isEmpty then
+    .error s!"Target state has unresolved goals"
+  else if target.root != branch.root then
     .error s!"Roots of two continued goal states do not match: {target.root.name} != {branch.root.name}"
   else
     target.resume (goals := branch.goals)
