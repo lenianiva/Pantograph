@@ -38,6 +38,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   | "options.print"  => run options_print
   | "goal.start"     => run goal_start
   | "goal.tactic"    => run goal_tactic
+  | "goal.continue"  => run goal_continue
   | "goal.delete"    => run goal_delete
   | "goal.print"    => run goal_print
   | cmd =>
@@ -170,6 +171,30 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
         return .error $ errorIndex s!"Invalid goal id index {goalId}"
       | .ok (.failure messages) =>
         return .ok { tacticErrors? := .some messages }
+  goal_continue (args: Protocol.GoalContinue): MainM (CR Protocol.GoalContinueResult) := do
+    let state ← get
+    match state.goalStates.get? args.target with
+    | .none => return .error $ errorIndex s!"Invalid state index {args.target}"
+    | .some target => do
+      let nextState? ← match args.branch?, args.goals? with
+        | .some branchId, .none => do
+          match state.goalStates.get? branchId with
+          | .none => return .error $ errorIndex s!"Invalid state index {branchId}"
+          | .some branch => pure $ target.continue branch
+        | .none, .some goals =>
+          let goals := goals.map (λ name => { name := str_to_name name })
+          pure $ target.resume goals
+        | _, _ => return .error <| errorI "arguments" "Exactly one of {branch, goals} must be supplied"
+      match nextState? with
+      | .error error => return .ok { error? := .some error }
+      | .ok nextGoalState =>
+        let (goalStates, nextStateId) := state.goalStates.insert nextGoalState
+        set { state with goalStates }
+        let goals ← nextGoalState.serializeGoals (parent := .some target) (options := state.options)
+        return .ok {
+          nextStateId? := .some nextStateId,
+          goals? := .some goals,
+        }
   goal_delete (args: Protocol.GoalDelete): MainM (CR Protocol.GoalDeleteResult) := do
     let state ← get
     let goalStates := args.stateIds.foldl (λ map id => map.remove id) state.goalStates

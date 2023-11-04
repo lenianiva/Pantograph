@@ -163,6 +163,21 @@ structure GoalTacticResult where
   -- Existence of this field shows the tactic parsing has failed
   parseError?: Option String := .none
   deriving Lean.ToJson
+structure GoalContinue where
+  -- State from which the continuation acquires the context
+  target: Nat
+
+  -- One of the following must be supplied
+  -- The state which is an ancestor of `target` where goals will be extracted from
+  branch?: Option Nat := .none
+  -- Or, the particular goals that should be brought back into scope
+  goals?: Option (List String) := .none
+  deriving Lean.FromJson
+structure GoalContinueResult where
+  error?: Option String := .none
+  nextStateId?: Option Nat := .none
+  goals?: Option (Array Goal) := .none
+  deriving Lean.ToJson
 
 -- Remove goal states
 structure GoalDelete where
