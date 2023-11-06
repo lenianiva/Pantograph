@@ -172,6 +172,20 @@ def test_partial_continuation: TestM Unit := do
     #[.some "2 ≤ Nat.succ ?m", .some "Nat.succ ?m ≤ 5", .some "Nat"])
   addTest $ LSpec.test "(2 root)" state1b.rootExpr?.isNone
 
+  -- Roundtrip
+  --let coupled_goals := coupled_goals.map (λ g =>
+  --  { name := str_to_name $ name_to_ast g.name (sanitize := false)})
+  let coupled_goals := coupled_goals.map (λ g => name_to_ast g.name (sanitize := false))
+  let coupled_goals := coupled_goals.map (λ g => { name := g.toName })
+  let state1b ← match state2.resume (goals := coupled_goals) with
+    | .error msg => do
+      addTest $ assertUnreachable $ msg
+      return ()
+    | .ok state => pure state
+  addTest $ LSpec.check "(continue)" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
+    #[.some "2 ≤ Nat.succ ?m", .some "Nat.succ ?m ≤ 5", .some "Nat"])
+  addTest $ LSpec.test "(2 root)" state1b.rootExpr?.isNone
+
   -- Continuation should fail if the state does not exist:
   match state0.resume coupled_goals with
   | .error error => addTest $ LSpec.check "(continuation failure message)" (error = "Goals not in scope")
@@ -185,7 +199,7 @@ def test_partial_continuation: TestM Unit := do
 
 def suite: IO LSpec.TestSeq := do
   let env: Lean.Environment ← Lean.importModules
-    (imports := #["Init"].map (λ str => { module := str_to_name str, runtimeOnly := false }))
+    (imports := #["Init"].map (λ str => { module := str.toName, runtimeOnly := false }))
     (opts := {})
     (trustLevel := 1)
   let tests := [

@@ -46,7 +46,7 @@ namespace Lean
 def setOptionFromString' (opts : Options) (entry : String) : ExceptT String IO Options := do
   let ps := (entry.splitOn "=").map String.trim
   let [key, val] ← pure ps | throw "invalid configuration option entry, it must be of the form '<key> = <value>'"
-  let key := Pantograph.str_to_name key
+  let key := key.toName
   let defValue ← getOptionDefaultValue key
   match defValue with
   | DataValue.ofString _ => pure $ opts.setString key val
@@ -88,7 +88,7 @@ unsafe def main (args: List String): IO Unit := do
   let imports:= args.filter (λ s => ¬ (s.startsWith "--"))
 
   let env ← Lean.importModules
-    (imports := imports.toArray.map (λ str => { module := str_to_name str, runtimeOnly := false }))
+    (imports := imports.toArray.map (λ str => { module := str.toName, runtimeOnly := false }))
     (opts := {})
     (trustLevel := 1)
   let context: Context := {

@@ -23,7 +23,7 @@ def startProof (start: Start): TestM (Option GoalState) := do
   let env ← Lean.MonadEnv.getEnv
   match start with
   | .copy name =>
-    let cInfo? := str_to_name name |> env.find?
+    let cInfo? := name.toName |> env.find?
     addTest $ LSpec.check s!"Symbol exists {name}" cInfo?.isSome
     match cInfo? with
     | .some cInfo =>

@@ -69,7 +69,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   lib_inspect (args: Protocol.LibInspect): MainM (CR Protocol.LibInspectResult) := do
     let state ← get
     let env ← Lean.MonadEnv.getEnv
-    let name := str_to_name args.name
+    let name :=  args.name.toName
     let info? := env.find? name
     match info? with
     | none => return .error $ errorIndex s!"Symbol not found {args.name}"
@@ -132,7 +132,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           | .error str => return .error <| errorI "elab" str
           | .ok expr => return .ok expr))
       | .none, .some copyFrom =>
-        (match env.find? <| str_to_name copyFrom with
+        (match env.find? <| copyFrom.toName with
         | .none => return .error <| errorIndex s!"Symbol not found: {copyFrom}"
         | .some cInfo => return .ok cInfo.type)
       | _, _ =>
@@ -182,7 +182,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           | .none => return .error $ errorIndex s!"Invalid state index {branchId}"
           | .some branch => pure $ target.continue branch
         | .none, .some goals =>
-          let goals := goals.map (λ name => { name := str_to_name name })
+          let goals := goals.map (λ name => { name := name.toName })
           pure $ target.resume goals
         | _, _ => return .error <| errorI "arguments" "Exactly one of {branch, goals} must be supplied"
       match nextState? with
