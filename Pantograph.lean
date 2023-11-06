@@ -143,7 +143,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
       let goalState ← GoalState.create expr
       let (goalStates, stateId) := state.goalStates.insert goalState
       set { state with goalStates }
-      return .ok { stateId }
+      return .ok { stateId, root := goalState.root.name.toString }
   goal_tactic (args: Protocol.GoalTactic): MainM (CR Protocol.GoalTacticResult) := do
     let state ← get
     match state.goalStates.get? args.stateId with

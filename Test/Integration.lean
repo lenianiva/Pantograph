@@ -91,7 +91,7 @@ def test_tactic : IO LSpec.TestSeq :=
   subroutine_runner [
     subroutine_step "goal.start"
       [("expr", .str "∀ (p q: Prop), p ∨ q → q ∨ p")]
-     (Lean.toJson ({stateId := 0}:
+     (Lean.toJson ({stateId := 0, root := "_uniq.8"}:
       Protocol.GoalStartResult)),
     subroutine_step "goal.tactic"
       [("stateId", .num 0), ("goalId", .num 0), ("tactic", .str "intro x")]

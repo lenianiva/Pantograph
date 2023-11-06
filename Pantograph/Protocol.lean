@@ -142,6 +142,8 @@ structure GoalStart where
   deriving Lean.FromJson
 structure GoalStartResult where
   stateId: Nat := 0
+  -- Name of the root metavariable
+  root: String
   deriving Lean.ToJson
 structure GoalTactic where
   -- Identifiers for tree, state, and goal
