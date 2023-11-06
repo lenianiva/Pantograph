@@ -33,7 +33,7 @@ result of a command execution.  The command can be passed in one of two formats
 command { ... }
 { "cmd": command, "payload": ... }
 ```
-The list of available commands can be found in `Pantograph/Commands.lean` and below. An
+The list of available commands can be found in `Pantograph/Protocol.lean` and below. An
 empty command aborts the REPL.
 
 The `pantograph` executable must be run with a list of modules to import. It can
@@ -54,18 +54,18 @@ Example proving a theorem: (alternatively use `goal.start {"copyFrom": "Nat.add_
 ```
 $ pantograph Init
 goal.start {"expr": "∀ (n m : Nat), n + m = m + n"}
-goal.tactic {"goalId": 0, "tactic": "intro n m"}
-goal.tactic {"goalId": 1, "tactic": "assumption"}
-goal.delete {"goalIds": [0]}
+goal.tactic {"stateId": 0, "goalId": 0, "tactic": "intro n m"}
+goal.tactic {"stateId": 1, "goalId": 0, "tactic": "assumption"}
+goal.delete {"stateIds": [0]}
 stat {}
-goal.tactic {"goalId": 1, "tactic": "rw [Nat.add_comm]"}
+goal.tactic {"stateId": 1, "goalId": 0, "tactic": "rw [Nat.add_comm]"}
 stat
 ```
 where the application of `assumption` should lead to a failure.
 
 ## Commands
 
-See `Pantograph/Commands.lean` for a description of the parameters and return values in JSON.
+See `Pantograph/Protocol.lean` for a description of the parameters and return values in JSON.
 - `reset`: Delete all cached expressions and proof trees
 - `expr.echo {"expr": <expr>}`: Determine the type of an expression and round-trip it
 - `lib.catalog`: Display a list of all safe Lean symbols in the current context
@@ -73,10 +73,11 @@ See `Pantograph/Commands.lean` for a description of the parameters and return va
   given symbol; If value flag is set, the value is printed or hidden. By default
   only the values of definitions are printed.
 - `options.set { key: value, ... }`: Set one or more options (not Lean options; those
-  have to be set via command line arguments.), for options, see `Pantograph/Commands.lean`
+  have to be set via command line arguments.), for options, see `Pantograph/Protocol.lean`
 - `options.print`: Display the current set of options
 - `goal.start {["name": <name>], ["expr": <expr>], ["copyFrom": <symbol>]}`: Start a new goal from a given expression or symbol
 - `goal.tactic {"stateId": <id>, "goalId": <id>, ["tactic": <tactic>], ["expr": <expr>]}`: Execute a tactic string on a given goal
+- `goal.continue {"stateId": <id>, ["branch": <id>], ["goals": <names>]}`: Continue from a proof state
 - `goal.remove {"stateIds": [<id>]}"`: Remove a bunch of stored goals.
 - `goal.print {"stateId": <id>}"`: Print a goal state
 - `stat`: Display resource usage
