@@ -22,7 +22,7 @@ def parseCommand (s: String): Except String Protocol.Command := do
       return { cmd := s.take offset, payload := payload }
   | .none => throw "Command is empty"
 
-unsafe def loop : MainM Unit := do
+partial def loop : MainM Unit := do
   let state ← get
   let command ← (← IO.getStdin).getLine
   if command.trim.length = 0 then return ()

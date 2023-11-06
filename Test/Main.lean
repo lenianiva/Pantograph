@@ -6,8 +6,7 @@ import Test.Serial
 
 open Pantograph.Test
 
-unsafe def main := do
-  Lean.enableInitializersExecution
+def main := do
   Lean.initSearchPath (← Lean.findSysroot)
 
   let suites := [
