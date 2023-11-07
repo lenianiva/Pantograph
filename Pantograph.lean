@@ -200,7 +200,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           goalStates := state.goalStates.insert nextStateId nextGoalState,
           nextId := state.nextId + 1
         }
-        let goals ← nextGoalState.serializeGoals (parent := .some target) (options := state.options)
+        let goals ← nextGoalState.serializeGoals (parent := .none) (options := state.options)
         return .ok {
           nextStateId? := .some nextStateId,
           goals? := .some goals,
