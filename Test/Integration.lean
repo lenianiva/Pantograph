@@ -83,10 +83,18 @@ def test_malformed_command : IO LSpec.TestSeq :=
       Protocol.InteractionError))
   ]
 def test_tactic : IO LSpec.TestSeq :=
-  let goal: Protocol.Goal := {
+  let goal1: Protocol.Goal := {
     name := "_uniq.10",
     target := { pp? := .some "∀ (q : Prop), x ∨ q → q ∨ x" },
     vars := #[{ name := "_uniq.9", userName := "x", isInaccessible? := .some false, type? := .some { pp? := .some "Prop" }}],
+  }
+  let goal2: Protocol.Goal := {
+    name := "_uniq.13",
+    target := { pp? := .some "x ∨ y → y ∨ x" },
+    vars := #[
+      { name := "_uniq.9", userName := "x", isInaccessible? := .some false, type? := .some { pp? := .some "Prop" }},
+      { name := "_uniq.12", userName := "y", isInaccessible? := .some false, type? := .some { pp? := .some "Prop" }}
+    ],
   }
   subroutine_runner [
     subroutine_step "goal.start"
@@ -97,7 +105,14 @@ def test_tactic : IO LSpec.TestSeq :=
       [("stateId", .num 0), ("goalId", .num 0), ("tactic", .str "intro x")]
      (Lean.toJson ({
        nextStateId? := .some 1,
-       goals? := #[goal],
+       goals? := #[goal1],
+     }:
+      Protocol.GoalTacticResult)),
+    subroutine_step "goal.tactic"
+      [("stateId", .num 1), ("goalId", .num 0), ("tactic", .str "intro y")]
+     (Lean.toJson ({
+       nextStateId? := .some 2,
+       goals? := #[goal2],
      }:
       Protocol.GoalTacticResult))
   ]

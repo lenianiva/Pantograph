@@ -54,7 +54,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   reset (_: Protocol.Reset): MainM (CR Protocol.StatResult) := do
     let state ← get
     let nGoals := state.goalStates.size
-    set { state with goalStates := Lean.HashMap.empty }
+    set { state with nextId := 0, goalStates := Lean.HashMap.empty }
     return .ok { nGoals }
   stat (_: Protocol.Stat): MainM (CR Protocol.StatResult) := do
     let state ← get
@@ -163,8 +163,10 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
       | .error error => return .error error
       | .ok (.success nextGoalState) =>
         let nextStateId := state.nextId
-        let goalStates := state.goalStates.insert state.nextId goalState
-        set { state with goalStates, nextId := state.nextId + 1 }
+        set { state with
+          goalStates := state.goalStates.insert state.nextId nextGoalState,
+          nextId := state.nextId + 1,
+        }
         let goals ← nextGoalState.serializeGoals (parent := .some goalState) (options := state.options)
         return .ok {
           nextStateId? := .some nextStateId,
