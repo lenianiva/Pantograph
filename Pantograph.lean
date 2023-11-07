@@ -1,8 +1,8 @@
 import Pantograph.Goal
 import Pantograph.Protocol
-import Pantograph.SemihashMap
 import Pantograph.Serial
 import Pantograph.Symbol
+import Lean.Data.HashMap
 
 namespace Pantograph
 
@@ -12,7 +12,8 @@ structure Context where
 /-- Stores state of the REPL -/
 structure State where
   options: Protocol.Options := {}
-  goalStates: SemihashMap GoalState := SemihashMap.empty
+  nextId: Nat := 0
+  goalStates: Lean.HashMap Nat GoalState := Lean.HashMap.empty
 
 /-- Main state monad for executing commands -/
 abbrev MainM := ReaderT Context (StateT State Lean.Elab.TermElabM)
@@ -52,7 +53,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   reset (_: Protocol.Reset): MainM (CR Protocol.StatResult) := do
     let state ← get
     let nGoals := state.goalStates.size
-    set { state with goalStates := SemihashMap.empty }
+    set { state with goalStates := Lean.HashMap.empty }
     return .ok { nGoals }
   stat (_: Protocol.Stat): MainM (CR Protocol.StatResult) := do
     let state ← get
@@ -140,12 +141,13 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     | .error error => return .error error
     | .ok expr =>
       let goalState ← GoalState.create expr
-      let (goalStates, stateId) := state.goalStates.insert goalState
-      set { state with goalStates }
+      let stateId := state.nextId
+      let goalStates := state.goalStates.insert stateId goalState
+      set { state with goalStates, nextId := state.nextId + 1 }
       return .ok { stateId }
   goal_tactic (args: Protocol.GoalTactic): MainM (CR Protocol.GoalTacticResult) := do
     let state ← get
-    match state.goalStates.get? args.stateId with
+    match state.goalStates.find? args.stateId with
     | .none => return .error $ errorIndex s!"Invalid state index {args.stateId}"
     | .some goalState => do
       let nextGoalState?: Except _ GoalState ← match args.tactic?, args.expr? with
@@ -157,8 +159,9 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
       match nextGoalState? with
       | .error error => return .error error
       | .ok (.success nextGoalState) =>
-        let (goalStates, nextStateId) := state.goalStates.insert nextGoalState
-        set { state with goalStates }
+        let nextStateId := state.nextId
+        let goalStates := state.goalStates.insert state.nextId goalState
+        set { state with goalStates, nextId := state.nextId + 1 }
         let goals ← nextGoalState.serializeGoals (parent := .some goalState) (options := state.options)
         return .ok {
           nextStateId? := .some nextStateId,
@@ -172,12 +175,12 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
         return .ok { tacticErrors? := .some messages }
   goal_delete (args: Protocol.GoalDelete): MainM (CR Protocol.GoalDeleteResult) := do
     let state ← get
-    let goalStates := args.stateIds.foldl (λ map id => map.remove id) state.goalStates
+    let goalStates := args.stateIds.foldl (λ map id => map.erase id) state.goalStates
     set { state with goalStates }
     return .ok {}
   goal_print (args: Protocol.GoalPrint): MainM (CR Protocol.GoalPrintResult) := do
     let state ← get
-    match state.goalStates.get? args.stateId with
+    match state.goalStates.find? args.stateId with
     | .none => return .error $ errorIndex s!"Invalid state index {args.stateId}"
     | .some goalState => do
       let root? ← goalState.rootExpr?.mapM (λ expr => serialize_expression state.options expr)
