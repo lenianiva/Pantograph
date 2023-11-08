@@ -30,16 +30,17 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
       | .error ierror => return Lean.toJson ierror
     | .error error => return Lean.toJson $ errorCommand s!"Unable to parse json: {error}"
   match command.cmd with
-  | "reset"          => run reset
-  | "stat"           => run stat
-  | "expr.echo"      => run expr_echo
-  | "lib.catalog"    => run lib_catalog
-  | "lib.inspect"    => run lib_inspect
-  | "options.set"    => run options_set
-  | "options.print"  => run options_print
-  | "goal.start"     => run goal_start
-  | "goal.tactic"    => run goal_tactic
-  | "goal.delete"    => run goal_delete
+  | "reset"         => run reset
+  | "stat"          => run stat
+  | "expr.echo"     => run expr_echo
+  | "lib.catalog"   => run lib_catalog
+  | "lib.inspect"   => run lib_inspect
+  | "options.set"   => run options_set
+  | "options.print" => run options_print
+  | "goal.start"    => run goal_start
+  | "goal.tactic"   => run goal_tactic
+  | "goal.continue" => run goal_continue
+  | "goal.delete"   => run goal_delete
   | "goal.print"    => run goal_print
   | cmd =>
     let error: Protocol.InteractionError :=
@@ -53,7 +54,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   reset (_: Protocol.Reset): MainM (CR Protocol.StatResult) := do
     let state ← get
     let nGoals := state.goalStates.size
-    set { state with goalStates := Lean.HashMap.empty }
+    set { state with nextId := 0, goalStates := Lean.HashMap.empty }
     return .ok { nGoals }
   stat (_: Protocol.Stat): MainM (CR Protocol.StatResult) := do
     let state ← get
@@ -69,7 +70,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   lib_inspect (args: Protocol.LibInspect): MainM (CR Protocol.LibInspectResult) := do
     let state ← get
     let env ← Lean.MonadEnv.getEnv
-    let name := str_to_name args.name
+    let name :=  args.name.toName
     let info? := env.find? name
     match info? with
     | none => return .error $ errorIndex s!"Symbol not found {args.name}"
@@ -132,7 +133,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           | .error str => return .error <| errorI "elab" str
           | .ok expr => return .ok expr))
       | .none, .some copyFrom =>
-        (match env.find? <| str_to_name copyFrom with
+        (match env.find? <| copyFrom.toName with
         | .none => return .error <| errorIndex s!"Symbol not found: {copyFrom}"
         | .some cInfo => return .ok cInfo.type)
       | _, _ =>
@@ -142,9 +143,11 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     | .ok expr =>
       let goalState ← GoalState.create expr
       let stateId := state.nextId
-      let goalStates := state.goalStates.insert stateId goalState
-      set { state with goalStates, nextId := state.nextId + 1 }
-      return .ok { stateId }
+      set { state with
+        goalStates := state.goalStates.insert stateId goalState,
+        nextId := state.nextId + 1
+      }
+      return .ok { stateId, root := goalState.root.name.toString }
   goal_tactic (args: Protocol.GoalTactic): MainM (CR Protocol.GoalTacticResult) := do
     let state ← get
     match state.goalStates.find? args.stateId with
@@ -160,8 +163,10 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
       | .error error => return .error error
       | .ok (.success nextGoalState) =>
         let nextStateId := state.nextId
-        let goalStates := state.goalStates.insert state.nextId goalState
-        set { state with goalStates, nextId := state.nextId + 1 }
+        set { state with
+          goalStates := state.goalStates.insert state.nextId nextGoalState,
+          nextId := state.nextId + 1,
+        }
         let goals ← nextGoalState.serializeGoals (parent := .some goalState) (options := state.options)
         return .ok {
           nextStateId? := .some nextStateId,
@@ -173,6 +178,33 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
         return .error $ errorIndex s!"Invalid goal id index {goalId}"
       | .ok (.failure messages) =>
         return .ok { tacticErrors? := .some messages }
+  goal_continue (args: Protocol.GoalContinue): MainM (CR Protocol.GoalContinueResult) := do
+    let state ← get
+    match state.goalStates.find? args.target with
+    | .none => return .error $ errorIndex s!"Invalid state index {args.target}"
+    | .some target => do
+      let nextState? ← match args.branch?, args.goals? with
+        | .some branchId, .none => do
+          match state.goalStates.find? branchId with
+          | .none => return .error $ errorIndex s!"Invalid state index {branchId}"
+          | .some branch => pure $ target.continue branch
+        | .none, .some goals =>
+          let goals := goals.map (λ name => { name := name.toName })
+          pure $ target.resume goals
+        | _, _ => return .error <| errorI "arguments" "Exactly one of {branch, goals} must be supplied"
+      match nextState? with
+      | .error error => return .ok { error? := .some error }
+      | .ok nextGoalState =>
+        let nextStateId := state.nextId
+        set { state with
+          goalStates := state.goalStates.insert nextStateId nextGoalState,
+          nextId := state.nextId + 1
+        }
+        let goals ← nextGoalState.serializeGoals (parent := .none) (options := state.options)
+        return .ok {
+          nextStateId? := .some nextStateId,
+          goals? := .some goals,
+        }
   goal_delete (args: Protocol.GoalDelete): MainM (CR Protocol.GoalDeleteResult) := do
     let state ← get
     let goalStates := args.stateIds.foldl (λ map id => map.erase id) state.goalStates

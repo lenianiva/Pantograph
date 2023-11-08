@@ -2,10 +2,6 @@ import Lean.Declaration
 
 namespace Pantograph
 
-/-- Converts a symbol of the form `aa.bb.cc` to a name -/
-def str_to_name (s: String): Lean.Name :=
-  (s.splitOn ".").foldl Lean.Name.str Lean.Name.anonymous
-
 def is_symbol_unsafe_or_internal (n: Lean.Name) (info: Lean.ConstantInfo): Bool :=
   let nameDeduce: Bool := match n.getRoot with
   | .str _ name => name.startsWith "_" ∨ name == "Lean"

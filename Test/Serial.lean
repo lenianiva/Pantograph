@@ -9,9 +9,6 @@ open Lean
 
 deriving instance Repr, DecidableEq for Protocol.BoundExpression
 
-def test_str_to_name: LSpec.TestSeq :=
-  LSpec.test "Symbol parsing" (Name.str (.str (.str .anonymous "Lean") "Meta") "run" = Pantograph.str_to_name "Lean.Meta.run")
-
 def test_name_to_ast: LSpec.TestSeq :=
   let quote := "\""
   let escape := "\\"
@@ -21,14 +18,14 @@ def test_name_to_ast: LSpec.TestSeq :=
   LSpec.test s!"«̈{escape}{quote}»" (name_to_ast (Name.str .anonymous s!"{escape}{quote}") = s!"{quote}«{escape}{quote}»{quote}")
 
 def test_expr_to_binder (env: Environment): IO LSpec.TestSeq := do
-  let entries: List (String × Protocol.BoundExpression) := [
-    ("Nat.add_comm", { binders := #[("n", "Nat"), ("m", "Nat")], target := "n + m = m + n" }),
-    ("Nat.le_of_succ_le", { binders := #[("n", "Nat"), ("m", "Nat"), ("h", "Nat.succ n ≤ m")], target := "n ≤ m" })
+  let entries: List (Name × Protocol.BoundExpression) := [
+    ("Nat.add_comm".toName, { binders := #[("n", "Nat"), ("m", "Nat")], target := "n + m = m + n" }),
+    ("Nat.le_of_succ_le".toName, { binders := #[("n", "Nat"), ("m", "Nat"), ("h", "Nat.succ n ≤ m")], target := "n ≤ m" })
   ]
-  let coreM := entries.foldlM (λ suites (symbol, target) => do
+  let coreM: CoreM LSpec.TestSeq := entries.foldlM (λ suites (symbol, target) => do
     let env ← MonadEnv.getEnv
-    let expr := str_to_name symbol |> env.find? |>.get! |>.type
-    let test := LSpec.check symbol ((← type_expr_to_bound expr) = target)
+    let expr := env.find? symbol |>.get! |>.type
+    let test := LSpec.check symbol.toString ((← type_expr_to_bound expr) = target)
     return LSpec.TestSeq.append suites test) LSpec.TestSeq.done |>.run'
   let coreContext: Core.Context := {
     currNamespace := Lean.Name.str .anonymous "Aniva"
@@ -54,7 +51,7 @@ def test_sexp_of_symbol (env: Environment): IO LSpec.TestSeq := do
   ]
   let metaM: MetaM LSpec.TestSeq := entries.foldlM (λ suites (symbol, target) => do
     let env ← MonadEnv.getEnv
-    let expr := str_to_name symbol |> env.find? |>.get! |>.type
+    let expr := env.find? symbol.toName |>.get! |>.type
     let test := LSpec.check symbol ((serialize_expression_ast expr) = target)
     return LSpec.TestSeq.append suites test) LSpec.TestSeq.done
   let coreM := metaM.run'
@@ -72,12 +69,11 @@ def test_sexp_of_symbol (env: Environment): IO LSpec.TestSeq := do
 
 def suite: IO LSpec.TestSeq := do
   let env: Environment ← importModules
-    (imports := #["Init"].map (λ str => { module := str_to_name str, runtimeOnly := false }))
+    (imports := #["Init"].map (λ str => { module := str.toName, runtimeOnly := false }))
     (opts := {})
     (trustLevel := 1)
 
   return LSpec.group "Serialization" $
-    (LSpec.group "str_to_name" test_str_to_name) ++
     (LSpec.group "name_to_ast" test_name_to_ast) ++
     (LSpec.group "Expression binder" (← test_expr_to_binder env)) ++
     (LSpec.group "Sexp from symbol" (← test_sexp_of_symbol env))

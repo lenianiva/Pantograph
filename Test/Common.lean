@@ -1,4 +1,6 @@
 import Pantograph.Protocol
+import Pantograph.Goal
+import LSpec
 
 namespace Pantograph
 
@@ -15,6 +17,19 @@ def Goal.devolatilize (goal: Goal): Goal :=
       v with
       name := ""
     }
+deriving instance DecidableEq, Repr for Expression
+deriving instance DecidableEq, Repr for Variable
+deriving instance DecidableEq, Repr for Goal
 end Protocol
+
+def TacticResult.toString : TacticResult → String
+  | .success state => s!".success ({state.goals.length} goals)"
+  | .failure messages =>
+    let messages := "\n".intercalate messages.toList
+    s!".failure {messages}"
+  | .parseError error => s!".parseError {error}"
+  | .indexError index => s!".indexError {index}"
+
+def assertUnreachable (message: String): LSpec.TestSeq := LSpec.check message false
 
 end Pantograph
