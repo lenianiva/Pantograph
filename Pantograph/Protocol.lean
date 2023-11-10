@@ -176,9 +176,8 @@ structure GoalContinue where
   goals?: Option (List String) := .none
   deriving Lean.FromJson
 structure GoalContinueResult where
-  error?: Option String := .none
-  nextStateId?: Option Nat := .none
-  goals?: Option (Array Goal) := .none
+  nextStateId: Nat
+  goals: (Array Goal)
   deriving Lean.ToJson
 
 -- Remove goal states

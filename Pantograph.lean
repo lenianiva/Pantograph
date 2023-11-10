@@ -193,7 +193,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           pure $ target.resume goals
         | _, _ => return .error <| errorI "arguments" "Exactly one of {branch, goals} must be supplied"
       match nextState? with
-      | .error error => return .ok { error? := .some error }
+      | .error error => return .error <| errorI "structure" error
       | .ok nextGoalState =>
         let nextStateId := state.nextId
         set { state with
@@ -202,8 +202,8 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
         }
         let goals ← nextGoalState.serializeGoals (parent := .none) (options := state.options)
         return .ok {
-          nextStateId? := .some nextStateId,
-          goals? := .some goals,
+          nextStateId,
+          goals,
         }
   goal_delete (args: Protocol.GoalDelete): MainM (CR Protocol.GoalDeleteResult) := do
     let state ← get
