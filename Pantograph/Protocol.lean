@@ -113,11 +113,15 @@ structure LibInspect where
   -- If true/false, show/hide the value expressions; By default definitions
   -- values are shown and theorem values are hidden.
   value?: Option Bool := .some false
+  -- If true, show the type and value dependencies
+  dependency?: Option Bool := .some false
   deriving Lean.FromJson
 structure LibInspectResult where
   type: Expression
   value?: Option Expression := .none
   module?: Option String
+  typeDependency?: Option (Array String) := .none
+  valueDependency?: Option (Array String) := .none
   deriving Lean.ToJson
 
 /-- Set options; See `Options` struct above for meanings -/
