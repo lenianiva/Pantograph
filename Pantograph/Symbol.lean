@@ -22,7 +22,7 @@ def to_compact_symbol_name (n: Lean.Name) (info: Lean.ConstantInfo): String :=
   | .inductInfo _ => "i"
   | .ctorInfo   _ => "c"
   | .recInfo    _ => "r"
-  s!"{pref}|{toString n}"
+  s!"{pref}{toString n}"
 
 def to_filtered_symbol (n: Lean.Name) (info: Lean.ConstantInfo): Option String :=
   if is_symbol_unsafe_or_internal n info
