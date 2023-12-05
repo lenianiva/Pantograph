@@ -4,7 +4,7 @@ namespace Pantograph
 
 def is_symbol_unsafe_or_internal (n: Lean.Name) (info: Lean.ConstantInfo): Bool :=
   let nameDeduce: Bool := match n.getRoot with
-  | .str _ name => name.startsWith "_" ∨ name == "Lean"
+  | .str _ name => name == "Lean"
   | _ => true
   nameDeduce ∨ info.isUnsafe
 
