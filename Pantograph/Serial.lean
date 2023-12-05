@@ -84,67 +84,70 @@ partial def serialize_sort_level_ast (level: Level) (sanitize: Bool): String :=
 /--
  Completely serializes an expression tree. Json not used due to compactness
 -/
-partial def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): String :=
+partial def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): MetaM String := do
   self expr
   where
-  self (e: Expr): String :=
+  self (e: Expr): MetaM String :=
     match e with
     | .bvar deBruijnIndex =>
       -- This is very common so the index alone is shown. Literals are handled below.
       -- The raw de Bruijn index should never appear in an unbound setting. In
       -- Lean these are handled using a `#` prefix.
-      s!"{deBruijnIndex}"
+      pure s!"{deBruijnIndex}"
     | .fvar fvarId =>
       let name := of_name fvarId.name
-      s!"(:fv {name})"
+      pure s!"(:fv {name})"
     | .mvar mvarId =>
       let name := of_name mvarId.name
-      s!"(:mv {name})"
+      pure s!"(:mv {name})"
     | .sort level =>
       let level := serialize_sort_level_ast level sanitize
-      s!"(:sort {level})"
+      pure s!"(:sort {level})"
     | .const declName _ =>
       -- The universe level of the const expression is elided since it should be
       -- inferrable from surrounding expression
-      s!"(:c {declName})"
-    | .app _ _ =>
-      let fn' := self e.getAppFn
-      let args := e.getAppArgs.map self |>.toList
+      pure s!"(:c {declName})"
+    | .app _ _ => do
+      let fn' ← self e.getAppFn
+      let args := (← e.getAppArgs.mapM self) |>.toList
       let args := " ".intercalate args
-      s!"({fn'} {args})"
-    | .lam binderName binderType body binderInfo =>
+      pure s!"({fn'} {args})"
+    | .lam binderName binderType body binderInfo => do
       let binderName' := of_name binderName
-      let binderType' := self binderType
-      let body' := self body
+      let binderType' ← self binderType
+      let body' ← self body
       let binderInfo' := binder_info_to_ast binderInfo
-      s!"(:lambda {binderName'} {binderType'} {body'}{binderInfo'})"
-    | .forallE binderName binderType body binderInfo =>
+      pure s!"(:lambda {binderName'} {binderType'} {body'}{binderInfo'})"
+    | .forallE binderName binderType body binderInfo => do
       let binderName' := of_name binderName
-      let binderType' := self binderType
-      let body' := self body
+      let binderType' ← self binderType
+      let body' ← self body
       let binderInfo' := binder_info_to_ast binderInfo
-      s!"(:forall {binderName'} {binderType'} {body'}{binderInfo'})"
-    | .letE name type value body _ =>
+      pure s!"(:forall {binderName'} {binderType'} {body'}{binderInfo'})"
+    | .letE name type value body _ => do
       -- Dependent boolean flag diacarded
       let name' := name_to_ast name
-      let type' := self type
-      let value' := self value
-      let body' := self body
-      s!"(:let {name'} {type'} {value'} {body'})"
+      let type' ← self type
+      let value' ← self value
+      let body' ← self body
+      pure s!"(:let {name'} {type'} {value'} {body'})"
     | .lit v =>
       -- To not burden the downstream parser who needs to handle this, the literal
       -- is wrapped in a :lit sexp.
       let v' := match v with
         | .natVal val => toString val
         | .strVal val => s!"\"{val}\""
-      s!"(:lit {v'})"
+      pure s!"(:lit {v'})"
     | .mdata _ inner =>
       -- NOTE: Equivalent to expr itself, but mdata influences the prettyprinter
       -- It may become necessary to incorporate the metadata.
       self inner
-    | .proj typeName idx struct =>
-      let struct' := self struct
-      s!"(:proj {typeName} {idx} {struct'})"
+    | .proj typeName idx inner => do
+      let env ← getEnv
+      let fieldName := getStructureFields env typeName |>.get! idx
+      let inner ← Meta.mkProjection inner fieldName
+      assert! !inner.isProj
+      self inner
   -- Elides all unhygenic names
   binder_info_to_ast : Lean.BinderInfo → String
     | .default => ""
@@ -158,7 +161,7 @@ def serialize_expression (options: Protocol.Options) (e: Expr): MetaM Protocol.E
   let pp?: Option String := match options.printExprPretty with
     | true => .some pp
     | false => .none
-  let sexp: String := serialize_expression_ast e
+  let sexp: String ← serialize_expression_ast e
   let sexp?: Option String := match options.printExprAST with
     | true => .some sexp
     | false => .none
@@ -287,7 +290,7 @@ protected def GoalState.print (goalState: GoalState) (options: Protocol.GoalDiag
     printMVar (pref: String) (mvarId: MVarId) (decl: MetavarDecl): MetaM Unit := do
       if options.printContext then
         decl.lctx.fvarIdToDecl.forM printFVar
-      let type_sexp := serialize_expression_ast (← instantiateMVars decl.type) (sanitize := false)
+      let type_sexp ← serialize_expression_ast (← instantiateMVars decl.type) (sanitize := false)
       IO.println s!"{pref}{mvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type} {type_sexp}"
       if options.printValue then
         if let Option.some value := (← getMCtx).eAssignment.find? mvarId then
