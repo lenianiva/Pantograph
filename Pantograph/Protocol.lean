@@ -120,6 +120,8 @@ structure LibInspectResult where
   type: Expression
   value?: Option Expression := .none
   module?: Option String
+  -- If the name is private, displays the public facing name
+  publicName?: Option String := .none
   typeDependency?: Option (Array String) := .none
   valueDependency?: Option (Array String) := .none
   deriving Lean.ToJson
