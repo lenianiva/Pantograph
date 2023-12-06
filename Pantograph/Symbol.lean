@@ -1,16 +1,13 @@
-import Lean.Declaration
+import Lean
 
 namespace Pantograph
 
 def is_symbol_unsafe_or_internal (n: Lean.Name) (info: Lean.ConstantInfo): Bool :=
-  let nameDeduce: Bool := match n.getRoot with
-  | .str _ name => name.startsWith "_" ∨ name == "Lean"
-  | _ => true
-  let stemDeduce: Bool := match n with
-  | .anonymous => true
-  | .str _ name => name.startsWith "_"
-  | .num _ _ => true
-  nameDeduce ∨ stemDeduce ∨ info.isUnsafe
+  isLeanSymbol n ∨ (Lean.privateToUserName? n |>.map isLeanSymbol |>.getD false) ∨ info.isUnsafe
+  where
+  isLeanSymbol (name: Lean.Name): Bool := match name.getRoot with
+    | .str _ name => name == "Lean"
+    | _ => true
 
 def to_compact_symbol_name (n: Lean.Name) (info: Lean.ConstantInfo): String :=
   let pref := match info with
