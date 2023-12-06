@@ -52,7 +52,7 @@ def test_sexp_of_symbol (env: Environment): IO LSpec.TestSeq := do
   let metaM: MetaM LSpec.TestSeq := entries.foldlM (λ suites (symbol, target) => do
     let env ← MonadEnv.getEnv
     let expr := env.find? symbol.toName |>.get! |>.type
-    let test := LSpec.check symbol ((serialize_expression_ast expr) = target)
+    let test := LSpec.check symbol ((← serialize_expression_ast expr) = target)
     return LSpec.TestSeq.append suites test) LSpec.TestSeq.done
   let coreM := metaM.run'
   let coreContext: Core.Context := {
@@ -66,6 +66,32 @@ def test_sexp_of_symbol (env: Environment): IO LSpec.TestSeq := do
     return LSpec.test "Exception" (s!"internal exception #{← exception.toMessageData.toString}" = "")
   | .ok a            => return a
 
+def test_sexp_of_expr (env: Environment): IO LSpec.TestSeq := do
+  let entries: List (String × String) := [
+    ("λ x: Nat × Bool => x.1", "(:lambda x ((:c Prod) (:c Nat) (:c Bool)) ((:c Prod.fst) (:c Nat) (:c Bool) 0))"),
+    ("λ x: Array Nat => x.data", "(:lambda x ((:c Array) (:c Nat)) ((:c Array.data) (:c Nat) 0))")
+  ]
+  let termElabM: Elab.TermElabM LSpec.TestSeq := entries.foldlM (λ suites (source, target) => do
+    let env ← MonadEnv.getEnv
+    let s := syntax_from_str env source |>.toOption |>.get!
+    let expr := (← syntax_to_expr s) |>.toOption |>.get!
+    let test := LSpec.check source ((← serialize_expression_ast expr) = target)
+    return LSpec.TestSeq.append suites test) LSpec.TestSeq.done
+  let metaM := termElabM.run' (ctx := {
+    declName? := some "_pantograph",
+    errToSorry := false
+  })
+  let coreM := metaM.run'
+  let coreContext: Core.Context := {
+    currNamespace := Lean.Name.str .anonymous "Aniva"
+    openDecls := [],     -- No 'open' directives needed
+    fileName := "<Pantograph/Test>",
+    fileMap := { source := "", positions := #[0], lines := #[1] }
+  }
+  match ← (coreM.run' coreContext { env := env }).toBaseIO with
+  | .error exception =>
+    return LSpec.test "Exception" (s!"internal exception #{← exception.toMessageData.toString}" = "")
+  | .ok a            => return a
 
 def suite: IO LSpec.TestSeq := do
   let env: Environment ← importModules
@@ -76,6 +102,7 @@ def suite: IO LSpec.TestSeq := do
   return LSpec.group "Serialization" $
     (LSpec.group "name_to_ast" test_name_to_ast) ++
     (LSpec.group "Expression binder" (← test_expr_to_binder env)) ++
-    (LSpec.group "Sexp from symbol" (← test_sexp_of_symbol env))
+    (LSpec.group "Sexp from symbol" (← test_sexp_of_symbol env)) ++
+    (LSpec.group "Sexp from expr" (← test_sexp_of_expr env))
 
 end Pantograph.Test.Serial
