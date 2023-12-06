@@ -85,7 +85,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
       return .ok {
         type := ← serialize_expression state.options info.type,
         value? := ← value?.mapM (λ v => serialize_expression state.options v),
-        isPrivate := Lean.isPrivateName name,
+        publicName? := Lean.privateToUserName? name |>.map (·.toString),
         typeDependency? := if args.dependency?.getD false then .some <| info.type.getUsedConstants.map (λ n => name_to_ast n) else .none,
         valueDependency? := if args.dependency?.getD false then info.value?.map (·.getUsedConstants.map (λ n => name_to_ast n)) else .none,
         module? := module?
