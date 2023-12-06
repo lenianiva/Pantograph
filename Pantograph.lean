@@ -86,6 +86,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
         type := ← serialize_expression state.options info.type,
         value? := ← value?.mapM (λ v => serialize_expression state.options v),
         publicName? := Lean.privateToUserName? name |>.map (·.toString),
+        -- BUG: Warning: getUsedConstants here will not include projections. This is a known bug.
         typeDependency? := if args.dependency?.getD false then .some <| info.type.getUsedConstants.map (λ n => name_to_ast n) else .none,
         valueDependency? := if args.dependency?.getD false then info.value?.map (·.getUsedConstants.map (λ n => name_to_ast n)) else .none,
         module? := module?
