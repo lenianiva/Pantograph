@@ -52,7 +52,7 @@ def test_option_modify : IO LSpec.TestSeq :=
     subroutine_step "lib.inspect"
       [("name", .str "Nat.add_one")]
      (Lean.toJson ({
-       type := { pp? }, module? }:
+       type := { pp? }, module?, isPrivate := false }:
       Protocol.LibInspectResult)),
     subroutine_step "options.set"
       [("printExprAST", .bool true)]
@@ -61,7 +61,7 @@ def test_option_modify : IO LSpec.TestSeq :=
     subroutine_step "lib.inspect"
       [("name", .str "Nat.add_one")]
      (Lean.toJson ({
-       type := { pp?, sexp? }, module? }:
+       type := { pp?, sexp? }, module?, isPrivate := false }:
       Protocol.LibInspectResult)),
     subroutine_step "options.print"
       []

@@ -120,6 +120,7 @@ structure LibInspectResult where
   type: Expression
   value?: Option Expression := .none
   module?: Option String
+  isPrivate: Bool
   typeDependency?: Option (Array String) := .none
   valueDependency?: Option (Array String) := .none
   deriving Lean.ToJson
