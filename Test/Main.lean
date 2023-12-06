@@ -1,4 +1,5 @@
 import LSpec
+import Test.Catalog
 import Test.Holes
 import Test.Integration
 import Test.Proofs
@@ -13,7 +14,8 @@ def main := do
     Holes.suite,
     Integration.suite,
     Proofs.suite,
-    Serial.suite
+    Serial.suite,
+    Catalog.suite
   ]
   let all ← suites.foldlM (λ acc m => do pure $ acc ++ (← m)) LSpec.TestSeq.done
   LSpec.lspecIO $ all
