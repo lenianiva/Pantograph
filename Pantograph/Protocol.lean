@@ -119,7 +119,7 @@ structure LibInspect where
 structure LibInspectResult where
   type: Expression
   value?: Option Expression := .none
-  module?: Option String
+  module?: Option String    := .none
   -- If the name is private, displays the public facing name
   publicName?: Option String := .none
   typeDependency?: Option (Array String) := .none
