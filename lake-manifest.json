@@ -1,4 +1,4 @@
-{"version": 5,
+{"version": 6,
  "packagesDir": "lake-packages",
  "packages":
  [{"git":
@@ -8,4 +8,5 @@
     "opts": {},
     "name": "LSpec",
     "inputRev?": "88f7d23e56a061d32c7173cea5befa4b2c248b41",
-    "inherited": false}}]}
+    "inherited": false}}],
+ "name": "pantograph"}

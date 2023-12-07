@@ -145,9 +145,9 @@ partial def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): Meta
     | .proj typeName idx inner => do
       let env ← getEnv
       let fieldName := getStructureFields env typeName |>.get! idx
-      let inner ← Meta.mkProjection inner fieldName
-      assert! !inner.isProj
-      self inner
+      let projectorName := getProjFnForField? env typeName fieldName |>.get!
+      let e := Expr.app (.const  projectorName []) inner
+      self e
   -- Elides all unhygenic names
   binder_info_to_ast : Lean.BinderInfo → String
     | .default => ""
