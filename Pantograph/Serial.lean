@@ -26,6 +26,7 @@ def syntax_from_str (env: Environment) (s: String): Except String Syntax :=
     (fileName := "<stdin>")
 
 
+/-- Parse a syntax object. May generate additional metavariables! -/
 def syntax_to_expr_type (syn: Syntax): Elab.TermElabM (Except String Expr) := do
   try
     let expr ← Elab.Term.elabType syn
