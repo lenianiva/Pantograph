@@ -242,8 +242,8 @@ def serialize_goal (options: Protocol.Options) (goal: MVarId) (mvarDecl: Metavar
   of_name (n: Name) := name_to_ast n (sanitize := false)
 
 protected def GoalState.serializeGoals (state: GoalState) (parent: Option GoalState := .none) (options: Protocol.Options := {}): MetaM (Array Protocol.Goal):= do
+  state.restoreMetaM
   let goals := state.goals.toArray
-  state.savedState.term.meta.restore
   let parentDecl? := parent.bind (λ parentState =>
     let parentGoal := parentState.goals.get! state.parentGoalId
     parentState.mctx.findDecl? parentGoal)
@@ -256,8 +256,8 @@ protected def GoalState.serializeGoals (state: GoalState) (parent: Option GoalSt
 
 /-- Print the metavariables in a readable format -/
 protected def GoalState.print (goalState: GoalState) (options: Protocol.GoalDiag := {}): MetaM Unit := do
+  goalState.restoreMetaM
   let savedState := goalState.savedState
-  savedState.term.meta.restore
   let goals := savedState.tactic.goals
   let mctx ← getMCtx
   let root := goalState.root

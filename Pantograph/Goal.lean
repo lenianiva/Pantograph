@@ -51,6 +51,10 @@ protected def GoalState.env (state: GoalState): Environment :=
   state.savedState.term.meta.core.env
 private def GoalState.mvars (state: GoalState): SSet MVarId :=
   state.mctx.decls.foldl (init := .empty) fun acc k _ => acc.insert k
+private def GoalState.restoreElabM (state: GoalState): Elab.TermElabM Unit :=
+  state.savedState.term.restore
+def GoalState.restoreMetaM (state: GoalState): MetaM Unit :=
+  state.savedState.term.meta.restore
 
 /-- Inner function for executing tactic on goal state -/
 def executeTactic (state: Elab.Tactic.SavedState) (goal: MVarId) (tactic: Syntax) :
@@ -84,6 +88,7 @@ inductive TacticResult where
 /-- Execute tactic on given state -/
 protected def GoalState.execute (state: GoalState) (goalId: Nat) (tactic: String):
     M TacticResult := do
+  state.restoreElabM
   let goal ← match state.savedState.tactic.goals.get? goalId with
     | .some goal => pure $ goal
     | .none => return .indexError goalId
@@ -118,6 +123,7 @@ protected def GoalState.execute (state: GoalState) (goalId: Nat) (tactic: String
     }
 
 protected def GoalState.tryAssign (state: GoalState) (goalId: Nat) (expr: String): M TacticResult := do
+  state.restoreElabM
   let goal ← match state.savedState.tactic.goals.get? goalId with
     | .some goal => pure goal
     | .none => return .indexError goalId
