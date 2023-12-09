@@ -33,11 +33,7 @@ def subroutine_runner (steps: List (MainM LSpec.TestSeq)): IO LSpec.TestSeq := d
       let result ← step
       return suite ++ result) LSpec.TestSeq.done
   try
-    let termElabM := commands.run context |>.run' {}
-    let metaM := termElabM.run' (ctx := {
-      declName? := some "_pantograph",
-      errToSorry := false
-    })
+    let metaM := commands.run context |>.run' {}
     let coreM := metaM.run'
     return Prod.fst $ (← coreM.toIO coreContext { env := env })
   catch ex =>

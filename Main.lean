@@ -102,11 +102,7 @@ unsafe def main (args: List String): IO Unit := do
     options := options
   }
   try
-    let termElabM := loop.run context |>.run' {}
-    let metaM := termElabM.run' (ctx := {
-      declName? := some "_pantograph",
-      errToSorry := false
-    })
+    let metaM := loop.run context |>.run' {}
     let coreM := metaM.run'
     IO.println "ready."
     discard <| coreM.toIO coreContext { env := env }
