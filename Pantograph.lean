@@ -16,10 +16,16 @@ structure State where
   goalStates: Lean.HashMap Nat GoalState := Lean.HashMap.empty
 
 /-- Main state monad for executing commands -/
-abbrev MainM := ReaderT Context (StateT State Lean.Elab.TermElabM)
+abbrev MainM := ReaderT Context (StateT State Lean.MetaM)
 -- HACK: For some reason writing `CommandM α := MainM (Except ... α)` disables
 -- certain monadic features in `MainM`
 abbrev CR α := Except Protocol.InteractionError α
+
+def runTermElabM { α } (termElabM: Lean.Elab.TermElabM α): Lean.MetaM α :=
+  termElabM.run' (ctx := {
+    declName? := .none,
+    errToSorry := false,
+  })
 
 def execute (command: Protocol.Command): MainM Lean.Json := do
   let run { α β: Type } [Lean.FromJson α] [Lean.ToJson β] (comm: α → MainM (CR β)): MainM Lean.Json :=
@@ -97,7 +103,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     match syntax_from_str env args.expr with
     | .error str => return .error $ errorI "parsing" str
     | .ok syn => do
-      match (← syntax_to_expr syn) with
+      match ← runTermElabM <| syntax_to_expr syn with
       | .error str => return .error $ errorI "elab" str
       | .ok expr => do
         try
@@ -133,7 +139,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
         (match syntax_from_str env expr with
         | .error str => return .error <| errorI "parsing" str
         | .ok syn => do
-          (match (← syntax_to_expr syn) with
+          (match ← runTermElabM <| syntax_to_expr syn with
           | .error str => return .error <| errorI "elab" str
           | .ok expr => return .ok expr))
       | .none, .some copyFrom =>
@@ -145,7 +151,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     match expr? with
     | .error error => return .error error
     | .ok expr =>
-      let goalState ← GoalState.create expr
+      let goalState ← runTermElabM <| GoalState.create expr
       let stateId := state.nextId
       set { state with
         goalStates := state.goalStates.insert stateId goalState,
@@ -159,9 +165,9 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     | .some goalState => do
       let nextGoalState?: Except _ GoalState ← match args.tactic?, args.expr? with
         | .some tactic, .none => do
-          pure ( Except.ok (← GoalState.execute goalState args.goalId tactic))
+          pure ( Except.ok (← runTermElabM <| GoalState.execute goalState args.goalId tactic))
         | .none, .some expr => do
-          pure ( Except.ok (← GoalState.tryAssign goalState args.goalId expr))
+          pure ( Except.ok (← runTermElabM <| GoalState.tryAssign goalState args.goalId expr))
         | _, _ => pure (Except.error <| errorI "arguments" "Exactly one of {tactic, expr} must be supplied")
       match nextGoalState? with
       | .error error => return .error error
