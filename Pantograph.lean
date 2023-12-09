@@ -134,24 +134,23 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   goal_start (args: Protocol.GoalStart): MainM (CR Protocol.GoalStartResult) := do
     let state ← get
     let env ← Lean.MonadEnv.getEnv
-    let expr?: Except _ Lean.Expr ← (match args.expr, args.copyFrom with
+    let expr?: Except _ GoalState ← runTermElabM (match args.expr, args.copyFrom with
       | .some expr, .none =>
         (match syntax_from_str env expr with
         | .error str => return .error <| errorI "parsing" str
         | .ok syn => do
-          (match ← runTermElabM <| syntax_to_expr syn with
+          (match ← syntax_to_expr syn with
           | .error str => return .error <| errorI "elab" str
-          | .ok expr => return .ok expr))
+          | .ok expr => return .ok (← GoalState.create expr)))
       | .none, .some copyFrom =>
         (match env.find? <| copyFrom.toName with
         | .none => return .error <| errorIndex s!"Symbol not found: {copyFrom}"
-        | .some cInfo => return .ok cInfo.type)
+        | .some cInfo => return .ok (← GoalState.create cInfo.type))
       | _, _ =>
         return .error <| errorI "arguments" "Exactly one of {expr, copyFrom} must be supplied")
     match expr? with
     | .error error => return .error error
-    | .ok expr =>
-      let goalState ← runTermElabM <| GoalState.create expr
+    | .ok goalState =>
       let stateId := state.nextId
       set { state with
         goalStates := state.goalStates.insert stateId goalState,
@@ -225,6 +224,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     match state.goalStates.find? args.stateId with
     | .none => return .error $ errorIndex s!"Invalid state index {args.stateId}"
     | .some goalState => do
+      goalState.restoreMetaM
       let root? ← goalState.rootExpr?.mapM (λ expr => serialize_expression state.options expr)
       return .ok {
         root?,
