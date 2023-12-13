@@ -102,8 +102,7 @@ unsafe def main (args: List String): IO Unit := do
     options := options
   }
   try
-    let metaM := loop.run context |>.run' {}
-    let coreM := metaM.run'
+    let coreM := loop.run context |>.run' {}
     IO.println "ready."
     discard <| coreM.toIO coreContext { env := env }
   catch ex =>

@@ -16,16 +16,18 @@ structure State where
   goalStates: Lean.HashMap Nat GoalState := Lean.HashMap.empty
 
 /-- Main state monad for executing commands -/
-abbrev MainM := ReaderT Context (StateT State Lean.MetaM)
+abbrev MainM := ReaderT Context (StateT State Lean.CoreM)
 -- HACK: For some reason writing `CommandM α := MainM (Except ... α)` disables
 -- certain monadic features in `MainM`
 abbrev CR α := Except Protocol.InteractionError α
 
-def runTermElabM { α } (termElabM: Lean.Elab.TermElabM α): Lean.MetaM α :=
+def runMetaM { α } (metaM: Lean.MetaM α): Lean.CoreM α :=
+  metaM.run'
+def runTermElabM { α } (termElabM: Lean.Elab.TermElabM α): Lean.CoreM α :=
   termElabM.run' (ctx := {
     declName? := .none,
     errToSorry := false,
-  })
+  }) |>.run'
 
 def execute (command: Protocol.Command): MainM Lean.Json := do
   let run { α β: Type } [Lean.FromJson α] [Lean.ToJson β] (comm: α → MainM (CR β)): MainM Lean.Json :=
@@ -89,8 +91,8 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
         | .none, .defnInfo _ => info.value?
         | .none, _ => .none
       return .ok {
-        type := ← serialize_expression state.options info.type,
-        value? := ← value?.mapM (λ v => serialize_expression state.options v),
+        type := ← (serialize_expression state.options info.type).run',
+        value? := ← value?.mapM (λ v => serialize_expression state.options v |>.run'),
         publicName? := Lean.privateToUserName? name |>.map (·.toString),
         -- BUG: Warning: getUsedConstants here will not include projections. This is a known bug.
         typeDependency? := if args.dependency?.getD false then .some <| info.type.getUsedConstants.map (λ n => name_to_ast n) else .none,
@@ -102,8 +104,8 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     let env ← Lean.MonadEnv.getEnv
     match syntax_from_str env args.expr with
     | .error str => return .error $ errorI "parsing" str
-    | .ok syn => do
-      match ← runTermElabM <| syntax_to_expr syn with
+    | .ok syn => runTermElabM do
+      match ← syntax_to_expr syn with
       | .error str => return .error $ errorI "elab" str
       | .ok expr => do
         try
@@ -176,7 +178,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           goalStates := state.goalStates.insert state.nextId nextGoalState,
           nextId := state.nextId + 1,
         }
-        let goals ← nextGoalState.serializeGoals (parent := .some goalState) (options := state.options)
+        let goals ← nextGoalState.serializeGoals (parent := .some goalState) (options := state.options) |>.run'
         return .ok {
           nextStateId? := .some nextStateId,
           goals? := .some goals,
@@ -209,7 +211,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           goalStates := state.goalStates.insert nextStateId nextGoalState,
           nextId := state.nextId + 1
         }
-        let goals ← nextGoalState.serializeGoals (parent := .none) (options := state.options)
+        let goals ← nextGoalState.serializeGoals (parent := .none) (options := state.options) |>.run'
         return .ok {
           nextStateId,
           goals,
@@ -223,7 +225,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     let state ← get
     match state.goalStates.find? args.stateId with
     | .none => return .error $ errorIndex s!"Invalid state index {args.stateId}"
-    | .some goalState => do
+    | .some goalState => runMetaM <| do
       goalState.restoreMetaM
       let root? ← goalState.rootExpr?.mapM (λ expr => serialize_expression state.options expr)
       return .ok {
