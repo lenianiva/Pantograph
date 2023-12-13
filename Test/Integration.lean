@@ -33,8 +33,7 @@ def subroutine_runner (steps: List (MainM LSpec.TestSeq)): IO LSpec.TestSeq := d
       let result ← step
       return suite ++ result) LSpec.TestSeq.done
   try
-    let metaM := commands.run context |>.run' {}
-    let coreM := metaM.run'
+    let coreM := commands.run context |>.run' {}
     return Prod.fst $ (← coreM.toIO coreContext { env := env })
   catch ex =>
     return LSpec.check s!"Uncaught IO exception: {ex.toString}" false
