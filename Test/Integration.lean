@@ -49,20 +49,20 @@ def test_option_modify : IO LSpec.TestSeq :=
   let module? := Option.some "Init.Data.Nat.Basic"
   let options: Protocol.Options := {}
   subroutine_runner [
-    subroutine_step "lib.inspect"
+    subroutine_step "env.inspect"
       [("name", .str "Nat.add_one")]
      (Lean.toJson ({
        type := { pp? }, module? }:
-      Protocol.LibInspectResult)),
+      Protocol.EnvInspectResult)),
     subroutine_step "options.set"
       [("printExprAST", .bool true)]
      (Lean.toJson ({ }:
       Protocol.OptionsSetResult)),
-    subroutine_step "lib.inspect"
+    subroutine_step "env.inspect"
       [("name", .str "Nat.add_one")]
      (Lean.toJson ({
        type := { pp?, sexp? }, module? }:
-      Protocol.LibInspectResult)),
+      Protocol.EnvInspectResult)),
     subroutine_step "options.print"
       []
      (Lean.toJson ({ options with printExprAST := true }:

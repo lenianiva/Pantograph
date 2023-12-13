@@ -33,8 +33,8 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   | "reset"         => run reset
   | "stat"          => run stat
   | "expr.echo"     => run expr_echo
-  | "lib.catalog"   => run lib_catalog
-  | "lib.inspect"   => run lib_inspect
+  | "env.catalog"   => run env_catalog
+  | "env.inspect"   => run env_inspect
   | "options.set"   => run options_set
   | "options.print" => run options_print
   | "goal.start"    => run goal_start
@@ -60,14 +60,14 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     let state ← get
     let nGoals := state.goalStates.size
     return .ok { nGoals }
-  lib_catalog (_: Protocol.LibCatalog): MainM (CR Protocol.LibCatalogResult) := do
+  env_catalog (_: Protocol.EnvCatalog): MainM (CR Protocol.EnvCatalogResult) := do
     let env ← Lean.MonadEnv.getEnv
     let names := env.constants.fold (init := #[]) (λ acc name info =>
       match to_filtered_symbol name info with
       | .some x => acc.push x
       | .none => acc)
     return .ok { symbols := names }
-  lib_inspect (args: Protocol.LibInspect): MainM (CR Protocol.LibInspectResult) := do
+  env_inspect (args: Protocol.EnvInspect): MainM (CR Protocol.EnvInspectResult) := do
     let state ← get
     let env ← Lean.MonadEnv.getEnv
     let name :=  args.name.toName
