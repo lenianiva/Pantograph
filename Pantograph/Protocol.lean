@@ -102,13 +102,13 @@ structure ExprEchoResult where
   deriving Lean.ToJson
 
 -- Print all symbols in environment
-structure LibCatalog where
+structure EnvCatalog where
   deriving Lean.FromJson
-structure LibCatalogResult where
+structure EnvCatalogResult where
   symbols: Array String
   deriving Lean.ToJson
 -- Print the type of a symbol
-structure LibInspect where
+structure EnvInspect where
   name: String
   -- If true/false, show/hide the value expressions; By default definitions
   -- values are shown and theorem values are hidden.
@@ -116,7 +116,7 @@ structure LibInspect where
   -- If true, show the type and value dependencies
   dependency?: Option Bool := .some false
   deriving Lean.FromJson
-structure LibInspectResult where
+structure EnvInspectResult where
   type: Expression
   value?: Option Expression := .none
   module?: Option String    := .none
