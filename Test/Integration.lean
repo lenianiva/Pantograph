@@ -112,12 +112,33 @@ def test_tactic : IO LSpec.TestSeq :=
       Protocol.GoalTacticResult))
   ]
 
+def test_env : IO LSpec.TestSeq :=
+  let name := "Pantograph.Mystery"
+  subroutine_runner [
+    subroutine_step "env.add"
+      [
+        ("name", .str name),
+        ("type", .str "Prop → Prop → Prop"),
+        ("value", .str "λ (a b: Prop) => Or a b"),
+        ("isTheorem", .bool false)
+      ]
+     (Lean.toJson ({}: Protocol.EnvAddResult)),
+    subroutine_step "env.inspect"
+      [("name", .str name)]
+     (Lean.toJson ({
+       value? := .some { pp? := .some "fun a b => a ∨ b" },
+       type := { pp? := .some "Prop → Prop → Prop" },
+     }:
+      Protocol.EnvInspectResult))
+  ]
+
 def suite: IO LSpec.TestSeq := do
 
   return LSpec.group "Integration" $
     (LSpec.group "Option modify" (← test_option_modify)) ++
     (LSpec.group "Malformed command" (← test_malformed_command)) ++
-    (LSpec.group "Tactic" (← test_tactic))
+    (LSpec.group "Tactic" (← test_tactic)) ++
+    (LSpec.group "Env" (← test_env))
 
 
 end Pantograph.Test.Integration
