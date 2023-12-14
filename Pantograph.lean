@@ -103,18 +103,25 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
       }
   env_add (args: Protocol.EnvAdd): MainM (CR Protocol.EnvAddResult) := do
     let env ← Lean.MonadEnv.getEnv
-    let type ← match syntax_from_str env args.type with
-      | .ok syn => do
-        match ← (syntax_to_expr syn |> runTermElabM) with
-        | .error e => return .error $ errorExpr e
-        | .ok expr => pure expr
-      | .error e => return .error $ errorExpr e
-    let value ← match syntax_from_str env args.value with
-      | .ok syn => do
-        try
-          let expr ← Lean.Elab.Term.elabTerm (stx := syn) (expectedType? := .some type) |> runTermElabM
-          pure $ expr
-        catch ex => return .error $ errorExpr (← ex.toMessageData.toString)
+    let tv?: Except String (Lean.Expr × Lean.Expr) ← runTermElabM (do
+        let type ← match syntax_from_str env args.type with
+          | .ok syn => do
+            match ← syntax_to_expr syn with
+            | .error e => return .error e
+            | .ok expr => pure expr
+          | .error e => return .error e
+        let value ← match syntax_from_str env args.value with
+          | .ok syn => do
+            try
+              let expr ← Lean.Elab.Term.elabTerm (stx := syn) (expectedType? := .some type)
+              let expr ← Lean.instantiateMVars expr
+              pure $ expr
+            catch ex => return .error (← ex.toMessageData.toString)
+          | .error e => return .error e
+        pure $ .ok (type, value)
+      )
+    let (type, value) ← match tv? with
+      | .ok t => pure t
       | .error e => return .error $ errorExpr e
     let constant := Lean.Declaration.defnDecl <| Lean.mkDefinitionValEx
       (name := args.name.toName)
@@ -135,9 +142,10 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   expr_echo (args: Protocol.ExprEcho): MainM (CR Protocol.ExprEchoResult) := do
     let state ← get
     let env ← Lean.MonadEnv.getEnv
-    match syntax_from_str env args.expr with
-    | .error str => return .error $ errorI "parsing" str
-    | .ok syn => runTermElabM do
+    let syn ← match syntax_from_str env args.expr with
+      | .error str => return .error $ errorI "parsing" str
+      | .ok syn => pure syn
+    runTermElabM (do
       match ← syntax_to_expr syn with
       | .error str => return .error $ errorI "elab" str
       | .ok expr => do
@@ -148,7 +156,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
               expr := (← serialize_expression (options := state.options) expr)
           }
         catch exception =>
-          return .error $ errorI "typing" (← exception.toMessageData.toString)
+          return .error $ errorI "typing" (← exception.toMessageData.toString))
   options_set (args: Protocol.OptionsSet): MainM (CR Protocol.OptionsSetResult) := do
     let state ← get
     let options := state.options
