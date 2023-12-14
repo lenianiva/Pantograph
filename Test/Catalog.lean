@@ -18,8 +18,6 @@ def test_symbol_visibility (env: Environment): IO LSpec.TestSeq := do
     LSpec.TestSeq.append suites test) LSpec.TestSeq.done
   return suite
 
-
-
 def suite: IO LSpec.TestSeq := do
   let env: Environment ← importModules
     (imports := #["Init"].map (λ str => { module := str.toName, runtimeOnly := false }))
