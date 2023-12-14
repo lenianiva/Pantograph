@@ -125,6 +125,14 @@ structure EnvInspectResult where
   typeDependency?: Option (Array String) := .none
   valueDependency?: Option (Array String) := .none
   deriving Lean.ToJson
+structure EnvAdd where
+  name: String
+  type: String
+  value: String
+  isTheorem?: Bool
+  deriving Lean.FromJson
+structure EnvAddResult where
+  deriving Lean.ToJson
 
 /-- Set options; See `Options` struct above for meanings -/
 structure OptionsSet where

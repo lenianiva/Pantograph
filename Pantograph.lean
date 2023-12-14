@@ -35,6 +35,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   | "expr.echo"     => run expr_echo
   | "env.catalog"   => run env_catalog
   | "env.inspect"   => run env_inspect
+  | "env.add"       => run env_add
   | "options.set"   => run options_set
   | "options.print" => run options_print
   | "goal.start"    => run goal_start
@@ -50,6 +51,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   errorI (type desc: String): Protocol.InteractionError := { error := type, desc := desc }
   errorCommand := errorI "command"
   errorIndex := errorI "index"
+  errorExpr := errorI "expr"
   -- Command Functions
   reset (_: Protocol.Reset): MainM (CR Protocol.StatResult) := do
     let state ← get
@@ -91,6 +93,37 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
         valueDependency? := if args.dependency?.getD false then info.value?.map (·.getUsedConstants.map (λ n => name_to_ast n)) else .none,
         module? := module?
       }
+  env_add (args: Protocol.EnvAdd): MainM (CR Protocol.EnvAddResult) := do
+    let env ← Lean.MonadEnv.getEnv
+    let type ← match syntax_from_str env args.type with
+      | .ok syn => do
+        match ← syntax_to_expr syn with
+        | .error e => return .error $ errorExpr e
+        | .ok expr => pure expr
+      | .error e => return .error $ errorExpr e
+    let value ← match syntax_from_str env args.value with
+      | .ok syn => do
+        try
+          let expr ← Lean.Elab.Term.elabTerm (stx := syn) (expectedType? := .some type)
+          pure $ expr
+        catch ex => return .error $ errorExpr (← ex.toMessageData.toString)
+      | .error e => return .error $ errorExpr e
+    let constant := Lean.Declaration.defnDecl <| Lean.mkDefinitionValEx
+      (name := args.name.toName)
+      (levelParams := [])
+      (type := type)
+      (value := value)
+      (hints := Lean.mkReducibilityHintsRegularEx 1)
+      (safety := Lean.DefinitionSafety.safe)
+      (all := [])
+    let env' ← match env.addDecl constant with
+      | .error e => do
+        let options ← Lean.MonadOptions.getOptions
+        let errorMessage ← (e.toMessageData options).toString
+        return .error $ errorI "kernel" errorMessage
+      | .ok env' => pure env'
+    Lean.MonadEnv.modifyEnv (λ _ => env')
+    return .ok {}
   expr_echo (args: Protocol.ExprEcho): MainM (CR Protocol.ExprEchoResult) := do
     let state ← get
     let env ← Lean.MonadEnv.getEnv
