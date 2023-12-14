@@ -105,14 +105,14 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     let env ← Lean.MonadEnv.getEnv
     let type ← match syntax_from_str env args.type with
       | .ok syn => do
-        match ← syntax_to_expr syn with
+        match ← (syntax_to_expr syn |> runTermElabM) with
         | .error e => return .error $ errorExpr e
         | .ok expr => pure expr
       | .error e => return .error $ errorExpr e
     let value ← match syntax_from_str env args.value with
       | .ok syn => do
         try
-          let expr ← Lean.Elab.Term.elabTerm (stx := syn) (expectedType? := .some type)
+          let expr ← Lean.Elab.Term.elabTerm (stx := syn) (expectedType? := .some type) |> runTermElabM
           pure $ expr
         catch ex => return .error $ errorExpr (← ex.toMessageData.toString)
       | .error e => return .error $ errorExpr e
