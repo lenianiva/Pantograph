@@ -1,7 +1,6 @@
 import Pantograph.Goal
 import Pantograph.Protocol
 import Pantograph.Serial
-import Pantograph.Symbol
 import Pantograph.Environment
 import Lean.Data.HashMap
 
