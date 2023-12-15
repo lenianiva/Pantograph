@@ -114,6 +114,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           | .ok syn => do
             try
               let expr ← Lean.Elab.Term.elabTerm (stx := syn) (expectedType? := .some type)
+              Lean.Elab.Term.synthesizeSyntheticMVarsNoPostponing
               let expr ← Lean.instantiateMVars expr
               pure $ expr
             catch ex => return .error (← ex.toMessageData.toString)
