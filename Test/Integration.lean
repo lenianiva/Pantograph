@@ -113,21 +113,37 @@ def test_tactic : IO LSpec.TestSeq :=
   ]
 
 def test_env : IO LSpec.TestSeq :=
-  let name := "Pantograph.Mystery"
+  let name1 := "Pantograph.mystery"
+  let name2 := "Pantograph.mystery2"
   subroutine_runner [
     subroutine_step "env.add"
       [
-        ("name", .str name),
+        ("name", .str name1),
         ("type", .str "Prop → Prop → Prop"),
         ("value", .str "λ (a b: Prop) => Or a b"),
         ("isTheorem", .bool false)
       ]
      (Lean.toJson ({}: Protocol.EnvAddResult)),
     subroutine_step "env.inspect"
-      [("name", .str name)]
+      [("name", .str name1)]
      (Lean.toJson ({
        value? := .some { pp? := .some "fun a b => a ∨ b" },
        type := { pp? := .some "Prop → Prop → Prop" },
+     }:
+      Protocol.EnvInspectResult)),
+    subroutine_step "env.add"
+      [
+        ("name", .str name2),
+        ("type", .str "Nat → Int"),
+        ("value", .str "λ (a: Nat) => a + 1"),
+        ("isTheorem", .bool false)
+      ]
+     (Lean.toJson ({}: Protocol.EnvAddResult)),
+    subroutine_step "env.inspect"
+      [("name", .str name2)]
+     (Lean.toJson ({
+       value? := .some { pp? := .some "fun a => Int.ofNat a + 1" },
+       type := { pp? := .some "Nat → Int" },
      }:
       Protocol.EnvInspectResult))
   ]
