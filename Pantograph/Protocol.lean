@@ -79,6 +79,9 @@ structure InteractionError where
   desc: String
   deriving Lean.ToJson
 
+def errorIndex (desc: String): InteractionError := { error := "index", desc }
+def errorExpr (desc: String): InteractionError := { error := "expr", desc }
+
 
 --- Individual command and return types ---
 
