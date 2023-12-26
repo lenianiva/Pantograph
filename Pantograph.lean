@@ -1,7 +1,7 @@
 import Pantograph.Goal
 import Pantograph.Protocol
 import Pantograph.Serial
-import Pantograph.Symbol
+import Pantograph.Environment
 import Lean.Data.HashMap
 
 namespace Pantograph
@@ -41,8 +41,9 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   | "reset"         => run reset
   | "stat"          => run stat
   | "expr.echo"     => run expr_echo
-  | "lib.catalog"   => run lib_catalog
-  | "lib.inspect"   => run lib_inspect
+  | "env.catalog"   => run env_catalog
+  | "env.inspect"   => run env_inspect
+  | "env.add"       => run env_add
   | "options.set"   => run options_set
   | "options.print" => run options_print
   | "goal.start"    => run goal_start
@@ -68,43 +69,20 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     let state ← get
     let nGoals := state.goalStates.size
     return .ok { nGoals }
-  lib_catalog (_: Protocol.LibCatalog): MainM (CR Protocol.LibCatalogResult) := do
-    let env ← Lean.MonadEnv.getEnv
-    let names := env.constants.fold (init := #[]) (λ acc name info =>
-      match to_filtered_symbol name info with
-      | .some x => acc.push x
-      | .none => acc)
-    return .ok { symbols := names }
-  lib_inspect (args: Protocol.LibInspect): MainM (CR Protocol.LibInspectResult) := do
+  env_catalog (args: Protocol.EnvCatalog): MainM (CR Protocol.EnvCatalogResult) := do
+    Environment.catalog args
+  env_inspect (args: Protocol.EnvInspect): MainM (CR Protocol.EnvInspectResult) := do
     let state ← get
-    let env ← Lean.MonadEnv.getEnv
-    let name :=  args.name.toName
-    let info? := env.find? name
-    match info? with
-    | none => return .error $ errorIndex s!"Symbol not found {args.name}"
-    | some info =>
-      let module? := env.getModuleIdxFor? name >>=
-        (λ idx => env.allImportedModuleNames.get? idx.toNat) |>.map toString
-      let value? := match args.value?, info with
-        | .some true, _ => info.value?
-        | .some false, _ => .none
-        | .none, .defnInfo _ => info.value?
-        | .none, _ => .none
-      return .ok {
-        type := ← (serialize_expression state.options info.type).run',
-        value? := ← value?.mapM (λ v => serialize_expression state.options v |>.run'),
-        publicName? := Lean.privateToUserName? name |>.map (·.toString),
-        -- BUG: Warning: getUsedConstants here will not include projections. This is a known bug.
-        typeDependency? := if args.dependency?.getD false then .some <| info.type.getUsedConstants.map (λ n => name_to_ast n) else .none,
-        valueDependency? := if args.dependency?.getD false then info.value?.map (·.getUsedConstants.map (λ n => name_to_ast n)) else .none,
-        module? := module?
-      }
+    Environment.inspect args state.options
+  env_add (args: Protocol.EnvAdd): MainM (CR Protocol.EnvAddResult) := do
+    Environment.addDecl args
   expr_echo (args: Protocol.ExprEcho): MainM (CR Protocol.ExprEchoResult) := do
     let state ← get
     let env ← Lean.MonadEnv.getEnv
-    match syntax_from_str env args.expr with
-    | .error str => return .error $ errorI "parsing" str
-    | .ok syn => runTermElabM do
+    let syn ← match syntax_from_str env args.expr with
+      | .error str => return .error $ errorI "parsing" str
+      | .ok syn => pure syn
+    runTermElabM (do
       match ← syntax_to_expr syn with
       | .error str => return .error $ errorI "elab" str
       | .ok expr => do
@@ -115,7 +93,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
               expr := (← serialize_expression (options := state.options) expr)
           }
         catch exception =>
-          return .error $ errorI "typing" (← exception.toMessageData.toString)
+          return .error $ errorI "typing" (← exception.toMessageData.toString))
   options_set (args: Protocol.OptionsSet): MainM (CR Protocol.OptionsSetResult) := do
     let state ← get
     let options := state.options

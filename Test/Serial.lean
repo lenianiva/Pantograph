@@ -1,6 +1,5 @@
 import LSpec
 import Pantograph.Serial
-import Pantograph.Symbol
 
 namespace Pantograph.Test.Serial
 

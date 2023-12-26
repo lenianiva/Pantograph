@@ -1,7 +1,5 @@
 import Lean
 
-import Pantograph.Symbol
-
 def Lean.MessageLog.getErrorMessages (log : MessageLog) : MessageLog :=
   {
     msgs := log.msgs.filter fun m => match m.severity with | MessageSeverity.error => true | _ => false
