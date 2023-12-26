@@ -2,7 +2,7 @@ import LSpec
 import Pantograph.Serial
 import Pantograph.Environment
 
-namespace Pantograph.Test.Catalog
+namespace Pantograph.Test.Environment
 
 open Pantograph
 open Lean
@@ -24,7 +24,7 @@ def suite: IO LSpec.TestSeq := do
     (opts := {})
     (trustLevel := 1)
 
-  return LSpec.group "Catalog" $
+  return LSpec.group "Environment" $
     (LSpec.group "Symbol visibility" (← test_symbol_visibility env))
 
-end Pantograph.Test.Catalog
+end Pantograph.Test.Environment
