@@ -44,20 +44,20 @@ def test_option_modify : IO LSpec.TestSeq :=
   let module? := Option.some "Init.Data.Nat.Basic"
   let options: Protocol.Options := {}
   subroutine_runner [
-    subroutine_step "lib.inspect"
+    subroutine_step "env.inspect"
       [("name", .str "Nat.add_one")]
      (Lean.toJson ({
        type := { pp? }, module? }:
-      Protocol.LibInspectResult)),
+      Protocol.EnvInspectResult)),
     subroutine_step "options.set"
       [("printExprAST", .bool true)]
      (Lean.toJson ({ }:
       Protocol.OptionsSetResult)),
-    subroutine_step "lib.inspect"
+    subroutine_step "env.inspect"
       [("name", .str "Nat.add_one")]
      (Lean.toJson ({
        type := { pp?, sexp? }, module? }:
-      Protocol.LibInspectResult)),
+      Protocol.EnvInspectResult)),
     subroutine_step "options.print"
       []
      (Lean.toJson ({ options with printExprAST := true }:
@@ -112,12 +112,49 @@ def test_tactic : IO LSpec.TestSeq :=
       Protocol.GoalTacticResult))
   ]
 
+def test_env : IO LSpec.TestSeq :=
+  let name1 := "Pantograph.mystery"
+  let name2 := "Pantograph.mystery2"
+  subroutine_runner [
+    subroutine_step "env.add"
+      [
+        ("name", .str name1),
+        ("type", .str "Prop → Prop → Prop"),
+        ("value", .str "λ (a b: Prop) => Or a b"),
+        ("isTheorem", .bool false)
+      ]
+     (Lean.toJson ({}: Protocol.EnvAddResult)),
+    subroutine_step "env.inspect"
+      [("name", .str name1)]
+     (Lean.toJson ({
+       value? := .some { pp? := .some "fun a b => a ∨ b" },
+       type := { pp? := .some "Prop → Prop → Prop" },
+     }:
+      Protocol.EnvInspectResult)),
+    subroutine_step "env.add"
+      [
+        ("name", .str name2),
+        ("type", .str "Nat → Int"),
+        ("value", .str "λ (a: Nat) => a + 1"),
+        ("isTheorem", .bool false)
+      ]
+     (Lean.toJson ({}: Protocol.EnvAddResult)),
+    subroutine_step "env.inspect"
+      [("name", .str name2)]
+     (Lean.toJson ({
+       value? := .some { pp? := .some "fun a => Int.ofNat a + 1" },
+       type := { pp? := .some "Nat → Int" },
+     }:
+      Protocol.EnvInspectResult))
+  ]
+
 def suite: IO LSpec.TestSeq := do
 
   return LSpec.group "Integration" $
     (LSpec.group "Option modify" (← test_option_modify)) ++
     (LSpec.group "Malformed command" (← test_malformed_command)) ++
-    (LSpec.group "Tactic" (← test_tactic))
+    (LSpec.group "Tactic" (← test_tactic)) ++
+    (LSpec.group "Env" (← test_env))
 
 
 end Pantograph.Test.Integration

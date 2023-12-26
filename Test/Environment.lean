@@ -1,8 +1,8 @@
 import LSpec
 import Pantograph.Serial
-import Pantograph.Symbol
+import Pantograph.Environment
 
-namespace Pantograph.Test.Catalog
+namespace Pantograph.Test.Environment
 
 open Pantograph
 open Lean
@@ -14,7 +14,7 @@ def test_symbol_visibility (env: Environment): IO LSpec.TestSeq := do
   ]
   let suite := entries.foldl (λ suites (symbol, target) =>
     let constant := env.constants.find! symbol
-    let test := LSpec.check symbol.toString ((is_symbol_unsafe_or_internal symbol constant) == target)
+    let test := LSpec.check symbol.toString ((Environment.is_symbol_unsafe_or_internal symbol constant) == target)
     LSpec.TestSeq.append suites test) LSpec.TestSeq.done
   return suite
 
@@ -24,7 +24,7 @@ def suite: IO LSpec.TestSeq := do
     (opts := {})
     (trustLevel := 1)
 
-  return LSpec.group "Catalog" $
+  return LSpec.group "Environment" $
     (LSpec.group "Symbol visibility" (← test_symbol_visibility env))
 
-end Pantograph.Test.Catalog
+end Pantograph.Test.Environment
