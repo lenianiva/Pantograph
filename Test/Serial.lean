@@ -1,5 +1,6 @@
 import LSpec
 import Pantograph.Serial
+import Test.Common
 
 namespace Pantograph.Test.Serial
 
@@ -26,16 +27,7 @@ def test_expr_to_binder (env: Environment): IO LSpec.TestSeq := do
     let expr := env.find? symbol |>.get! |>.type
     let test := LSpec.check symbol.toString ((← type_expr_to_bound expr) = target)
     return LSpec.TestSeq.append suites test) LSpec.TestSeq.done |>.run'
-  let coreContext: Core.Context := {
-    currNamespace := Lean.Name.str .anonymous "Aniva"
-    openDecls := [],     -- No 'open' directives needed
-    fileName := "<Pantograph/Test>",
-    fileMap := { source := "", positions := #[0], lines := #[1] }
-  }
-  match ← (coreM.run' coreContext { env := env }).toBaseIO with
-  | .error exception =>
-    return LSpec.test "Exception" (s!"internal exception #{← exception.toMessageData.toString}" = "")
-  | .ok a            => return a
+  runCoreMSeq env coreM
 
 def test_sexp_of_symbol (env: Environment): IO LSpec.TestSeq := do
   let entries: List (String × String) := [
@@ -53,17 +45,7 @@ def test_sexp_of_symbol (env: Environment): IO LSpec.TestSeq := do
     let expr := env.find? symbol.toName |>.get! |>.type
     let test := LSpec.check symbol ((← serialize_expression_ast expr) = target)
     return LSpec.TestSeq.append suites test) LSpec.TestSeq.done
-  let coreM := metaM.run'
-  let coreContext: Core.Context := {
-    currNamespace := Lean.Name.str .anonymous "Aniva"
-    openDecls := [],     -- No 'open' directives needed
-    fileName := "<Pantograph/Test>",
-    fileMap := { source := "", positions := #[0], lines := #[1] }
-  }
-  match ← (coreM.run' coreContext { env := env }).toBaseIO with
-  | .error exception =>
-    return LSpec.test "Exception" (s!"internal exception #{← exception.toMessageData.toString}" = "")
-  | .ok a            => return a
+  runMetaMSeq env metaM
 
 def test_sexp_of_expr (env: Environment): IO LSpec.TestSeq := do
   let entries: List (String × String) := [
@@ -80,17 +62,17 @@ def test_sexp_of_expr (env: Environment): IO LSpec.TestSeq := do
     declName? := some "_pantograph",
     errToSorry := false
   })
-  let coreM := metaM.run'
-  let coreContext: Core.Context := {
-    currNamespace := Lean.Name.str .anonymous "Aniva"
-    openDecls := [],     -- No 'open' directives needed
-    fileName := "<Pantograph/Test>",
-    fileMap := { source := "", positions := #[0], lines := #[1] }
-  }
-  match ← (coreM.run' coreContext { env := env }).toBaseIO with
-  | .error exception =>
-    return LSpec.test "Exception" (s!"internal exception #{← exception.toMessageData.toString}" = "")
-  | .ok a            => return a
+  runMetaMSeq env metaM
+
+-- Instance parsing
+def test_instance (env: Environment): IO LSpec.TestSeq := do
+  let metaM: MetaM LSpec.TestSeq := do
+    let env ← MonadEnv.getEnv
+    let source := "λ x y: Nat => HAdd.hAdd Nat Nat Nat (instHAdd Nat instAddNat) x y"
+    let s := syntax_from_str env source |>.toOption |>.get!
+    let expr := (← runTermElabMInMeta <| syntax_to_expr s) |>.toOption |>.get!
+    return LSpec.TestSeq.done
+  runMetaMSeq env metaM
 
 def suite: IO LSpec.TestSeq := do
   let env: Environment ← importModules
@@ -102,6 +84,7 @@ def suite: IO LSpec.TestSeq := do
     (LSpec.group "name_to_ast" test_name_to_ast) ++
     (LSpec.group "Expression binder" (← test_expr_to_binder env)) ++
     (LSpec.group "Sexp from symbol" (← test_sexp_of_symbol env)) ++
-    (LSpec.group "Sexp from expr" (← test_sexp_of_expr env))
+    (LSpec.group "Sexp from expr" (← test_sexp_of_expr env)) ++
+    (LSpec.group "Instance" (← test_instance env))
 
 end Pantograph.Test.Serial
