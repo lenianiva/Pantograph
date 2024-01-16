@@ -110,6 +110,7 @@ structure EnvCatalog where
 structure EnvCatalogResult where
   symbols: Array String
   deriving Lean.ToJson
+
 -- Print the type of a symbol
 structure EnvInspect where
   name: String
@@ -119,6 +120,17 @@ structure EnvInspect where
   -- If true, show the type and value dependencies
   dependency?: Option Bool := .some false
   deriving Lean.FromJson
+-- See `InductiveVal`
+structure InductInfo where
+  numParams: Nat
+  numIndices: Nat
+  all: List String
+  ctors: List String
+  isRec:       Bool := false
+  isUnsafe:    Bool := false
+  isReflexive: Bool := false
+  isNested:    Bool := false
+  deriving Lean.ToJson
 structure EnvInspectResult where
   type: Expression
   value?: Option Expression := .none
@@ -127,7 +139,9 @@ structure EnvInspectResult where
   publicName?: Option String := .none
   typeDependency?: Option (Array String) := .none
   valueDependency?: Option (Array String) := .none
+  inductInfo?: Option InductInfo := .none
   deriving Lean.ToJson
+
 structure EnvAdd where
   name: String
   type: String
