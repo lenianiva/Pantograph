@@ -56,6 +56,7 @@ def inspect (args: Protocol.EnvInspect) (options: Protocol.Options): CoreM (CR P
   -- Information common to all symbols
   let core := {
     type := ← (serialize_expression options info.type).run',
+    isUnsafe := info.isUnsafe,
     value? := ← value?.mapM (λ v => serialize_expression options v |>.run'),
     publicName? := Lean.privateToUserName? name |>.map (·.toString),
     -- BUG: Warning: getUsedConstants here will not include projections. This is a known bug.
@@ -70,9 +71,22 @@ def inspect (args: Protocol.EnvInspect) (options: Protocol.Options): CoreM (CR P
           all := induct.all.map (·.toString),
           ctors := induct.ctors.map (·.toString),
           isRec := induct.isRec,
-          isUnsafe := induct.isUnsafe,
           isReflexive := induct.isReflexive,
           isNested := induct.isNested,
+      } }
+    | .ctorInfo ctor => { core with constructorInfo? := .some {
+          induct := ctor.induct.toString,
+          cidx := ctor.cidx,
+          numParams := ctor.numParams,
+          numFields := ctor.numFields,
+      } }
+    | .recInfo r => { core with recursorInfo? := .some {
+          all := r.all.map (·.toString),
+          numParams := r.numParams,
+          numIndices := r.numIndices,
+          numMotives := r.numMotives,
+          numMinors := r.numMinors,
+          k := r.k,
       } }
     | _ => core
   return .ok result

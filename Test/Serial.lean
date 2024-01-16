@@ -70,7 +70,7 @@ def test_instance (env: Environment): IO LSpec.TestSeq := do
     let env ← MonadEnv.getEnv
     let source := "λ x y: Nat => HAdd.hAdd Nat Nat Nat (instHAdd Nat instAddNat) x y"
     let s := syntax_from_str env source |>.toOption |>.get!
-    let expr := (← runTermElabMInMeta <| syntax_to_expr s) |>.toOption |>.get!
+    let _expr := (← runTermElabMInMeta <| syntax_to_expr s) |>.toOption |>.get!
     return LSpec.TestSeq.done
   runMetaMSeq env metaM
 

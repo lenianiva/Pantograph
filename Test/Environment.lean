@@ -9,6 +9,8 @@ open Pantograph
 open Lean
 
 deriving instance DecidableEq, Repr for Protocol.InductInfo
+deriving instance DecidableEq, Repr for Protocol.ConstructorInfo
+deriving instance DecidableEq, Repr for Protocol.RecursorInfo
 deriving instance DecidableEq, Repr for Protocol.EnvInspectResult
 
 def test_symbol_visibility (env: Environment): IO LSpec.TestSeq := do
@@ -22,20 +24,54 @@ def test_symbol_visibility (env: Environment): IO LSpec.TestSeq := do
     LSpec.TestSeq.append suites test) LSpec.TestSeq.done
   return suite
 
+inductive ConstantCat where
+  | induct (info: Protocol.InductInfo)
+  | ctor (info: Protocol.ConstructorInfo)
+  | recursor (info: Protocol.RecursorInfo)
+
 def test_inspect (env: Environment): IO LSpec.TestSeq := do
-  let inner: CoreM LSpec.TestSeq := do
-    let args: Protocol.EnvInspect := { name := "Or" }
-    let result ← match ← Environment.inspect args (options := {}) with
-      | .ok result => pure $ result
-      | .error e => panic! s!"Error: {e.desc}"
-    --IO.println s!"{reprStr result.inductInfo?}"
-    let test := LSpec.check "Or" (result.inductInfo? == .some {
+  let testCases: List (String × ConstantCat) := [
+    ("Or", ConstantCat.induct {
       numParams := 2,
       numIndices := 0,
       all := ["Or"],
       ctors := ["Or.inl", "Or.inr"],
+    }),
+    ("Except.ok", ConstantCat.ctor {
+      induct := "Except",
+      cidx := 1,
+      numParams := 2,
+      numFields := 1,
+    }),
+    ("Eq.rec", ConstantCat.recursor {
+      all := ["Eq"],
+      numParams := 2,
+      numIndices := 1,
+      numMotives := 1,
+      numMinors := 1,
+      k := true,
+    }),
+    ("ForM.rec", ConstantCat.recursor {
+      all := ["ForM"],
+      numParams := 3,
+      numIndices := 0,
+      numMotives := 1,
+      numMinors := 1,
+      k := false,
     })
-    return LSpec.TestSeq.append LSpec.TestSeq.done test
+  ]
+  let inner: CoreM LSpec.TestSeq := do
+    testCases.foldlM (λ acc (name, cat) => do
+      let args: Protocol.EnvInspect := { name := name }
+      let result ← match ← Environment.inspect args (options := {}) with
+        | .ok result => pure $ result
+        | .error e => panic! s!"Error: {e.desc}"
+      let p := match cat with
+        | .induct info => LSpec.test name (result.inductInfo? == .some info)
+        | .ctor info => LSpec.test name (result.constructorInfo? == .some info)
+        | .recursor info => LSpec.test name (result.recursorInfo? == .some info)
+      return LSpec.TestSeq.append acc p
+    ) LSpec.TestSeq.done
   runCoreMSeq env inner
 
 def suite: IO LSpec.TestSeq := do
