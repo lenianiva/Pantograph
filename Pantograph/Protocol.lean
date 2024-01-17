@@ -110,6 +110,7 @@ structure EnvCatalog where
 structure EnvCatalogResult where
   symbols: Array String
   deriving Lean.ToJson
+
 -- Print the type of a symbol
 structure EnvInspect where
   name: String
@@ -119,15 +120,45 @@ structure EnvInspect where
   -- If true, show the type and value dependencies
   dependency?: Option Bool := .some false
   deriving Lean.FromJson
+-- See `InductiveVal`
+structure InductInfo where
+  numParams: Nat
+  numIndices: Nat
+  all: List String
+  ctors: List String
+  isRec:       Bool := false
+  isReflexive: Bool := false
+  isNested:    Bool := false
+  deriving Lean.ToJson
+-- See `ConstructorVal`
+structure ConstructorInfo where
+  induct: String
+  cidx: Nat
+  numParams: Nat
+  numFields: Nat
+  deriving Lean.ToJson
+structure RecursorInfo where
+  all: List String
+  numParams: Nat
+  numIndices: Nat
+  numMotives: Nat
+  numMinors: Nat
+  k: Bool
+  deriving Lean.ToJson
 structure EnvInspectResult where
   type: Expression
+  isUnsafe: Bool            := false
   value?: Option Expression := .none
   module?: Option String    := .none
   -- If the name is private, displays the public facing name
   publicName?: Option String := .none
   typeDependency?: Option (Array String) := .none
   valueDependency?: Option (Array String) := .none
+  inductInfo?:      Option InductInfo      := .none
+  constructorInfo?: Option ConstructorInfo := .none
+  recursorInfo?:    Option RecursorInfo    := .none
   deriving Lean.ToJson
+
 structure EnvAdd where
   name: String
   type: String
