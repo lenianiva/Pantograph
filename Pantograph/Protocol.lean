@@ -219,6 +219,7 @@ structure GoalDiag where
   printNewMVars: Bool := false
   -- Print all mvars
   printAll: Bool := false
+  instantiate: Bool := true
 
 
 end Pantograph.Protocol
