@@ -43,25 +43,53 @@ def inspect (args: Protocol.EnvInspect) (options: Protocol.Options): CoreM (CR P
   let env ← Lean.MonadEnv.getEnv
   let name :=  args.name.toName
   let info? := env.find? name
-  match info? with
-  | none => return .error $ Protocol.errorIndex s!"Symbol not found {args.name}"
-  | some info =>
-    let module? := env.getModuleIdxFor? name >>=
-      (λ idx => env.allImportedModuleNames.get? idx.toNat) |>.map toString
-    let value? := match args.value?, info with
-      | .some true, _ => info.value?
-      | .some false, _ => .none
-      | .none, .defnInfo _ => info.value?
-      | .none, _ => .none
-    return .ok {
-      type := ← (serialize_expression options info.type).run',
-      value? := ← value?.mapM (λ v => serialize_expression options v |>.run'),
-      publicName? := Lean.privateToUserName? name |>.map (·.toString),
-      -- BUG: Warning: getUsedConstants here will not include projections. This is a known bug.
-      typeDependency? := if args.dependency?.getD false then .some <| info.type.getUsedConstants.map (λ n => name_to_ast n) else .none,
-      valueDependency? := if args.dependency?.getD false then info.value?.map (·.getUsedConstants.map (λ n => name_to_ast n)) else .none,
-      module? := module?
-    }
+  let info ← match info? with
+    | none => return .error $ Protocol.errorIndex s!"Symbol not found {args.name}"
+    | some info => pure info
+  let module? := env.getModuleIdxFor? name >>=
+    (λ idx => env.allImportedModuleNames.get? idx.toNat) |>.map toString
+  let value? := match args.value?, info with
+    | .some true, _ => info.value?
+    | .some false, _ => .none
+    | .none, .defnInfo _ => info.value?
+    | .none, _ => .none
+  -- Information common to all symbols
+  let core := {
+    type := ← (serialize_expression options info.type).run',
+    isUnsafe := info.isUnsafe,
+    value? := ← value?.mapM (λ v => serialize_expression options v |>.run'),
+    publicName? := Lean.privateToUserName? name |>.map (·.toString),
+    -- BUG: Warning: getUsedConstants here will not include projections. This is a known bug.
+    typeDependency? := if args.dependency?.getD false then .some <| info.type.getUsedConstants.map (λ n => name_to_ast n) else .none,
+    valueDependency? := if args.dependency?.getD false then info.value?.map (·.getUsedConstants.map (λ n => name_to_ast n)) else .none,
+    module? := module?
+  }
+  let result := match info with
+    | .inductInfo induct => { core with inductInfo? := .some {
+          numParams := induct.numParams,
+          numIndices := induct.numIndices,
+          all := induct.all.map (·.toString),
+          ctors := induct.ctors.map (·.toString),
+          isRec := induct.isRec,
+          isReflexive := induct.isReflexive,
+          isNested := induct.isNested,
+      } }
+    | .ctorInfo ctor => { core with constructorInfo? := .some {
+          induct := ctor.induct.toString,
+          cidx := ctor.cidx,
+          numParams := ctor.numParams,
+          numFields := ctor.numFields,
+      } }
+    | .recInfo r => { core with recursorInfo? := .some {
+          all := r.all.map (·.toString),
+          numParams := r.numParams,
+          numIndices := r.numIndices,
+          numMotives := r.numMotives,
+          numMinors := r.numMinors,
+          k := r.k,
+      } }
+    | _ => core
+  return .ok result
 def addDecl (args: Protocol.EnvAdd): CoreM (CR Protocol.EnvAddResult) := do
   let env ← Lean.MonadEnv.getEnv
   let tvM: Elab.TermElabM (Except String (Expr × Expr)) := do
