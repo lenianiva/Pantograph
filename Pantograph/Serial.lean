@@ -276,9 +276,6 @@ protected def GoalState.print (goalState: GoalState) (options: Protocol.GoalDiag
   mctx.decls.forM (fun mvarId decl => do
     if goals.contains mvarId || mvarId == root then
       pure ()
-    -- Always print the root goal
-    else if mvarId == goalState.root then
-      printMVar (pref := ">") mvarId decl
     -- Print the remainig ones that users don't see in Lean
     else if options.printAll then
       let pref := if goalState.newMVars.contains mvarId then "~" else " "
@@ -291,11 +288,17 @@ protected def GoalState.print (goalState: GoalState) (options: Protocol.GoalDiag
     printMVar (pref: String) (mvarId: MVarId) (decl: MetavarDecl): MetaM Unit := do
       if options.printContext then
         decl.lctx.fvarIdToDecl.forM printFVar
-      let type_sexp ← serialize_expression_ast (← instantiateMVars decl.type) (sanitize := false)
+      let type ← if options.instantiate
+        then instantiateMVars decl.type
+        else pure $ decl.type
+      let type_sexp ← serialize_expression_ast type (sanitize := false)
       IO.println s!"{pref}{mvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type} {type_sexp}"
       if options.printValue then
         if let Option.some value := (← getMCtx).eAssignment.find? mvarId then
-          IO.println s!"  = {← Meta.ppExpr value}"
+          let value ← if options.instantiate
+            then instantiateMVars value
+            else pure $ value
+          IO.println s!" := {← Meta.ppExpr value}"
     printFVar (fvarId: FVarId) (decl: LocalDecl): MetaM Unit := do
       IO.println s!" | {fvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type}"
     userNameToString : Name → String
