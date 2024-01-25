@@ -231,6 +231,8 @@ def proof_or_comm: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
+  let state3_1parent ← serialize_expression_ast state3_1.parentExpr?.get! (sanitize := false)
+  addTest $ LSpec.test "(3_1 parent)" (state3_1parent == "((:c Or.inr) (:fv _uniq.13) (:fv _uniq.10) (:mv _uniq.83))")
   addTest $ LSpec.check "· apply Or.inr" (state3_1.goals.length = 1)
   let state4_1 ← match ← state3_1.execute (goalId := 0) (tactic := "assumption") with
     | .success state => pure state
@@ -238,6 +240,8 @@ def proof_or_comm: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "  assumption" state4_1.goals.isEmpty
+  let state4_1parent ← serialize_expression_ast state4_1.parentExpr?.get! (sanitize := false)
+  addTest $ LSpec.test "(4_1 parent)" (state4_1parent == "(:fv _uniq.49)")
   addTest $ LSpec.check "(4_1 root)" state4_1.rootExpr?.isNone
   let state3_2 ← match ← state2.execute (goalId := 1) (tactic := "apply Or.inl") with
     | .success state => pure state
