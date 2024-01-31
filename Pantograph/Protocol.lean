@@ -241,7 +241,7 @@ structure GoalPrint where
 structure GoalPrintResult where
   -- The root expression
   root?: Option Expression := .none
-  -- How is this goal filled in relation to its children?
+  -- The filling expression of the parent goal
   parent?: Option Expression := .none
   deriving Lean.ToJson
 
