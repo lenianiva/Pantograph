@@ -210,6 +210,8 @@ def proof_or_comm: TestM Unit := do
     | .none => do
       addTest $ assertUnreachable "Goal could not parse"
       return ()
+  addTest $ LSpec.check "(0 parent)" state0.parentExpr?.isNone
+  addTest $ LSpec.check "(0 root)" state0.rootExpr?.isNone
 
   let state1 ← match ← state0.execute (goalId := 0) (tactic := "intro p q h") with
     | .success state => pure state
@@ -218,6 +220,8 @@ def proof_or_comm: TestM Unit := do
       return ()
   addTest $ LSpec.check "intro n m" ((← state1.serializeGoals (options := ← read)).map (·.devolatilize) =
     #[buildGoal [("p", "Prop"), ("q", "Prop"), ("h", "p ∨ q")] "q ∨ p"])
+  addTest $ LSpec.check "(1 parent)" state1.parentExpr?.isSome
+  addTest $ LSpec.check "(1 root)" state1.rootExpr?.isNone
   let state2 ← match ← state1.execute (goalId := 0) (tactic := "cases h") with
     | .success state => pure state
     | other => do
@@ -225,6 +229,8 @@ def proof_or_comm: TestM Unit := do
       return ()
   addTest $ LSpec.check "cases h" ((← state2.serializeGoals (options := ← read)).map (·.devolatilize) =
     #[branchGoal "inl" "p", branchGoal "inr" "q"])
+  addTest $ LSpec.check "(2 parent)" state2.parentExpr?.isSome
+  addTest $ LSpec.check "(2 root)" state2.rootExpr?.isNone
 
   let state3_1 ← match ← state2.execute (goalId := 0) (tactic := "apply Or.inr") with
     | .success state => pure state

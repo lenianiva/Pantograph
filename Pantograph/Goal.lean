@@ -210,8 +210,8 @@ protected def GoalState.continue (target: GoalState) (branch: GoalState): Except
   else
     target.resume (goals := branch.goals)
 
-protected def GoalState.rootExpr? (goalState: GoalState): Option Expr :=
-  let expr := goalState.mctx.eAssignment.find! goalState.root
+protected def GoalState.rootExpr? (goalState: GoalState): Option Expr := do
+  let expr ← goalState.mctx.eAssignment.find? goalState.root
   let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
   if expr.hasMVar then
     -- Must not assert that the goal state is empty here. We could be in a branch goal.
@@ -219,7 +219,7 @@ protected def GoalState.rootExpr? (goalState: GoalState): Option Expr :=
     .none
   else
     assert! goalState.goals.isEmpty
-    .some expr
+    return expr
 protected def GoalState.parentExpr? (goalState: GoalState): Option Expr := do
   let parent ← goalState.parentMVar
   let expr := goalState.mctx.eAssignment.find! parent
