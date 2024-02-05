@@ -30,6 +30,7 @@
     in rec {
       packages = project // {
         inherit (leanPkgs) lean;
+        lake = leanPkgs.Lake-Main.executable;
         default = packages.executable;
       };
       devShells.default = project.devShell;
