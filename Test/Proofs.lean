@@ -232,6 +232,11 @@ def proof_or_comm: TestM Unit := do
   addTest $ LSpec.check "(2 parent)" state2.parentExpr?.isSome
   addTest $ LSpec.check "(2 root)" state2.rootExpr?.isNone
 
+  let state2parent ← serialize_expression_ast state2.parentExpr?.get! (sanitize := false)
+  -- This is due to delayed assignment
+  addTest $ LSpec.test "(2 parent)" (state2parent ==
+    "((:mv _uniq.45) (:fv _uniq.16) ((:c Eq.refl) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16)))")
+
   let state3_1 ← match ← state2.execute (goalId := 0) (tactic := "apply Or.inr") with
     | .success state => pure state
     | other => do
