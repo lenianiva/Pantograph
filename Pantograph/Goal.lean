@@ -1,3 +1,4 @@
+import Pantograph.Protocol
 import Lean
 
 def Lean.MessageLog.getErrorMessages (log : MessageLog) : MessageLog :=
@@ -20,6 +21,9 @@ structure GoalState where
   -- The id of the goal in the parent
   parentGoalId: Nat := 0
 
+  -- Parent state metavariable source
+  parentMVar: Option MVarId
+
 abbrev M := Elab.TermElabM
 
 protected def GoalState.create (expr: Expr): M GoalState := do
@@ -36,6 +40,7 @@ protected def GoalState.create (expr: Expr): M GoalState := do
     savedState,
     root,
     newMVars := SSet.insert .empty root,
+    parentMVar := .none,
   }
 protected def GoalState.goals (state: GoalState): List MVarId := state.savedState.tactic.goals
 
@@ -114,10 +119,11 @@ protected def GoalState.execute (state: GoalState) (goalId: Nat) (tactic: String
         return acc.insert mvarId
       ) SSet.empty
     return .success {
-      state with
+      root := state.root,
       savedState := nextSavedState
       newMVars,
       parentGoalId := goalId,
+      parentMVar := .some goal,
     }
 
 protected def GoalState.tryAssign (state: GoalState) (goalId: Nat) (expr: String): M TacticResult := do
@@ -164,10 +170,11 @@ protected def GoalState.tryAssign (state: GoalState) (goalId: Nat) (expr: String
         Elab.Tactic.setGoals (← newMVars.filterM (λ mvar => do pure !(← mvar.isAssigned)))
         let nextSavedState ← MonadBacktrack.saveState
         return .success {
-          state with
+          root := state.root,
           savedState := nextSavedState,
           newMVars := newMVars.toSSet,
           parentGoalId := goalId,
+          parentMVar := .some goal,
         }
     catch exception =>
       return .failure #[← exception.toMessageData.toString]
@@ -203,8 +210,8 @@ protected def GoalState.continue (target: GoalState) (branch: GoalState): Except
   else
     target.resume (goals := branch.goals)
 
-protected def GoalState.rootExpr? (goalState: GoalState): Option Expr :=
-  let expr := goalState.mctx.eAssignment.find! goalState.root
+protected def GoalState.rootExpr? (goalState: GoalState): Option Expr := do
+  let expr ← goalState.mctx.eAssignment.find? goalState.root
   let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
   if expr.hasMVar then
     -- Must not assert that the goal state is empty here. We could be in a branch goal.
@@ -212,6 +219,12 @@ protected def GoalState.rootExpr? (goalState: GoalState): Option Expr :=
     .none
   else
     assert! goalState.goals.isEmpty
-    .some expr
+    return expr
+protected def GoalState.parentExpr? (goalState: GoalState): Option Expr := do
+  let parent ← goalState.parentMVar
+  let expr := goalState.mctx.eAssignment.find! parent
+  let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
+  return expr
+
 
 end Pantograph

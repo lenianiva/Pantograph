@@ -240,7 +240,9 @@ structure GoalPrint where
   deriving Lean.FromJson
 structure GoalPrintResult where
   -- The root expression
-  root?: Option Expression
+  root?: Option Expression := .none
+  -- The filling expression of the parent goal
+  parent?: Option Expression := .none
   deriving Lean.ToJson
 
 -- Diagnostic Options, not available in REPL
@@ -252,5 +254,6 @@ structure GoalDiag where
   printAll: Bool := false
   instantiate: Bool := true
 
+abbrev CR α := Except InteractionError α
 
 end Pantograph.Protocol
