@@ -206,8 +206,10 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     | .some goalState => runMetaM <| do
       goalState.restoreMetaM
       let root? ← goalState.rootExpr?.mapM (λ expr => serialize_expression state.options expr)
+      let parent? ← goalState.parentExpr?.mapM (λ expr => serialize_expression state.options expr)
       return .ok {
         root?,
+        parent?,
       }
 
 end Pantograph

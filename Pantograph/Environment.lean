@@ -7,8 +7,6 @@ open Pantograph
 
 namespace Pantograph.Environment
 
-abbrev CR α := Except Protocol.InteractionError α
-
 def is_symbol_unsafe_or_internal (n: Lean.Name) (info: Lean.ConstantInfo): Bool :=
   isLeanSymbol n ∨ (Lean.privateToUserName? n |>.map isLeanSymbol |>.getD false) ∨ info.isUnsafe
   where
@@ -32,14 +30,14 @@ def to_filtered_symbol (n: Lean.Name) (info: Lean.ConstantInfo): Option String :
   if is_symbol_unsafe_or_internal n info
   then Option.none
   else Option.some <| to_compact_symbol_name n info
-def catalog (_: Protocol.EnvCatalog): CoreM (CR Protocol.EnvCatalogResult) := do
+def catalog (_: Protocol.EnvCatalog): CoreM (Protocol.CR Protocol.EnvCatalogResult) := do
   let env ← Lean.MonadEnv.getEnv
   let names := env.constants.fold (init := #[]) (λ acc name info =>
     match to_filtered_symbol name info with
     | .some x => acc.push x
     | .none => acc)
   return .ok { symbols := names }
-def inspect (args: Protocol.EnvInspect) (options: Protocol.Options): CoreM (CR Protocol.EnvInspectResult) := do
+def inspect (args: Protocol.EnvInspect) (options: Protocol.Options): CoreM (Protocol.CR Protocol.EnvInspectResult) := do
   let env ← Lean.MonadEnv.getEnv
   let name :=  args.name.toName
   let info? := env.find? name
@@ -90,7 +88,7 @@ def inspect (args: Protocol.EnvInspect) (options: Protocol.Options): CoreM (CR P
       } }
     | _ => core
   return .ok result
-def addDecl (args: Protocol.EnvAdd): CoreM (CR Protocol.EnvAddResult) := do
+def addDecl (args: Protocol.EnvAdd): CoreM (Protocol.CR Protocol.EnvAddResult) := do
   let env ← Lean.MonadEnv.getEnv
   let tvM: Elab.TermElabM (Except String (Expr × Expr)) := do
     let type ← match syntax_from_str env args.type with
