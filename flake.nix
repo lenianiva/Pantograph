@@ -29,7 +29,7 @@
       };
     in rec {
       packages = project // {
-        inherit (leanPkgs) lean;
+        inherit leanPkgs;
         default = packages.executable;
       };
       devShells.default = project.devShell;
