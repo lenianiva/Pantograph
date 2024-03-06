@@ -28,9 +28,10 @@
         src = ./.;
       };
     in rec {
-      packages = project // {
-        inherit leanPkgs;
-        default = packages.executable;
+      packages = {
+        inherit (leanPkgs) lean lean-all;
+        inherit (project) sharedLib executable;
+        default = project.executable;
       };
       devShells.default = project.devShell;
     };
