@@ -4,6 +4,7 @@ open Lake DSL
 package pantograph
 
 lean_lib Pantograph {
+  defaultFacets := #[LeanLib.sharedFacet]
 }
 
 @[default_target]
