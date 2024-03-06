@@ -242,7 +242,7 @@ structure GoalPrintResult where
   -- The root expression
   root?: Option Expression := .none
   -- The filling expression of the parent goal
-  parent?: Option Expression := .none
+  parent?: Option Expression
   deriving Lean.ToJson
 
 -- Diagnostic Options, not available in REPL
