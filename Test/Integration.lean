@@ -103,6 +103,12 @@ def test_tactic : IO LSpec.TestSeq :=
        goals? := #[goal1],
      }:
       Protocol.GoalTacticResult)),
+    subroutine_step "goal.print"
+      [("stateId", .num 1)]
+     (Lean.toJson ({
+       parent? := .some { pp? := .some "fun x => ?m.11 x" },
+     }:
+      Protocol.GoalPrintResult)),
     subroutine_step "goal.tactic"
       [("stateId", .num 1), ("goalId", .num 0), ("tactic", .str "intro y")]
      (Lean.toJson ({
