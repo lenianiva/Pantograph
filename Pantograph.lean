@@ -2,6 +2,7 @@ import Pantograph.Goal
 import Pantograph.Protocol
 import Pantograph.Serial
 import Pantograph.Environment
+import Pantograph.Library
 import Lean.Data.HashMap
 
 namespace Pantograph
