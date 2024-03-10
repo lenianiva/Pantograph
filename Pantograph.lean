@@ -49,6 +49,8 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
       errorCommand s!"Unknown command {cmd}"
     return Lean.toJson error
   where
+  errorCommand := errorI "command"
+  errorIndex := errorI "index"
   -- Command Functions
   reset (_: Protocol.Reset): MainM (CR Protocol.StatResult) := do
     let state ← get
@@ -93,14 +95,11 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   goal_start (args: Protocol.GoalStart): MainM (CR Protocol.GoalStartResult) := do
     let state ← get
     let env ← Lean.MonadEnv.getEnv
-    let expr?: Except _ GoalState ← runTermElabM (match args.expr, args.copyFrom with
-      | .some expr, .none =>
-        (match syntax_from_str env expr with
-        | .error str => return .error <| errorI "parsing" str
-        | .ok syn => do
-          (match ← syntax_to_expr syn with
-          | .error str => return .error <| errorI "elab" str
-          | .ok expr => return .ok (← GoalState.create expr)))
+    let expr?: Except Protocol.InteractionError GoalState ← runTermElabM (match args.expr, args.copyFrom with
+      | .some expr, .none => do
+          match ← exprParse expr with
+          | .ok expr => return .ok (← GoalState.create expr)
+          | .error e => return .error e
       | .none, .some copyFrom =>
         (match env.find? <| copyFrom.toName with
         | .none => return .error <| errorIndex s!"Symbol not found: {copyFrom}"
@@ -123,9 +122,9 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     | .some goalState => do
       let nextGoalState?: Except _ GoalState ← match args.tactic?, args.expr? with
         | .some tactic, .none => do
-          pure ( Except.ok (← runTermElabM <| GoalState.execute goalState args.goalId tactic))
+          pure ( Except.ok (← goalTactic goalState args.goalId tactic))
         | .none, .some expr => do
-          pure ( Except.ok (← runTermElabM <| GoalState.tryAssign goalState args.goalId expr))
+          pure ( Except.ok (← goalTryAssign goalState args.goalId expr))
         | _, _ => pure (Except.error <| errorI "arguments" "Exactly one of {tactic, expr} must be supplied")
       match nextGoalState? with
       | .error error => return .error error
@@ -157,8 +156,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           | .none => return .error $ errorIndex s!"Invalid state index {branchId}"
           | .some branch => pure $ target.continue branch
         | .none, .some goals =>
-          let goals := goals.map (λ name => { name := name.toName })
-          pure $ target.resume goals
+          pure $ goalResume target goals
         | _, _ => return .error <| errorI "arguments" "Exactly one of {branch, goals} must be supplied"
       match nextState? with
       | .error error => return .error <| errorI "structure" error
@@ -168,7 +166,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           goalStates := state.goalStates.insert nextStateId nextGoalState,
           nextId := state.nextId + 1
         }
-        let goals ← nextGoalState.serializeGoals (parent := .none) (options := state.options) |>.run'
+        let goals ← goalSerialize nextGoalState (options := state.options)
         return .ok {
           nextStateId,
           goals,

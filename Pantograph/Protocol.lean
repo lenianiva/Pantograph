@@ -221,7 +221,7 @@ structure GoalContinue where
   -- The state which is an ancestor of `target` where goals will be extracted from
   branch?: Option Nat := .none
   -- Or, the particular goals that should be brought back into scope
-  goals?: Option (List String) := .none
+  goals?: Option (Array String) := .none
   deriving Lean.FromJson
 structure GoalContinueResult where
   nextStateId: Nat
