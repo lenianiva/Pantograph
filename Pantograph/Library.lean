@@ -80,6 +80,23 @@ def createCoreState (imports: Array String): IO Lean.Core.State := do
 def envCatalog: Lean.CoreM Protocol.EnvCatalogResult :=
   Environment.catalog ({}: Protocol.EnvCatalog)
 
+@[export pantograph_mk_options]
+def mkOptions
+  (printJsonPretty: Bool)
+  (printExprPretty: Bool)
+  (printExprAST: Bool)
+  (noRepeat: Bool)
+  (printAuxDecls: Bool)
+  (printImplementationDetailHyps: Bool)
+  : Protocol.Options := {
+    printJsonPretty,
+    printExprPretty,
+    printExprAST,
+    noRepeat,
+    printAuxDecls,
+    printImplementationDetailHyps,
+  }
+
 @[export pantograph_env_inspect_m]
 def envInspect (name: String) (value: Bool) (dependency: Bool) (options: Protocol.Options):
     Lean.CoreM (Protocol.CR Protocol.EnvInspectResult) :=
@@ -92,34 +109,41 @@ def envAdd (name: String) (type: String) (value: String) (isTheorem: Bool):
     Lean.CoreM (Protocol.CR Protocol.EnvAddResult) :=
   Environment.addDecl { name, type, value, isTheorem }
 
-@[export pantograph_expr_parse_m]
-def exprParse (s: String): Lean.CoreM (Protocol.CR Lean.Expr) := do
+/-- This must be a TermElabM since the parsed expr contains extra information -/
+def exprParse (s: String): Lean.Elab.TermElabM (Protocol.CR Lean.Expr) := do
   let env ← Lean.MonadEnv.getEnv
   let syn ← match syntax_from_str env s with
     | .error str => return .error $ errorI "parsing" str
     | .ok syn => pure syn
-  runTermElabM (do
-    match ← syntax_to_expr syn with
-    | .error str => return .error $ errorI "elab" str
-    | .ok expr => return .ok expr)
+  match ← syntax_to_expr syn with
+  | .error str => return .error $ errorI "elab" str
+  | .ok expr => return .ok expr
 
-@[export pantograph_expr_print_m]
-def exprPrint (expr: Lean.Expr) (options: @&Protocol.Options):
+@[export pantograph_expr_echo_m]
+def exprEcho (expr: String) (options: @&Protocol.Options):
     Lean.CoreM (Protocol.CR Protocol.ExprEchoResult) := do
-  let termElabM: Lean.Elab.TermElabM _ :=
-      try
-        let type ← Lean.Meta.inferType expr
-        return .ok {
-            type := (← serialize_expression options type),
-            expr := (← serialize_expression options expr)
-        }
-      catch exception =>
-        return .error $ errorI "typing" (← exception.toMessageData.toString)
+  let termElabM: Lean.Elab.TermElabM _ := do
+    let expr ← match ← exprParse expr with
+      | .error e => return .error e
+      | .ok expr => pure expr
+    try
+      let type ← Lean.Meta.inferType expr
+      return .ok {
+          type := (← serialize_expression options type),
+          expr := (← serialize_expression options expr)
+      }
+    catch exception =>
+      return .error $ errorI "typing" (← exception.toMessageData.toString)
   runTermElabM termElabM
 
-@[export pantograph_goal_start_m]
-def goalStart (expr: Lean.Expr): Lean.CoreM GoalState :=
-  runTermElabM (GoalState.create expr)
+@[export pantograph_goal_start_expr_m]
+def goalStartExpr (expr: String): Lean.CoreM (Protocol.CR GoalState) :=
+  let termElabM: Lean.Elab.TermElabM _ := do
+    let expr ← match ← exprParse expr with
+      | .error e => return .error e
+      | .ok expr => pure $ expr
+    return .ok $ ← GoalState.create expr
+  runTermElabM termElabM
 
 @[export pantograph_goal_tactic_m]
 def goalTactic (state: GoalState) (goalId: Nat) (tactic: String): Lean.CoreM TacticResult :=
