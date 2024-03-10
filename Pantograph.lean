@@ -22,14 +22,6 @@ abbrev MainM := ReaderT Context (StateT State Lean.CoreM)
 -- certain monadic features in `MainM`
 abbrev CR α := Except Protocol.InteractionError α
 
-def runMetaM { α } (metaM: Lean.MetaM α): Lean.CoreM α :=
-  metaM.run'
-def runTermElabM { α } (termElabM: Lean.Elab.TermElabM α): Lean.CoreM α :=
-  termElabM.run' (ctx := {
-    declName? := .none,
-    errToSorry := false,
-  }) |>.run'
-
 def execute (command: Protocol.Command): MainM Lean.Json := do
   let run { α β: Type } [Lean.FromJson α] [Lean.ToJson β] (comm: α → MainM (CR β)): MainM Lean.Json :=
     match Lean.fromJson? command.payload with
@@ -57,9 +49,6 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
       errorCommand s!"Unknown command {cmd}"
     return Lean.toJson error
   where
-  errorI (type desc: String): Protocol.InteractionError := { error := type, desc := desc }
-  errorCommand := errorI "command"
-  errorIndex := errorI "index"
   -- Command Functions
   reset (_: Protocol.Reset): MainM (CR Protocol.StatResult) := do
     let state ← get
@@ -80,22 +69,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     Environment.addDecl args
   expr_echo (args: Protocol.ExprEcho): MainM (CR Protocol.ExprEchoResult) := do
     let state ← get
-    let env ← Lean.MonadEnv.getEnv
-    let syn ← match syntax_from_str env args.expr with
-      | .error str => return .error $ errorI "parsing" str
-      | .ok syn => pure syn
-    runTermElabM (do
-      match ← syntax_to_expr syn with
-      | .error str => return .error $ errorI "elab" str
-      | .ok expr => do
-        try
-          let type ← Lean.Meta.inferType expr
-          return .ok {
-              type := (← serialize_expression (options := state.options) type),
-              expr := (← serialize_expression (options := state.options) expr)
-          }
-        catch exception =>
-          return .error $ errorI "typing" (← exception.toMessageData.toString))
+    exprEcho args state.options
   options_set (args: Protocol.OptionsSet): MainM (CR Protocol.OptionsSetResult) := do
     let state ← get
     let options := state.options
