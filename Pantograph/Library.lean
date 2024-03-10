@@ -3,7 +3,6 @@ import Pantograph.Environment
 import Pantograph.Protocol
 import Lean
 
-
 namespace Lean
 
 /-- This is better than the default version since it handles `.` and doesn't
@@ -34,6 +33,18 @@ def setOptionFromString' (opts : Options) (entry : String) : ExceptT String IO O
 end Lean
 
 namespace Pantograph
+
+def runMetaM { α } (metaM: Lean.MetaM α): Lean.CoreM α :=
+  metaM.run'
+def runTermElabM { α } (termElabM: Lean.Elab.TermElabM α): Lean.CoreM α :=
+  termElabM.run' (ctx := {
+    declName? := .none,
+    errToSorry := false,
+  }) |>.run'
+
+def errorI (type desc: String): Protocol.InteractionError := { error := type, desc := desc }
+def errorCommand := errorI "command"
+def errorIndex := errorI "index"
 
 @[export pantograph_version]
 def pantographVersion: String := version
@@ -67,9 +78,49 @@ def createCoreState (imports: Array String): IO Lean.Core.State := do
     (trustLevel := 1)
   return { env := env }
 
-@[export pantograph_catalog]
-def catalog (cc: Lean.Core.Context) (cs: Lean.Core.State): IO Protocol.EnvCatalogResult := do
+@[export pantograph_env_catalog]
+def envCatalog (cc: Lean.Core.Context) (cs: Lean.Core.State): IO Protocol.EnvCatalogResult := do
   let coreM: Lean.CoreM _ := Environment.catalog ({}: Protocol.EnvCatalog)
+  let (result, _) ← coreM.toIO cc cs
+  return result
+
+@[export pantograph_env_inspect]
+def envInspect (cc: Lean.Core.Context) (cs: Lean.Core.State)
+    (name: String) (value: Bool) (dependency: Bool) (options: Protocol.Options): IO (Protocol.CR Protocol.EnvInspectResult) := do
+  let coreM: Lean.CoreM _ := Environment.inspect ({
+    name, value? := .some value, dependency?:= .some dependency
+  }: Protocol.EnvInspect) options
+  let (result, _) ← coreM.toIO cc cs
+  return result
+
+@[export pantograph_env_add]
+def envAdd (cc: Lean.Core.Context) (cs: Lean.Core.State)
+  (name: String) (type: String) (value: String) (isTheorem: Bool): IO (Protocol.CR Protocol.EnvAddResult) := do
+  let coreM: Lean.CoreM _ := Environment.addDecl { name, type, value, isTheorem }
+  let (result, _) ← coreM.toIO cc cs
+  return result
+
+def exprEcho (args: Protocol.ExprEcho) (options: @&Protocol.Options): Lean.CoreM (Protocol.CR Protocol.ExprEchoResult) := do
+    let env ← Lean.MonadEnv.getEnv
+    let syn ← match syntax_from_str env args.expr with
+      | .error str => return .error $ errorI "parsing" str
+      | .ok syn => pure syn
+    runTermElabM (do
+      match ← syntax_to_expr syn with
+      | .error str => return .error $ errorI "elab" str
+      | .ok expr => do
+        try
+          let type ← Lean.Meta.inferType expr
+          return .ok {
+              type := (← serialize_expression options type),
+              expr := (← serialize_expression options expr)
+          }
+        catch exception =>
+          return .error $ errorI "typing" (← exception.toMessageData.toString))
+
+@[export pantograph_expr_echo]
+def exprEchoExport (cc: Lean.Core.Context) (cs: Lean.Core.State) (expr: String) (options: @&Protocol.Options): IO (Protocol.CR Protocol.ExprEchoResult) := do
+  let coreM: Lean.CoreM _ := exprEcho { expr } options
   let (result, _) ← coreM.toIO cc cs
   return result
 

@@ -157,7 +157,7 @@ partial def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): Meta
     | .instImplicit => " :instImplicit"
   of_name (name: Name) := name_to_ast name sanitize
 
-def serialize_expression (options: Protocol.Options) (e: Expr): MetaM Protocol.Expression := do
+def serialize_expression (options: @&Protocol.Options) (e: Expr): MetaM Protocol.Expression := do
   let pp := toString (← Meta.ppExpr e)
   let pp?: Option String := match options.printExprPretty with
     | true => .some pp

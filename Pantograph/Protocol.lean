@@ -163,7 +163,7 @@ structure EnvAdd where
   name: String
   type: String
   value: String
-  isTheorem?: Bool
+  isTheorem: Bool
   deriving Lean.FromJson
 structure EnvAddResult where
   deriving Lean.ToJson
