@@ -2,6 +2,7 @@ import Lean.Data.Json
 import Lean.Environment
 
 import Pantograph.Version
+import Pantograph.Library
 import Pantograph
 
 -- Main IO functions
@@ -39,35 +40,6 @@ partial def loop : MainM Unit := do
     IO.println str
   loop
 
-namespace Lean
-
-/-- This is better than the default version since it handles `.` and doesn't
- crash the program when it fails. -/
-def setOptionFromString' (opts : Options) (entry : String) : ExceptT String IO Options := do
-  let ps := (entry.splitOn "=").map String.trim
-  let [key, val] ← pure ps | throw "invalid configuration option entry, it must be of the form '<key> = <value>'"
-  let key := key.toName
-  let defValue ← getOptionDefaultValue key
-  match defValue with
-  | DataValue.ofString _ => pure $ opts.setString key val
-  | DataValue.ofBool _   =>
-    match val with
-    | "true" => pure $ opts.setBool key true
-    | "false" => pure $ opts.setBool key false
-    | _ => throw  s!"invalid Bool option value '{val}'"
-  | DataValue.ofName _   => pure $ opts.setName key val.toName
-  | DataValue.ofNat _    =>
-    match val.toNat? with
-    | none   => throw s!"invalid Nat option value '{val}'"
-    | some v => pure $ opts.setNat key v
-  | DataValue.ofInt _    =>
-    match val.toInt? with
-    | none   => throw s!"invalid Int option value '{val}'"
-    | some v => pure $ opts.setInt key v
-  | DataValue.ofSyntax _ => throw s!"invalid Syntax option value"
-
-end Lean
-
 
 unsafe def main (args: List String): IO Unit := do
   -- NOTE: A more sophisticated scheme of command line argument handling is needed.
@@ -79,32 +51,17 @@ unsafe def main (args: List String): IO Unit := do
   Lean.enableInitializersExecution
   Lean.initSearchPath (← Lean.findSysroot)
 
-  let options? ← args.filterMap (λ s => if s.startsWith "--" then .some <| s.drop 2 else .none)
-    |>.foldlM Lean.setOptionFromString' Lean.Options.empty
-    |>.run
-  let options ← match options? with
-    | .ok options => pure options
-    | .error e => throw $ IO.userError s!"Options cannot be parsed: {e}"
+  let coreContext ← args.filterMap (λ s => if s.startsWith "--" then .some <| s.drop 2 else .none)
+    |>.toArray |> createCoreContext
   let imports:= args.filter (λ s => ¬ (s.startsWith "--"))
-
-  let env ← Lean.importModules
-    (imports := imports.toArray.map (λ str => { module := str.toName, runtimeOnly := false }))
-    (opts := {})
-    (trustLevel := 1)
+  let coreState ← createCoreState imports.toArray
   let context: Context := {
     imports
-  }
-  let coreContext: Lean.Core.Context := {
-    currNamespace := Lean.Name.str .anonymous "Aniva"
-    openDecls := [],     -- No 'open' directives needed
-    fileName := "<Pantograph>",
-    fileMap := { source := "", positions := #[0], lines := #[1] },
-    options := options
   }
   try
     let coreM := loop.run context |>.run' {}
     IO.println "ready."
-    discard <| coreM.toIO coreContext { env := env }
+    discard <| coreM.toIO coreContext coreState
   catch ex =>
     IO.println "Uncaught IO exception"
     IO.println ex.toString
