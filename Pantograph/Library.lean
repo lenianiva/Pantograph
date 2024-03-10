@@ -38,6 +38,12 @@ namespace Pantograph
 @[export pantograph_version]
 def pantographVersion: String := version
 
+/-- Adds the given paths to Lean package search path -/
+@[export pantograph_init_search]
+unsafe def initSearch (sp: String): IO Unit := do
+  Lean.enableInitializersExecution
+  Lean.initSearchPath (← Lean.findSysroot) (sp := System.SearchPath.parse sp)
+
 /-- Creates a Core.Context object needed to run all monads -/
 @[export pantograph_create_core_context]
 def createCoreContext (options: Array String): IO Lean.Core.Context := do

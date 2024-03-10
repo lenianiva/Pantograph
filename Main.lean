@@ -48,8 +48,7 @@ unsafe def main (args: List String): IO Unit := do
     println! s!"{version}"
     return
 
-  Lean.enableInitializersExecution
-  Lean.initSearchPath (← Lean.findSysroot)
+  initSearch ""
 
   let coreContext ← args.filterMap (λ s => if s.startsWith "--" then .some <| s.drop 2 else .none)
     |>.toArray |> createCoreContext
