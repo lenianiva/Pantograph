@@ -1,6 +1,7 @@
-import Pantograph.Version
 import Pantograph.Environment
+import Pantograph.Goal
 import Pantograph.Protocol
+import Pantograph.Version
 import Lean
 
 namespace Lean
@@ -70,6 +71,7 @@ def createCoreContext (options: Array String): IO Lean.Core.Context := do
     options := options
   }
 
+/-- Creates a Core.State object needed to run all monads -/
 @[export pantograph_create_core_state]
 def createCoreState (imports: Array String): IO Lean.Core.State := do
   let env ← Lean.importModules
@@ -78,11 +80,14 @@ def createCoreState (imports: Array String): IO Lean.Core.State := do
     (trustLevel := 1)
   return { env := env }
 
+/-- Execute a `CoreM` monad -/
+@[export pantograph_exec_core]
+def execCore {α} (context: Lean.Core.Context) (state: Lean.Core.State) (coreM: Lean.CoreM α): IO (α × Lean.Core.State) :=
+  coreM.toIO context state
+
 @[export pantograph_env_catalog]
-def envCatalog (cc: Lean.Core.Context) (cs: Lean.Core.State): IO Protocol.EnvCatalogResult := do
-  let coreM: Lean.CoreM _ := Environment.catalog ({}: Protocol.EnvCatalog)
-  let (result, _) ← coreM.toIO cc cs
-  return result
+def envCatalog: Lean.CoreM Protocol.EnvCatalogResult :=
+  Environment.catalog ({}: Protocol.EnvCatalog)
 
 @[export pantograph_env_inspect]
 def envInspect (cc: Lean.Core.Context) (cs: Lean.Core.State)
@@ -100,28 +105,32 @@ def envAdd (cc: Lean.Core.Context) (cs: Lean.Core.State)
   let (result, _) ← coreM.toIO cc cs
   return result
 
-def exprEcho (args: Protocol.ExprEcho) (options: @&Protocol.Options): Lean.CoreM (Protocol.CR Protocol.ExprEchoResult) := do
-    let env ← Lean.MonadEnv.getEnv
-    let syn ← match syntax_from_str env args.expr with
-      | .error str => return .error $ errorI "parsing" str
-      | .ok syn => pure syn
-    runTermElabM (do
-      match ← syntax_to_expr syn with
-      | .error str => return .error $ errorI "elab" str
-      | .ok expr => do
-        try
-          let type ← Lean.Meta.inferType expr
-          return .ok {
-              type := (← serialize_expression options type),
-              expr := (← serialize_expression options expr)
-          }
-        catch exception =>
-          return .error $ errorI "typing" (← exception.toMessageData.toString))
+@[export pantograph_expr_parse]
+def exprParse (s: String): Lean.CoreM (Protocol.CR Lean.Expr) := do
+  let env ← Lean.MonadEnv.getEnv
+  let syn ← match syntax_from_str env s with
+    | .error str => return .error $ errorI "parsing" str
+    | .ok syn => pure syn
+  runTermElabM (do
+    match ← syntax_to_expr syn with
+    | .error str => return .error $ errorI "elab" str
+    | .ok expr => return .ok expr)
 
-@[export pantograph_expr_echo]
-def exprEchoExport (cc: Lean.Core.Context) (cs: Lean.Core.State) (expr: String) (options: @&Protocol.Options): IO (Protocol.CR Protocol.ExprEchoResult) := do
-  let coreM: Lean.CoreM _ := exprEcho { expr } options
-  let (result, _) ← coreM.toIO cc cs
-  return result
+@[export pantograph_expr_print]
+def exprPrint (expr: Lean.Expr) (options: @&Protocol.Options): Lean.CoreM (Protocol.CR Protocol.ExprEchoResult) := do
+  let termElabM: Lean.Elab.TermElabM _ :=
+      try
+        let type ← Lean.Meta.inferType expr
+        return .ok {
+            type := (← serialize_expression options type),
+            expr := (← serialize_expression options expr)
+        }
+      catch exception =>
+        return .error $ errorI "typing" (← exception.toMessageData.toString)
+  runTermElabM termElabM
+
+@[export pantograph_goal_start]
+def goalStart (expr: Lean.Expr): Lean.CoreM GoalState :=
+  runTermElabM (GoalState.create expr)
 
 end Pantograph
