@@ -1,6 +1,7 @@
 import Pantograph.Environment
 import Pantograph.Goal
 import Pantograph.Protocol
+import Pantograph.Serial
 import Pantograph.Version
 import Lean
 
@@ -44,11 +45,6 @@ def runTermElabM { α } (termElabM: Lean.Elab.TermElabM α): Lean.CoreM α :=
   }) |>.run'
 
 def errorI (type desc: String): Protocol.InteractionError := { error := type, desc := desc }
-def errorCommand := errorI "command"
-def errorIndex := errorI "index"
-
-@[export pantograph_version]
-def pantographVersion: String := version
 
 /-- Adds the given paths to Lean package search path -/
 @[export pantograph_init_search]
@@ -82,30 +78,27 @@ def createCoreState (imports: Array String): IO Lean.Core.State := do
 
 /-- Execute a `CoreM` monad -/
 @[export pantograph_exec_core]
-def execCore {α} (context: Lean.Core.Context) (state: Lean.Core.State) (coreM: Lean.CoreM α): IO (α × Lean.Core.State) :=
+def execCore {α} (context: Lean.Core.Context) (state: Lean.Core.State) (coreM: Lean.CoreM α):
+    IO (α × Lean.Core.State) :=
   coreM.toIO context state
 
-@[export pantograph_env_catalog]
+@[export pantograph_env_catalog_m]
 def envCatalog: Lean.CoreM Protocol.EnvCatalogResult :=
   Environment.catalog ({}: Protocol.EnvCatalog)
 
-@[export pantograph_env_inspect]
-def envInspect (cc: Lean.Core.Context) (cs: Lean.Core.State)
-    (name: String) (value: Bool) (dependency: Bool) (options: Protocol.Options): IO (Protocol.CR Protocol.EnvInspectResult) := do
-  let coreM: Lean.CoreM _ := Environment.inspect ({
+@[export pantograph_env_inspect_m]
+def envInspect (name: String) (value: Bool) (dependency: Bool) (options: Protocol.Options):
+    Lean.CoreM (Protocol.CR Protocol.EnvInspectResult) :=
+  Environment.inspect ({
     name, value? := .some value, dependency?:= .some dependency
   }: Protocol.EnvInspect) options
-  let (result, _) ← coreM.toIO cc cs
-  return result
 
-@[export pantograph_env_add]
-def envAdd (cc: Lean.Core.Context) (cs: Lean.Core.State)
-  (name: String) (type: String) (value: String) (isTheorem: Bool): IO (Protocol.CR Protocol.EnvAddResult) := do
-  let coreM: Lean.CoreM _ := Environment.addDecl { name, type, value, isTheorem }
-  let (result, _) ← coreM.toIO cc cs
-  return result
+@[export pantograph_env_add_m]
+def envAdd (name: String) (type: String) (value: String) (isTheorem: Bool):
+    Lean.CoreM (Protocol.CR Protocol.EnvAddResult) :=
+  Environment.addDecl { name, type, value, isTheorem }
 
-@[export pantograph_expr_parse]
+@[export pantograph_expr_parse_m]
 def exprParse (s: String): Lean.CoreM (Protocol.CR Lean.Expr) := do
   let env ← Lean.MonadEnv.getEnv
   let syn ← match syntax_from_str env s with
@@ -116,8 +109,9 @@ def exprParse (s: String): Lean.CoreM (Protocol.CR Lean.Expr) := do
     | .error str => return .error $ errorI "elab" str
     | .ok expr => return .ok expr)
 
-@[export pantograph_expr_print]
-def exprPrint (expr: Lean.Expr) (options: @&Protocol.Options): Lean.CoreM (Protocol.CR Protocol.ExprEchoResult) := do
+@[export pantograph_expr_print_m]
+def exprPrint (expr: Lean.Expr) (options: @&Protocol.Options):
+    Lean.CoreM (Protocol.CR Protocol.ExprEchoResult) := do
   let termElabM: Lean.Elab.TermElabM _ :=
       try
         let type ← Lean.Meta.inferType expr
@@ -129,8 +123,30 @@ def exprPrint (expr: Lean.Expr) (options: @&Protocol.Options): Lean.CoreM (Proto
         return .error $ errorI "typing" (← exception.toMessageData.toString)
   runTermElabM termElabM
 
-@[export pantograph_goal_start]
+@[export pantograph_goal_start_m]
 def goalStart (expr: Lean.Expr): Lean.CoreM GoalState :=
   runTermElabM (GoalState.create expr)
+
+@[export pantograph_goal_tactic_m]
+def goalTactic (state: GoalState) (goalId: Nat) (tactic: String): Lean.CoreM TacticResult :=
+  runTermElabM <| GoalState.execute state goalId tactic
+
+@[export pantograph_goal_try_assign_m]
+def goalTryAssign (state: GoalState) (goalId: Nat) (expr: String): Lean.CoreM TacticResult :=
+  runTermElabM <| GoalState.tryAssign state goalId expr
+
+@[export pantograph_goal_continue]
+def goalContinue (target: GoalState) (branch: GoalState): Except String GoalState :=
+  target.continue branch
+
+@[export pantograph_goal_resume]
+def goalResume (target: GoalState) (goals: Array String): Except String GoalState :=
+  target.resume (goals.map (λ n => { name := n.toName }) |>.toList)
+
+@[export pantograph_goal_serialize_m]
+def goalSerialize (state: GoalState) (options: Protocol.Options): Lean.CoreM (Array Protocol.Goal) :=
+  runMetaM <| state.serializeGoals (parent := .none) options
+
+
 
 end Pantograph
