@@ -71,7 +71,8 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     let nGoals := state.goalStates.size
     return .ok { nGoals }
   env_catalog (args: Protocol.EnvCatalog): MainM (CR Protocol.EnvCatalogResult) := do
-    Environment.catalog args
+    let result ← Environment.catalog args
+    return .ok result
   env_inspect (args: Protocol.EnvInspect): MainM (CR Protocol.EnvInspectResult) := do
     let state ← get
     Environment.inspect args state.options

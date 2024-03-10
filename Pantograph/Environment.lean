@@ -30,13 +30,13 @@ def to_filtered_symbol (n: Lean.Name) (info: Lean.ConstantInfo): Option String :
   if is_symbol_unsafe_or_internal n info
   then Option.none
   else Option.some <| to_compact_symbol_name n info
-def catalog (_: Protocol.EnvCatalog): CoreM (Protocol.CR Protocol.EnvCatalogResult) := do
+def catalog (_: Protocol.EnvCatalog): CoreM Protocol.EnvCatalogResult := do
   let env ← Lean.MonadEnv.getEnv
   let names := env.constants.fold (init := #[]) (λ acc name info =>
     match to_filtered_symbol name info with
     | .some x => acc.push x
     | .none => acc)
-  return .ok { symbols := names }
+  return { symbols := names }
 def inspect (args: Protocol.EnvInspect) (options: Protocol.Options): CoreM (Protocol.CR Protocol.EnvInspectResult) := do
   let env ← Lean.MonadEnv.getEnv
   let name :=  args.name.toName
