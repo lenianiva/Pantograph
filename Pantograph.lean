@@ -95,11 +95,14 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   goal_start (args: Protocol.GoalStart): MainM (CR Protocol.GoalStartResult) := do
     let state ← get
     let env ← Lean.MonadEnv.getEnv
-    let expr?: Except Protocol.InteractionError GoalState ← runTermElabM (match args.expr, args.copyFrom with
-      | .some expr, .none => do
-          match ← exprParse expr with
-          | .ok expr => return .ok (← GoalState.create expr)
-          | .error e => return .error e
+    let expr?: Except _ GoalState ← runTermElabM (match args.expr, args.copyFrom with
+      | .some expr, .none =>
+        (match syntax_from_str env expr with
+        | .error str => return .error <| errorI "parsing" str
+        | .ok syn => do
+          (match ← syntax_to_expr syn with
+          | .error str => return .error <| errorI "elab" str
+          | .ok expr => return .ok (← GoalState.create expr)))
       | .none, .some copyFrom =>
         (match env.find? <| copyFrom.toName with
         | .none => return .error <| errorIndex s!"Symbol not found: {copyFrom}"

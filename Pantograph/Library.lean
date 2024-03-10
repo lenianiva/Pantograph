@@ -76,12 +76,6 @@ def createCoreState (imports: Array String): IO Lean.Core.State := do
     (trustLevel := 1)
   return { env := env }
 
-/-- Execute a `CoreM` monad -/
-@[export pantograph_exec_core]
-def execCore {α} (context: Lean.Core.Context) (state: Lean.Core.State) (coreM: Lean.CoreM α):
-    IO (α × Lean.Core.State) :=
-  coreM.toIO context state
-
 @[export pantograph_env_catalog_m]
 def envCatalog: Lean.CoreM Protocol.EnvCatalogResult :=
   Environment.catalog ({}: Protocol.EnvCatalog)
