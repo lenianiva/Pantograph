@@ -172,7 +172,7 @@ def serialize_expression (options: @&Protocol.Options) (e: Expr): MetaM Protocol
   }
 
 /-- Adapted from ppGoal -/
-def serialize_goal (options: Protocol.Options) (goal: MVarId) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl)
+def serialize_goal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl)
       : MetaM Protocol.Goal := do
   -- Options for printing; See Meta.ppGoal for details
   let showLetValues  := true
@@ -242,7 +242,11 @@ def serialize_goal (options: Protocol.Options) (goal: MVarId) (mvarDecl: Metavar
   where
   of_name (n: Name) := name_to_ast n (sanitize := false)
 
-protected def GoalState.serializeGoals (state: GoalState) (parent: Option GoalState := .none) (options: Protocol.Options := {}): MetaM (Array Protocol.Goal):= do
+protected def GoalState.serializeGoals
+      (state: GoalState)
+      (parent: Option GoalState := .none)
+      (options: @&Protocol.Options := {}):
+    MetaM (Array Protocol.Goal):= do
   state.restoreMetaM
   let goals := state.goals.toArray
   let parentDecl? := parent.bind (λ parentState =>
