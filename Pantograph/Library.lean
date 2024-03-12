@@ -98,7 +98,7 @@ def mkOptions
   }
 
 @[export pantograph_env_inspect_m]
-def envInspect (name: String) (value: Bool) (dependency: Bool) (options: Protocol.Options):
+def envInspect (name: String) (value: Bool) (dependency: Bool) (options: @&Protocol.Options):
     Lean.CoreM (Protocol.CR Protocol.EnvInspectResult) :=
   Environment.inspect ({
     name, value? := .some value, dependency?:= .some dependency
@@ -162,7 +162,7 @@ def goalResume (target: GoalState) (goals: Array String): Except String GoalStat
   target.resume (goals.map (λ n => { name := n.toName }) |>.toList)
 
 @[export pantograph_goal_serialize_m]
-def goalSerialize (state: GoalState) (options: Protocol.Options): Lean.CoreM (Array Protocol.Goal) :=
+def goalSerialize (state: GoalState) (options: @&Protocol.Options): Lean.CoreM (Array Protocol.Goal) :=
   runMetaM <| state.serializeGoals (parent := .none) options
 
 

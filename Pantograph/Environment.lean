@@ -37,7 +37,7 @@ def catalog (_: Protocol.EnvCatalog): CoreM Protocol.EnvCatalogResult := do
     | .some x => acc.push x
     | .none => acc)
   return { symbols := names }
-def inspect (args: Protocol.EnvInspect) (options: Protocol.Options): CoreM (Protocol.CR Protocol.EnvInspectResult) := do
+def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): CoreM (Protocol.CR Protocol.EnvInspectResult) := do
   let env ← Lean.MonadEnv.getEnv
   let name :=  args.name.toName
   let info? := env.find? name
