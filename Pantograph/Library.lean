@@ -165,6 +165,15 @@ def goalResume (target: GoalState) (goals: Array String): Except String GoalStat
 def goalSerialize (state: GoalState) (options: @&Protocol.Options): Lean.CoreM (Array Protocol.Goal) :=
   runMetaM <| state.serializeGoals (parent := .none) options
 
+@[export pantograph_goal_print_m]
+def goalPrint (state: GoalState) (options: @&Protocol.Options): Lean.CoreM Protocol.GoalPrintResult := do
+  let metaM := do
+    state.restoreMetaM
+    return {
+      root? := ← state.rootExpr?.mapM (λ expr => serialize_expression options expr),
+      parent? := ← state.parentExpr?.mapM (λ expr => serialize_expression options expr),
+    }
+  runMetaM metaM
 
 
 end Pantograph
