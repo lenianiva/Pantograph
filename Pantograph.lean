@@ -179,12 +179,6 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     match state.goalStates.find? args.stateId with
     | .none => return .error $ errorIndex s!"Invalid state index {args.stateId}"
     | .some goalState => runMetaM <| do
-      goalState.restoreMetaM
-      let root? ← goalState.rootExpr?.mapM (λ expr => serialize_expression state.options expr)
-      let parent? ← goalState.parentExpr?.mapM (λ expr => serialize_expression state.options expr)
-      return .ok {
-        root?,
-        parent?,
-      }
+      return .ok (← goalPrint goalState state.options)
 
 end Pantograph
