@@ -4,7 +4,7 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
-    lean.url = "github:leanprover/lean4?ref=v4.1.0";
+    lean.url = "github:leanprover/lean4?ref=v4.7.0-rc2";
   };
 
   outputs = inputs @ {
