@@ -124,8 +124,8 @@ structure EnvInspect where
 structure InductInfo where
   numParams: Nat
   numIndices: Nat
-  all: List String
-  ctors: List String
+  all: Array String
+  ctors: Array String
   isRec:       Bool := false
   isReflexive: Bool := false
   isNested:    Bool := false
@@ -138,7 +138,7 @@ structure ConstructorInfo where
   numFields: Nat
   deriving Lean.ToJson
 structure RecursorInfo where
-  all: List String
+  all: Array String
   numParams: Nat
   numIndices: Nat
   numMotives: Nat
@@ -230,6 +230,7 @@ structure GoalContinueResult where
 
 -- Remove goal states
 structure GoalDelete where
+  -- This is ok being a List because it doesn't show up in the ABI
   stateIds: List Nat
   deriving Lean.FromJson
 structure GoalDeleteResult where
