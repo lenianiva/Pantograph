@@ -66,8 +66,8 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): CoreM (Pr
     | .inductInfo induct => { core with inductInfo? := .some {
           numParams := induct.numParams,
           numIndices := induct.numIndices,
-          all := induct.all.map (·.toString),
-          ctors := induct.ctors.map (·.toString),
+          all := induct.all.toArray.map (·.toString),
+          ctors := induct.ctors.toArray.map (·.toString),
           isRec := induct.isRec,
           isReflexive := induct.isReflexive,
           isNested := induct.isNested,
@@ -79,7 +79,7 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): CoreM (Pr
           numFields := ctor.numFields,
       } }
     | .recInfo r => { core with recursorInfo? := .some {
-          all := r.all.map (·.toString),
+          all := r.all.toArray.map (·.toString),
           numParams := r.numParams,
           numIndices := r.numIndices,
           numMotives := r.numMotives,

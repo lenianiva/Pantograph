@@ -34,8 +34,8 @@ def test_inspect (env: Environment): IO LSpec.TestSeq := do
     ("Or", ConstantCat.induct {
       numParams := 2,
       numIndices := 0,
-      all := ["Or"],
-      ctors := ["Or.inl", "Or.inr"],
+      all := #["Or"],
+      ctors := #["Or.inl", "Or.inr"],
     }),
     ("Except.ok", ConstantCat.ctor {
       induct := "Except",
@@ -44,7 +44,7 @@ def test_inspect (env: Environment): IO LSpec.TestSeq := do
       numFields := 1,
     }),
     ("Eq.rec", ConstantCat.recursor {
-      all := ["Eq"],
+      all := #["Eq"],
       numParams := 2,
       numIndices := 1,
       numMotives := 1,
@@ -52,7 +52,7 @@ def test_inspect (env: Environment): IO LSpec.TestSeq := do
       k := true,
     }),
     ("ForM.rec", ConstantCat.recursor {
-      all := ["ForM"],
+      all := #["ForM"],
       numParams := 3,
       numIndices := 0,
       numMotives := 1,
