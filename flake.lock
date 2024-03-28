@@ -38,19 +38,20 @@
         "flake-utils": "flake-utils",
         "lean4-mode": "lean4-mode",
         "nix": "nix",
-        "nixpkgs": "nixpkgs_2"
+        "nixpkgs": "nixpkgs_2",
+        "nixpkgs-old": "nixpkgs-old"
       },
       "locked": {
-        "lastModified": 1710520221,
-        "narHash": "sha256-8Fm4bj9sqqsUHFZweSdGMM5GdUX3jkGK/ggGq27CeQc=",
+        "lastModified": 1711508550,
+        "narHash": "sha256-UK4DnYmwXLcqHA316Zkn0cnujdYlxqUf+b6S4l56Q3s=",
         "owner": "leanprover",
         "repo": "lean4",
-        "rev": "f70895ede54501adf0db77474f452a7fef40d0b3",
+        "rev": "b4caee80a3dfc5c9619d88b16c40cc3db90da4e2",
         "type": "github"
       },
       "original": {
         "owner": "leanprover",
-        "ref": "f70895ede54501adf0db77474f452a7fef40d0b3",
+        "ref": "b4caee80a3dfc5c9619d88b16c40cc3db90da4e2",
         "repo": "lean4",
         "type": "github"
       }
@@ -137,6 +138,23 @@
         "dir": "lib",
         "owner": "NixOS",
         "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs-old": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1581379743,
+        "narHash": "sha256-i1XCn9rKuLjvCdu2UeXKzGLF6IuQePQKFt4hEKRU5oc=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "34c7eb7545d155cc5b6f499b23a7cb1c96ab4d59",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-19.03",
         "repo": "nixpkgs",
         "type": "github"
       }

@@ -44,16 +44,8 @@ def buildGoal (nameType: List (String × String)) (target: String) (userName?: O
 def proofRunner (env: Lean.Environment) (tests: TestM Unit): IO LSpec.TestSeq := do
   let termElabM := tests.run LSpec.TestSeq.done |>.run {} -- with default options
 
-  let coreContext: Lean.Core.Context := {
-    currNamespace := Name.append .anonymous "Aniva",
-    openDecls := [],     -- No 'open' directives needed
-    fileName := "<Pantograph>",
-    fileMap := { source := "", positions := #[0], lines := #[1] }
-  }
-  let metaM := termElabM.run' (ctx := {
-    declName? := some "_pantograph",
-    errToSorry := false
-  })
+  let coreContext: Lean.Core.Context ← createCoreContext #[]
+  let metaM := termElabM.run' (ctx := defaultTermElabMContext)
   let coreM := metaM.run'
   match ← (coreM.run' coreContext { env := env }).toBaseIO with
   | .error exception =>
@@ -169,7 +161,7 @@ def test_partial_continuation: TestM Unit := do
       return ()
     | .ok state => pure state
   addTest $ LSpec.check "(continue)" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
-    #[.some "2 ≤ Nat.succ ?m", .some "Nat.succ ?m ≤ 5", .some "Nat"])
+    #[.some "2 ≤ ?m.succ", .some "?m.succ ≤ 5", .some "Nat"])
   addTest $ LSpec.test "(2 root)" state1b.rootExpr?.isNone
 
   -- Roundtrip
@@ -183,7 +175,7 @@ def test_partial_continuation: TestM Unit := do
       return ()
     | .ok state => pure state
   addTest $ LSpec.check "(continue)" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
-    #[.some "2 ≤ Nat.succ ?m", .some "Nat.succ ?m ≤ 5", .some "Nat"])
+    #[.some "2 ≤ ?m.succ", .some "?m.succ ≤ 5", .some "Nat"])
   addTest $ LSpec.test "(2 root)" state1b.rootExpr?.isNone
 
   -- Continuation should fail if the state does not exist:

@@ -63,7 +63,7 @@ def createCoreContext (options: Array String): IO Lean.Core.Context := do
     currNamespace := Lean.Name.str .anonymous "Aniva"
     openDecls := [],     -- No 'open' directives needed
     fileName := "<Pantograph>",
-    fileMap := { source := "", positions := #[0], lines := #[1] },
+    fileMap := { source := "", positions := #[0] },
     options := options
   }
 

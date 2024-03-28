@@ -1,5 +1,6 @@
-import Pantograph.Protocol
 import Pantograph.Goal
+import Pantograph.Library
+import Pantograph.Protocol
 import LSpec
 
 namespace Pantograph
@@ -35,12 +36,7 @@ def assertUnreachable (message: String): LSpec.TestSeq := LSpec.check message fa
 open Lean
 
 def runCoreMSeq (env: Environment) (coreM: CoreM LSpec.TestSeq): IO LSpec.TestSeq := do
-  let coreContext: Core.Context := {
-    currNamespace := Name.str .anonymous "Aniva"
-    openDecls := [],     -- No 'open' directives needed
-    fileName := "<Pantograph/Test>",
-    fileMap := { source := "", positions := #[0], lines := #[1] }
-  }
+  let coreContext: Core.Context ← createCoreContext #[]
   match ← (coreM.run' coreContext { env := env }).toBaseIO with
   | .error exception =>
     return LSpec.test "Exception" (s!"internal exception #{← exception.toMessageData.toString}" = "")
@@ -52,5 +48,10 @@ def runTermElabMInMeta { α } (termElabM: Lean.Elab.TermElabM α): Lean.MetaM α
     declName? := .none,
     errToSorry := false,
   })
+
+def defaultTermElabMContext: Lean.Elab.Term.Context := {
+    declName? := some "_pantograph".toName,
+    errToSorry := false
+  }
 
 end Pantograph
