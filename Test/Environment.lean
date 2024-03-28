@@ -76,7 +76,8 @@ def test_inspect (env: Environment): IO LSpec.TestSeq := do
 
 def suite: IO LSpec.TestSeq := do
   let env: Environment ← importModules
-    (imports := #["Init"].map (λ str => { module := str.toName, runtimeOnly := false }))
+    (imports := #[`Init])
+    --(imports := #["Prelude"].map (λ str => { module := str.toName, runtimeOnly := false }))
     (opts := {})
     (trustLevel := 1)
 

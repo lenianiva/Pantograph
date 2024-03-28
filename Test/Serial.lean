@@ -20,7 +20,7 @@ def test_name_to_ast: LSpec.TestSeq :=
 def test_expr_to_binder (env: Environment): IO LSpec.TestSeq := do
   let entries: List (Name × Protocol.BoundExpression) := [
     ("Nat.add_comm".toName, { binders := #[("n", "Nat"), ("m", "Nat")], target := "n + m = m + n" }),
-    ("Nat.le_of_succ_le".toName, { binders := #[("n", "Nat"), ("m", "Nat"), ("h", "Nat.succ n ≤ m")], target := "n ≤ m" })
+    ("Nat.le_of_succ_le".toName, { binders := #[("n", "Nat"), ("m", "Nat"), ("h", "n.succ ≤ m")], target := "n ≤ m" })
   ]
   let coreM: CoreM LSpec.TestSeq := entries.foldlM (λ suites (symbol, target) => do
     let env ← MonadEnv.getEnv
@@ -58,10 +58,7 @@ def test_sexp_of_expr (env: Environment): IO LSpec.TestSeq := do
     let expr := (← syntax_to_expr s) |>.toOption |>.get!
     let test := LSpec.check source ((← serialize_expression_ast expr) = target)
     return LSpec.TestSeq.append suites test) LSpec.TestSeq.done
-  let metaM := termElabM.run' (ctx := {
-    declName? := some "_pantograph",
-    errToSorry := false
-  })
+  let metaM := termElabM.run' (ctx := defaultTermElabMContext)
   runMetaMSeq env metaM
 
 -- Instance parsing
