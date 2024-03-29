@@ -9,7 +9,7 @@ namespace Pantograph.Environment
 
 def isNameInternal (n: Lean.Name): Bool :=
   -- Returns true if the name is an implementation detail which should not be shown to the user.
-  isLeanSymbol n ∨ (Lean.privateToUserName? n |>.map isLeanSymbol |>.getD false) ∨ n.isAuxLemma
+  isLeanSymbol n ∨ (Lean.privateToUserName? n |>.map isLeanSymbol |>.getD false) ∨ n.isAuxLemma ∨ n.hasMacroScopes
   where
   isLeanSymbol (name: Lean.Name): Bool := match name.getRoot with
     | .str _ name => name == "Lean"
