@@ -37,9 +37,14 @@
       };
       project = leanPkgs.buildLeanPackage {
         name = "Pantograph";
-        #roots = pkgs.lib.optional pkgs.stdenv.isDarwin [ "Main" "Pantograph" ];
         roots = [ "Main" "Pantograph" ];
-        src = ./.;
+        src = pkgs.lib.cleanSourceWith {
+          src = ./.;
+          filter = path: type:
+            !(pkgs.lib.hasInfix "/Test/" path) &&
+            !(pkgs.lib.hasSuffix ".md" path) &&
+            !(pkgs.lib.hasSuffix "Makefile" path);
+        };
       };
       test = leanPkgs.buildLeanPackage {
         name = "Test";
@@ -58,7 +63,6 @@
       packages = {
         inherit (leanPkgs) lean lean-all;
         inherit (project) sharedLib executable;
-        test = test.executable;
         default = project.executable;
       };
       checks = {
@@ -69,7 +73,9 @@
           ${test.executable}/bin/test > $out
         '';
       };
-      devShells.default = project.devShell;
+      devShells.default = pkgs.mkShell {
+        buildInputs = [ leanPkgs.lean-all leanPkgs.lean ];
+      };
     };
   };
 }

@@ -1,8 +1,11 @@
 # Pantograph
 
-An interaction system for Lean 4.
+A Machine-to-Machine interaction system for Lean 4.
 
 ![Pantograph](doc/icon.svg)
+
+Pantograph provides interfaces to execute proofs, construct expressions, and
+examine the symbol list of a Lean project for machine learning.
 
 ## Installation
 
@@ -109,9 +112,12 @@ ulimit -s unlimited
 ## Library Usage
 
 `Pantograph/Library.lean` exposes a series of interfaces which allow FFI call
-with `Pantograph`.
+with `Pantograph` which mirrors the REPL commands above. It is recommended to
+call Pantograph via this FFI since it provides a tremendous speed up.
 
-## Testing
+## Developing
+
+### Testing
 
 The tests are based on `LSpec`. To run tests,
 ``` sh
@@ -119,6 +125,10 @@ make test
 ```
 
 ## Nix based workflow
+
+The included Nix flake provides build targets for `sharedLib` and `executable`.
+The executable can be used as-is, but linking against the shared library
+requires the presence of `lean-all`.
 
 To run tests:
 ``` sh
