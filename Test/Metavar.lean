@@ -3,7 +3,7 @@ import Pantograph.Goal
 import Pantograph.Serial
 import Test.Common
 
-namespace Pantograph.Test.Holes
+namespace Pantograph.Test.Metavar
 open Pantograph
 open Lean
 
@@ -204,6 +204,6 @@ def suite: IO LSpec.TestSeq := do
     let tests ← proofRunner env tests
     return acc ++ (LSpec.group name tests)) LSpec.TestSeq.done
 
-  return LSpec.group "Holes" tests
+  return LSpec.group "Metavar" tests
 
-end Pantograph.Test.Holes
+end Pantograph.Test.Metavar

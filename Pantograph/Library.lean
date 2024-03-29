@@ -165,13 +165,21 @@ def goalResume (target: GoalState) (goals: Array String): Except String GoalStat
 def goalSerialize (state: GoalState) (options: @&Protocol.Options): Lean.CoreM (Array Protocol.Goal) :=
   runMetaM <| state.serializeGoals (parent := .none) options
 
+def Lean.Name.isAuxLemma (n : Lean.Name) : Bool := n matches .num (.str _ "_auxLemma") _
+
+/-- Unfold all lemmas created by `Lean.Meta.mkAuxLemma`. These end in `_auxLemma.nn` where `nn` is a number. -/
+def unfoldAuxLemmas (e : Lean.Expr) : Lean.MetaM Lean.Expr := do
+  Lean.Meta.deltaExpand e Lean.Name.isAuxLemma
+
 @[export pantograph_goal_print_m]
 def goalPrint (state: GoalState) (options: @&Protocol.Options): Lean.CoreM Protocol.GoalPrintResult := do
   let metaM := do
     state.restoreMetaM
     return {
-      root? := ← state.rootExpr?.mapM (λ expr => serialize_expression options expr),
-      parent? := ← state.parentExpr?.mapM (λ expr => serialize_expression options expr),
+      root? := ← state.rootExpr?.mapM (λ expr => do
+        serialize_expression options (← unfoldAuxLemmas expr)),
+      parent? := ← state.parentExpr?.mapM (λ expr => do
+        serialize_expression options (← unfoldAuxLemmas expr)),
     }
   runMetaM metaM
 

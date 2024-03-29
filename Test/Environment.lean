@@ -2,11 +2,12 @@ import LSpec
 import Pantograph.Serial
 import Pantograph.Environment
 import Test.Common
+import Lean
 
+open Lean
 namespace Pantograph.Test.Environment
 
 open Pantograph
-open Lean
 
 deriving instance DecidableEq, Repr for Protocol.InductInfo
 deriving instance DecidableEq, Repr for Protocol.ConstructorInfo
