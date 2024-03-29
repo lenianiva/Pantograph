@@ -1,7 +1,10 @@
 import Pantograph.Goal
 import Pantograph.Library
 import Pantograph.Protocol
+import Lean
 import LSpec
+
+open Lean
 
 namespace Pantograph
 

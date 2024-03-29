@@ -2,8 +2,9 @@ import LSpec
 import Pantograph.Goal
 import Pantograph.Serial
 import Test.Common
+import Lean
 
-namespace Pantograph.Test.Holes
+namespace Pantograph.Test.Metavar
 open Pantograph
 open Lean
 
@@ -85,6 +86,62 @@ def test_m_couple: TestM Unit := do
   addTest $ LSpec.check "exact 3" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
     #[.some "2 ≤ 3", .some "3 ≤ 5"])
   addTest $ LSpec.test "(2 root)" state1b.rootExpr?.isNone
+
+def test_m_couple_simp: TestM Unit := do
+  let state? ← startProof "(2: Nat) ≤ 5"
+  let state0 ← match state? with
+    | .some state => pure state
+    | .none => do
+      addTest $ assertUnreachable "Goal could not parse"
+      return ()
+
+  let state1 ← match ← state0.execute (goalId := 0) (tactic := "apply Nat.le_trans") with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check "apply Nat.le_trans" ((← state1.serializeGoals (options := ← read)).map (·.target.pp?) =
+    #[.some "2 ≤ ?m", .some "?m ≤ 5", .some "Nat"])
+  let state2 ← match ← state1.execute (goalId := 2) (tactic := "exact 2") with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.test "(1b root)" state2.rootExpr?.isNone
+  let state1b ← match state2.continue state1 with
+    | .error msg => do
+      addTest $ assertUnreachable $ msg
+      return ()
+    | .ok state => pure state
+  addTest $ LSpec.check "exact 2" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
+    #[.some "2 ≤ 2", .some "2 ≤ 5"])
+  addTest $ LSpec.test "(2 root)" state1b.rootExpr?.isNone
+  let state3 ← match ← state1b.execute (goalId := 0) (tactic := "simp") with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  let state4 ← match state3.continue state1b with
+    | .error msg => do
+      addTest $ assertUnreachable $ msg
+      return ()
+    | .ok state => pure state
+  let state5 ← match ← state4.execute (goalId := 0) (tactic := "simp") with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+
+  state5.restoreMetaM
+  let root ← match state5.rootExpr? with
+    | .some e => pure e
+    | .none =>
+      addTest $ assertUnreachable "(5 root)"
+      return ()
+  let rootStr: String := toString (← Lean.Meta.ppExpr root)
+  addTest $ LSpec.check "(5 root)" (rootStr = "Nat.le_trans (of_eq_true (Init.Data.Nat.Basic._auxLemma.4 2)) (of_eq_true (eq_true_of_decide (Eq.refl true)))")
+  let rootStr: String := toString (← Lean.Meta.ppExpr (← unfoldAuxLemmas root))
+  addTest $ LSpec.check "(5 root)" (rootStr = "Nat.le_trans (of_eq_true (eq_true (Nat.le_refl 2))) (of_eq_true (eq_true_of_decide (Eq.refl true)))")
   return ()
 
 def test_proposition_generation: TestM Unit := do
@@ -196,6 +253,7 @@ def suite: IO LSpec.TestSeq := do
     (trustLevel := 1)
   let tests := [
     ("2 < 5", test_m_couple),
+    ("2 < 5", test_m_couple_simp),
     ("Proposition Generation", test_proposition_generation),
     ("Partial Continuation", test_partial_continuation)
   ]
@@ -204,6 +262,6 @@ def suite: IO LSpec.TestSeq := do
     let tests ← proofRunner env tests
     return acc ++ (LSpec.group name tests)) LSpec.TestSeq.done
 
-  return LSpec.group "Holes" tests
+  return LSpec.group "Metavar" tests
 
-end Pantograph.Test.Holes
+end Pantograph.Test.Metavar
