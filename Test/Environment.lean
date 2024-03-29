@@ -14,6 +14,21 @@ deriving instance DecidableEq, Repr for Protocol.ConstructorInfo
 deriving instance DecidableEq, Repr for Protocol.RecursorInfo
 deriving instance DecidableEq, Repr for Protocol.EnvInspectResult
 
+def test_catalog: IO LSpec.TestSeq := do
+  let env: Environment ← importModules
+    (imports := #[`Init])
+    (opts := {})
+    (trustLevel := 1)
+  let inner: CoreM LSpec.TestSeq := do
+    let catalogResult ← Environment.catalog {}
+    let symbolsWithNum := env.constants.fold (init := #[]) (λ acc name info =>
+      match (Environment.toFilteredSymbol name info).isSome && (name matches .num _ _) with
+      | false => acc
+      | true => acc.push name
+      )
+    return LSpec.check "No num symbols" (symbolsWithNum.size == 0)
+  runCoreMSeq env inner
+
 def test_symbol_visibility: IO LSpec.TestSeq := do
   let entries: List (Name × Bool) := [
     ("Nat.add_comm".toName, false),
@@ -30,7 +45,11 @@ inductive ConstantCat where
   | ctor (info: Protocol.ConstructorInfo)
   | recursor (info: Protocol.RecursorInfo)
 
-def test_inspect (env: Environment): IO LSpec.TestSeq := do
+def test_inspect: IO LSpec.TestSeq := do
+  let env: Environment ← importModules
+    (imports := #[`Init])
+    (opts := {})
+    (trustLevel := 1)
   let testCases: List (String × ConstantCat) := [
     ("Or", ConstantCat.induct {
       numParams := 2,
@@ -76,13 +95,9 @@ def test_inspect (env: Environment): IO LSpec.TestSeq := do
   runCoreMSeq env inner
 
 def suite: IO LSpec.TestSeq := do
-  let env: Environment ← importModules
-    (imports := #[`Init])
-    (opts := {})
-    (trustLevel := 1)
-
   return LSpec.group "Environment" $
+    (LSpec.group "Catalog" (← test_catalog)) ++
     (LSpec.group "Symbol visibility" (← test_symbol_visibility)) ++
-    (LSpec.group "Inspect" (← test_inspect env))
+    (LSpec.group "Inspect" (← test_inspect))
 
 end Pantograph.Test.Environment
