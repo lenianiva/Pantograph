@@ -14,14 +14,14 @@ deriving instance DecidableEq, Repr for Protocol.ConstructorInfo
 deriving instance DecidableEq, Repr for Protocol.RecursorInfo
 deriving instance DecidableEq, Repr for Protocol.EnvInspectResult
 
-def test_symbol_visibility (env: Environment): IO LSpec.TestSeq := do
+def test_symbol_visibility: IO LSpec.TestSeq := do
   let entries: List (Name × Bool) := [
     ("Nat.add_comm".toName, false),
-    ("Lean.Name".toName, true)
+    ("Lean.Name".toName, true),
+    ("Init.Data.Nat.Basic._auxLemma.4".toName, true),
   ]
   let suite := entries.foldl (λ suites (symbol, target) =>
-    let constant := env.constants.find! symbol
-    let test := LSpec.check symbol.toString ((Environment.is_symbol_unsafe_or_internal symbol constant) == target)
+    let test := LSpec.check symbol.toString ((Environment.isNameInternal symbol) == target)
     LSpec.TestSeq.append suites test) LSpec.TestSeq.done
   return suite
 
@@ -78,12 +78,11 @@ def test_inspect (env: Environment): IO LSpec.TestSeq := do
 def suite: IO LSpec.TestSeq := do
   let env: Environment ← importModules
     (imports := #[`Init])
-    --(imports := #["Prelude"].map (λ str => { module := str.toName, runtimeOnly := false }))
     (opts := {})
     (trustLevel := 1)
 
   return LSpec.group "Environment" $
-    (LSpec.group "Symbol visibility" (← test_symbol_visibility env)) ++
+    (LSpec.group "Symbol visibility" (← test_symbol_visibility)) ++
     (LSpec.group "Inspect" (← test_inspect env))
 
 end Pantograph.Test.Environment
