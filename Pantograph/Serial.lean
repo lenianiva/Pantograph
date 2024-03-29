@@ -6,17 +6,20 @@ import Lean
 import Pantograph.Protocol
 import Pantograph.Goal
 
-namespace Pantograph
 open Lean
+
+-- Symbol processing functions --
+
+def Lean.Name.isAuxLemma (n : Lean.Name) : Bool := n matches .num (.str _ "_auxLemma") _
+
+namespace Pantograph
+
+/-- Unfold all lemmas created by `Lean.Meta.mkAuxLemma`. These end in `_auxLemma.nn` where `nn` is a number. -/
+def unfoldAuxLemmas (e : Lean.Expr) : Lean.MetaM Lean.Expr := do
+  Lean.Meta.deltaExpand e Lean.Name.isAuxLemma
 
 --- Input Functions ---
 
-
-/-- Read a theorem from the environment -/
-def expr_from_const (env: Environment) (name: Name): Except String Lean.Expr :=
-  match env.find? name with
-  | none       => throw s!"Symbol not found: {name}"
-  | some cInfo => return cInfo.type
 /-- Read syntax object from string -/
 def syntax_from_str (env: Environment) (s: String): Except String Syntax :=
   Parser.runParserCategory

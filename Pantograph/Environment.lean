@@ -7,14 +7,15 @@ open Pantograph
 
 namespace Pantograph.Environment
 
-def is_symbol_unsafe_or_internal (n: Lean.Name) (info: Lean.ConstantInfo): Bool :=
-  isLeanSymbol n ∨ (Lean.privateToUserName? n |>.map isLeanSymbol |>.getD false) ∨ info.isUnsafe
+def isNameInternal (n: Lean.Name): Bool :=
+  -- Returns true if the name is an implementation detail which should not be shown to the user.
+  isLeanSymbol n ∨ (Lean.privateToUserName? n |>.map isLeanSymbol |>.getD false) ∨ n.isAuxLemma
   where
   isLeanSymbol (name: Lean.Name): Bool := match name.getRoot with
     | .str _ name => name == "Lean"
     | _ => true
 
-def to_compact_symbol_name (n: Lean.Name) (info: Lean.ConstantInfo): String :=
+def toCompactSymbolName (n: Lean.Name) (info: Lean.ConstantInfo): String :=
   let pref := match info with
   | .axiomInfo  _ => "a"
   | .defnInfo   _ => "d"
@@ -26,14 +27,14 @@ def to_compact_symbol_name (n: Lean.Name) (info: Lean.ConstantInfo): String :=
   | .recInfo    _ => "r"
   s!"{pref}{toString n}"
 
-def to_filtered_symbol (n: Lean.Name) (info: Lean.ConstantInfo): Option String :=
-  if is_symbol_unsafe_or_internal n info
+def toFilteredSymbol (n: Lean.Name) (info: Lean.ConstantInfo): Option String :=
+  if isNameInternal n || info.isUnsafe
   then Option.none
-  else Option.some <| to_compact_symbol_name n info
+  else Option.some <| toCompactSymbolName n info
 def catalog (_: Protocol.EnvCatalog): CoreM Protocol.EnvCatalogResult := do
   let env ← Lean.MonadEnv.getEnv
   let names := env.constants.fold (init := #[]) (λ acc name info =>
-    match to_filtered_symbol name info with
+    match toFilteredSymbol name info with
     | .some x => acc.push x
     | .none => acc)
   return { symbols := names }
@@ -58,8 +59,14 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): CoreM (Pr
     value? := ← value?.mapM (λ v => serialize_expression options v |>.run'),
     publicName? := Lean.privateToUserName? name |>.map (·.toString),
     -- BUG: Warning: getUsedConstants here will not include projections. This is a known bug.
-    typeDependency? := if args.dependency?.getD false then .some <| info.type.getUsedConstants.map (λ n => name_to_ast n) else .none,
-    valueDependency? := if args.dependency?.getD false then info.value?.map (·.getUsedConstants.map (λ n => name_to_ast n)) else .none,
+    typeDependency? := if args.dependency?.getD false
+      then .some <| info.type.getUsedConstants.map (λ n => name_to_ast n)
+      else .none,
+    valueDependency? := ← if args.dependency?.getD false
+      then info.value?.mapM (λ e => do
+        let e ← (unfoldAuxLemmas e).run'
+        pure $ e.getUsedConstants.filter (!isNameInternal ·) |>.map (λ n => name_to_ast n) )
+      else pure (.none),
     module? := module?
   }
   let result := match info with
