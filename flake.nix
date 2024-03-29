@@ -37,7 +37,6 @@
       };
       project = leanPkgs.buildLeanPackage {
         name = "Pantograph";
-        #roots = pkgs.lib.optional pkgs.stdenv.isDarwin [ "Main" "Pantograph" ];
         roots = [ "Main" "Pantograph" ];
         src = pkgs.lib.cleanSourceWith {
           src = ./.;
@@ -74,7 +73,9 @@
           ${test.executable}/bin/test > $out
         '';
       };
-      devShells.default = project.devShell;
+      devShells.default = pkgs.mkShell {
+        buildInputs = [ leanPkgs.lean-all leanPkgs.lean ];
+      };
     };
   };
 }
