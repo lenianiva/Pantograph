@@ -1,11 +1,12 @@
 import LSpec
 import Pantograph.Serial
 import Test.Common
+import Lean
 
+open Lean
 namespace Pantograph.Test.Serial
 
 open Pantograph
-open Lean
 
 deriving instance Repr, DecidableEq for Protocol.BoundExpression
 

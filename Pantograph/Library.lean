@@ -170,8 +170,10 @@ def goalPrint (state: GoalState) (options: @&Protocol.Options): Lean.CoreM Proto
   let metaM := do
     state.restoreMetaM
     return {
-      root? := ← state.rootExpr?.mapM (λ expr => serialize_expression options expr),
-      parent? := ← state.parentExpr?.mapM (λ expr => serialize_expression options expr),
+      root? := ← state.rootExpr?.mapM (λ expr => do
+        serialize_expression options (← unfoldAuxLemmas expr)),
+      parent? := ← state.parentExpr?.mapM (λ expr => do
+        serialize_expression options (← unfoldAuxLemmas expr)),
     }
   runMetaM metaM
 
