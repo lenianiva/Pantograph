@@ -127,7 +127,7 @@ def exprEcho (expr: String) (options: @&Protocol.Options):
       | .error e => return .error e
       | .ok expr => pure expr
     try
-      let type ← Lean.Meta.inferType expr
+      let type ← instantiateAll (← Lean.Meta.inferType expr)
       return .ok {
           type := (← serialize_expression options type),
           expr := (← serialize_expression options expr)
@@ -171,9 +171,9 @@ def goalPrint (state: GoalState) (options: @&Protocol.Options): Lean.CoreM Proto
     state.restoreMetaM
     return {
       root? := ← state.rootExpr?.mapM (λ expr => do
-        serialize_expression options (← unfoldAuxLemmas expr)),
+        serialize_expression options (← instantiateAll expr)),
       parent? := ← state.parentExpr?.mapM (λ expr => do
-        serialize_expression options (← unfoldAuxLemmas expr)),
+        serialize_expression options (← instantiateAll expr)),
     }
   runMetaM metaM
 
