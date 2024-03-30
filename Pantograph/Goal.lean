@@ -225,6 +225,10 @@ protected def GoalState.parentExpr? (goalState: GoalState): Option Expr := do
   let expr := goalState.mctx.eAssignment.find! parent
   let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
   return expr
+protected def GoalState.assignedExprOf? (goalState: GoalState) (mvar: MVarId): Option Expr := do
+  let expr ← goalState.mctx.eAssignment.find? mvar
+  let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
+  return expr
 
 
 end Pantograph
