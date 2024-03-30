@@ -1,10 +1,15 @@
 # Pantograph
 
-An interaction system for Lean 4.
+A Machine-to-Machine interaction system for Lean 4.
 
 ![Pantograph](doc/icon.svg)
 
+Pantograph provides interfaces to execute proofs, construct expressions, and
+examine the symbol list of a Lean project for machine learning.
+
 ## Installation
+
+For Nix based workflow, see below.
 
 Install `elan` and `lake`. Execute
 ``` sh
@@ -20,7 +25,7 @@ LEAN_PATH=$LEAN_PATH build/bin/pantograph $@
 ```
 The provided `flake.nix` has a develop environment with Lean already setup.
 
-## Usage
+## Executable Usage
 
 ``` sh
 pantograph MODULES|LEAN_OPTIONS
@@ -63,7 +68,7 @@ stat
 ```
 where the application of `assumption` should lead to a failure.
 
-## Commands
+### Commands
 
 See `Pantograph/Protocol.lean` for a description of the parameters and return values in JSON.
 - `reset`: Delete all cached expressions and proof trees
@@ -82,7 +87,7 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
 - `goal.print {"stateId": <id>}"`: Print a goal state
 - `stat`: Display resource usage
 
-## Errors
+### Errors
 
 When an error pertaining to the execution of a command happens, the returning JSON structure is
 
@@ -97,16 +102,38 @@ Common error forms:
   input of another is broken. For example, attempting to query a symbol not
   existing in the library or indexing into a non-existent proof state.
 
-## Troubleshooting
+### Troubleshooting
 
 If lean encounters stack overflow problems when printing catalog, execute this before running lean:
 ```sh
 ulimit -s unlimited
 ```
 
-## Testing
+## Library Usage
+
+`Pantograph/Library.lean` exposes a series of interfaces which allow FFI call
+with `Pantograph` which mirrors the REPL commands above. It is recommended to
+call Pantograph via this FFI since it provides a tremendous speed up.
+
+## Developing
+
+### Testing
 
 The tests are based on `LSpec`. To run tests,
 ``` sh
 make test
 ```
+
+## Nix based workflow
+
+The included Nix flake provides build targets for `sharedLib` and `executable`.
+The executable can be used as-is, but linking against the shared library
+requires the presence of `lean-all`.
+
+To run tests:
+``` sh
+nix build .#checks.${system}.test
+```
+
+For example, `${system}` could be `x86_64-linux`. Using `nix develop` drops the
+current session into a development shell with fixed Lean version.

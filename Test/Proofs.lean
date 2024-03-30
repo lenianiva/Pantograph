@@ -62,16 +62,8 @@ def buildGoal (nameType: List (String × String)) (target: String) (userName?: O
 def proofRunner (env: Lean.Environment) (tests: TestM Unit): IO LSpec.TestSeq := do
   let termElabM := tests.run LSpec.TestSeq.done |>.run {} -- with default options
 
-  let coreContext: Lean.Core.Context := {
-    currNamespace := Name.append .anonymous "Aniva",
-    openDecls := [],     -- No 'open' directives needed
-    fileName := "<Pantograph>",
-    fileMap := { source := "", positions := #[0], lines := #[1] }
-  }
-  let metaM := termElabM.run' (ctx := {
-    declName? := some "_pantograph",
-    errToSorry := false
-  })
+  let coreContext: Lean.Core.Context ← createCoreContext #[]
+  let metaM := termElabM.run' (ctx := defaultTermElabMContext)
   let coreM := metaM.run'
   match ← (coreM.run' coreContext { env := env }).toBaseIO with
   | .error exception =>
@@ -232,13 +224,18 @@ def proof_or_comm: TestM Unit := do
   addTest $ LSpec.check "(2 parent)" state2.parentExpr?.isSome
   addTest $ LSpec.check "(2 root)" state2.rootExpr?.isNone
 
+  let state2parent ← serialize_expression_ast state2.parentExpr?.get! (sanitize := false)
+  -- This is due to delayed assignment
+  addTest $ LSpec.test "(2 parent)" (state2parent ==
+    "((:mv _uniq.43) (:fv _uniq.16) ((:c Eq.refl) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16)))")
+
   let state3_1 ← match ← state2.execute (goalId := 0) (tactic := "apply Or.inr") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
   let state3_1parent ← serialize_expression_ast state3_1.parentExpr?.get! (sanitize := false)
-  addTest $ LSpec.test "(3_1 parent)" (state3_1parent == "((:c Or.inr) (:fv _uniq.13) (:fv _uniq.10) (:mv _uniq.83))")
+  addTest $ LSpec.test "(3_1 parent)" (state3_1parent == "((:c Or.inr) (:fv _uniq.13) (:fv _uniq.10) (:mv _uniq.78))")
   addTest $ LSpec.check "· apply Or.inr" (state3_1.goals.length = 1)
   let state4_1 ← match ← state3_1.execute (goalId := 0) (tactic := "assumption") with
     | .success state => pure state
@@ -247,7 +244,7 @@ def proof_or_comm: TestM Unit := do
       return ()
   addTest $ LSpec.check "  assumption" state4_1.goals.isEmpty
   let state4_1parent ← serialize_expression_ast state4_1.parentExpr?.get! (sanitize := false)
-  addTest $ LSpec.test "(4_1 parent)" (state4_1parent == "(:fv _uniq.49)")
+  addTest $ LSpec.test "(4_1 parent)" (state4_1parent == "(:fv _uniq.47)")
   addTest $ LSpec.check "(4_1 root)" state4_1.rootExpr?.isNone
   let state3_2 ← match ← state2.execute (goalId := 1) (tactic := "apply Or.inl") with
     | .success state => pure state
@@ -299,7 +296,7 @@ def proof_or_comm: TestM Unit := do
 
 def suite: IO LSpec.TestSeq := do
   let env: Lean.Environment ← Lean.importModules
-    (imports := #[{ module := Name.append .anonymous "Init", runtimeOnly := false}])
+    (imports := #[{ module := "Init".toName, runtimeOnly := false}])
     (opts := {})
     (trustLevel := 1)
   let tests := [

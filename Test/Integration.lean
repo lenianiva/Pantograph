@@ -21,13 +21,7 @@ def subroutine_runner (steps: List (MainM LSpec.TestSeq)): IO LSpec.TestSeq := d
   let context: Context := {
     imports := ["Init"]
   }
-  let coreContext: Lean.Core.Context := {
-    currNamespace := Lean.Name.str .anonymous "Aniva"
-    openDecls := [],
-    fileName := "<Test>",
-    fileMap := { source := "", positions := #[0], lines := #[1] },
-    options := Lean.Options.empty
-  }
+  let coreContext: Lean.Core.Context ← createCoreContext #[]
   let commands: MainM LSpec.TestSeq :=
     steps.foldlM (λ suite step => do
       let result ← step
@@ -39,7 +33,7 @@ def subroutine_runner (steps: List (MainM LSpec.TestSeq)): IO LSpec.TestSeq := d
     return LSpec.check s!"Uncaught IO exception: {ex.toString}" false
 
 def test_option_modify : IO LSpec.TestSeq :=
-  let pp? := Option.some "∀ (n : Nat), n + 1 = Nat.succ n"
+  let pp? := Option.some "∀ (n : Nat), n + 1 = n.succ"
   let sexp? := Option.some "(:forall n (:c Nat) ((:c Eq) (:c Nat) ((:c HAdd.hAdd) (:c Nat) (:c Nat) (:c Nat) ((:c instHAdd) (:c Nat) (:c instAddNat)) 0 ((:c OfNat.ofNat) (:c Nat) (:lit 1) ((:c instOfNatNat) (:lit 1)))) ((:c Nat.succ) 0)))"
   let module? := Option.some "Init.Data.Nat.Basic"
   let options: Protocol.Options := {}
@@ -148,7 +142,7 @@ def test_env : IO LSpec.TestSeq :=
     subroutine_step "env.inspect"
       [("name", .str name2)]
      (Lean.toJson ({
-       value? := .some { pp? := .some "fun a => Int.ofNat a + 1" },
+       value? := .some { pp? := .some "fun a => ↑a + 1" },
        type := { pp? := .some "Nat → Int" },
      }:
       Protocol.EnvInspectResult))
