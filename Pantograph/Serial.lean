@@ -6,17 +6,20 @@ import Lean
 import Pantograph.Protocol
 import Pantograph.Goal
 
-namespace Pantograph
 open Lean
+
+-- Symbol processing functions --
+
+def Lean.Name.isAuxLemma (n : Lean.Name) : Bool := n matches .num (.str _ "_auxLemma") _
+
+namespace Pantograph
+
+/-- Unfold all lemmas created by `Lean.Meta.mkAuxLemma`. These end in `_auxLemma.nn` where `nn` is a number. -/
+def unfoldAuxLemmas (e : Lean.Expr) : Lean.MetaM Lean.Expr := do
+  Lean.Meta.deltaExpand e Lean.Name.isAuxLemma
 
 --- Input Functions ---
 
-
-/-- Read a theorem from the environment -/
-def expr_from_const (env: Environment) (name: Name): Except String Lean.Expr :=
-  match env.find? name with
-  | none       => throw s!"Symbol not found: {name}"
-  | some cInfo => return cInfo.type
 /-- Read syntax object from string -/
 def syntax_from_str (env: Environment) (s: String): Except String Syntax :=
   Parser.runParserCategory
@@ -157,7 +160,7 @@ partial def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): Meta
     | .instImplicit => " :instImplicit"
   of_name (name: Name) := name_to_ast name sanitize
 
-def serialize_expression (options: Protocol.Options) (e: Expr): MetaM Protocol.Expression := do
+def serialize_expression (options: @&Protocol.Options) (e: Expr): MetaM Protocol.Expression := do
   let pp := toString (← Meta.ppExpr e)
   let pp?: Option String := match options.printExprPretty with
     | true => .some pp
@@ -172,7 +175,7 @@ def serialize_expression (options: Protocol.Options) (e: Expr): MetaM Protocol.E
   }
 
 /-- Adapted from ppGoal -/
-def serialize_goal (options: Protocol.Options) (goal: MVarId) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl)
+def serialize_goal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl)
       : MetaM Protocol.Goal := do
   -- Options for printing; See Meta.ppGoal for details
   let showLetValues  := true
@@ -242,7 +245,11 @@ def serialize_goal (options: Protocol.Options) (goal: MVarId) (mvarDecl: Metavar
   where
   of_name (n: Name) := name_to_ast n (sanitize := false)
 
-protected def GoalState.serializeGoals (state: GoalState) (parent: Option GoalState := .none) (options: Protocol.Options := {}): MetaM (Array Protocol.Goal):= do
+protected def GoalState.serializeGoals
+      (state: GoalState)
+      (parent: Option GoalState := .none)
+      (options: @&Protocol.Options := {}):
+    MetaM (Array Protocol.Goal):= do
   state.restoreMetaM
   let goals := state.goals.toArray
   let parentDecl? := parent.bind (λ parentState =>

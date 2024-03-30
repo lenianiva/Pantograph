@@ -2,6 +2,7 @@ import Pantograph.Goal
 import Pantograph.Protocol
 import Pantograph.Serial
 import Pantograph.Environment
+import Pantograph.Library
 import Lean.Data.HashMap
 
 namespace Pantograph
@@ -20,14 +21,6 @@ abbrev MainM := ReaderT Context (StateT State Lean.CoreM)
 -- HACK: For some reason writing `CommandM α := MainM (Except ... α)` disables
 -- certain monadic features in `MainM`
 abbrev CR α := Except Protocol.InteractionError α
-
-def runMetaM { α } (metaM: Lean.MetaM α): Lean.CoreM α :=
-  metaM.run'
-def runTermElabM { α } (termElabM: Lean.Elab.TermElabM α): Lean.CoreM α :=
-  termElabM.run' (ctx := {
-    declName? := .none,
-    errToSorry := false,
-  }) |>.run'
 
 def execute (command: Protocol.Command): MainM Lean.Json := do
   let run { α β: Type } [Lean.FromJson α] [Lean.ToJson β] (comm: α → MainM (CR β)): MainM Lean.Json :=
@@ -56,7 +49,6 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
       errorCommand s!"Unknown command {cmd}"
     return Lean.toJson error
   where
-  errorI (type desc: String): Protocol.InteractionError := { error := type, desc := desc }
   errorCommand := errorI "command"
   errorIndex := errorI "index"
   -- Command Functions
@@ -70,7 +62,8 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     let nGoals := state.goalStates.size
     return .ok { nGoals }
   env_catalog (args: Protocol.EnvCatalog): MainM (CR Protocol.EnvCatalogResult) := do
-    Environment.catalog args
+    let result ← Environment.catalog args
+    return .ok result
   env_inspect (args: Protocol.EnvInspect): MainM (CR Protocol.EnvInspectResult) := do
     let state ← get
     Environment.inspect args state.options
@@ -78,22 +71,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     Environment.addDecl args
   expr_echo (args: Protocol.ExprEcho): MainM (CR Protocol.ExprEchoResult) := do
     let state ← get
-    let env ← Lean.MonadEnv.getEnv
-    let syn ← match syntax_from_str env args.expr with
-      | .error str => return .error $ errorI "parsing" str
-      | .ok syn => pure syn
-    runTermElabM (do
-      match ← syntax_to_expr syn with
-      | .error str => return .error $ errorI "elab" str
-      | .ok expr => do
-        try
-          let type ← Lean.Meta.inferType expr
-          return .ok {
-              type := (← serialize_expression (options := state.options) type),
-              expr := (← serialize_expression (options := state.options) expr)
-          }
-        catch exception =>
-          return .error $ errorI "typing" (← exception.toMessageData.toString))
+    exprEcho args.expr state.options
   options_set (args: Protocol.OptionsSet): MainM (CR Protocol.OptionsSetResult) := do
     let state ← get
     let options := state.options
@@ -115,13 +93,11 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     let state ← get
     let env ← Lean.MonadEnv.getEnv
     let expr?: Except _ GoalState ← runTermElabM (match args.expr, args.copyFrom with
-      | .some expr, .none =>
-        (match syntax_from_str env expr with
-        | .error str => return .error <| errorI "parsing" str
-        | .ok syn => do
-          (match ← syntax_to_expr syn with
-          | .error str => return .error <| errorI "elab" str
-          | .ok expr => return .ok (← GoalState.create expr)))
+      | .some expr, .none => do
+        let expr ← match ← exprParse expr with
+          | .error e => return .error e
+          | .ok expr => pure $ expr
+        return .ok $ ← GoalState.create expr
       | .none, .some copyFrom =>
         (match env.find? <| copyFrom.toName with
         | .none => return .error <| errorIndex s!"Symbol not found: {copyFrom}"
@@ -144,9 +120,9 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     | .some goalState => do
       let nextGoalState?: Except _ GoalState ← match args.tactic?, args.expr? with
         | .some tactic, .none => do
-          pure ( Except.ok (← runTermElabM <| GoalState.execute goalState args.goalId tactic))
+          pure ( Except.ok (← goalTactic goalState args.goalId tactic))
         | .none, .some expr => do
-          pure ( Except.ok (← runTermElabM <| GoalState.tryAssign goalState args.goalId expr))
+          pure ( Except.ok (← goalTryAssign goalState args.goalId expr))
         | _, _ => pure (Except.error <| errorI "arguments" "Exactly one of {tactic, expr} must be supplied")
       match nextGoalState? with
       | .error error => return .error error
@@ -178,8 +154,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           | .none => return .error $ errorIndex s!"Invalid state index {branchId}"
           | .some branch => pure $ target.continue branch
         | .none, .some goals =>
-          let goals := goals.map (λ name => { name := name.toName })
-          pure $ target.resume goals
+          pure $ goalResume target goals
         | _, _ => return .error <| errorI "arguments" "Exactly one of {branch, goals} must be supplied"
       match nextState? with
       | .error error => return .error <| errorI "structure" error
@@ -189,7 +164,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           goalStates := state.goalStates.insert nextStateId nextGoalState,
           nextId := state.nextId + 1
         }
-        let goals ← nextGoalState.serializeGoals (parent := .none) (options := state.options) |>.run'
+        let goals ← goalSerialize nextGoalState (options := state.options)
         return .ok {
           nextStateId,
           goals,
@@ -204,12 +179,6 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     match state.goalStates.find? args.stateId with
     | .none => return .error $ errorIndex s!"Invalid state index {args.stateId}"
     | .some goalState => runMetaM <| do
-      goalState.restoreMetaM
-      let root? ← goalState.rootExpr?.mapM (λ expr => serialize_expression state.options expr)
-      let parent? ← goalState.parentExpr?.mapM (λ expr => serialize_expression state.options expr)
-      return .ok {
-        root?,
-        parent?,
-      }
+      return .ok (← goalPrint goalState state.options)
 
 end Pantograph

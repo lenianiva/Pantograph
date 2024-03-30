@@ -1,6 +1,6 @@
 import LSpec
 import Test.Environment
-import Test.Holes
+import Test.Metavar
 import Test.Integration
 import Test.Proofs
 import Test.Serial
@@ -11,7 +11,7 @@ def main := do
   Lean.initSearchPath (← Lean.findSysroot)
 
   let suites := [
-    Holes.suite,
+    Metavar.suite,
     Integration.suite,
     Proofs.suite,
     Serial.suite,
