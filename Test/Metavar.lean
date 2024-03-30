@@ -13,6 +13,27 @@ abbrev TestM := StateRefT LSpec.TestSeq (ReaderT Protocol.Options M)
 def addTest (test: LSpec.TestSeq): TestM Unit := do
   set $ (← get) ++ test
 
+-- Tests that all delay assigned mvars are instantiated
+def test_instantiate_mvar: TestM Unit := do
+  let env ← Lean.MonadEnv.getEnv
+  let value := "@Nat.le_trans 2 2 5 (@of_eq_true (@LE.le Nat instLENat 2 2) (@eq_true (@LE.le Nat instLENat 2 2) (@Nat.le_refl 2))) (@of_eq_true (@LE.le Nat instLENat 2 5) (@eq_true_of_decide (@LE.le Nat instLENat 2 5) (@Nat.decLe 2 5) (@Eq.refl Bool Bool.true)))"
+  let syn ← match syntax_from_str env value with
+    | .ok s => pure $ s
+    | .error e => do
+      addTest $ assertUnreachable e
+      return ()
+  let expr ← match ← syntax_to_expr syn with
+    | .ok expr => pure $ expr
+    | .error e => do
+      addTest $ assertUnreachable e
+      return ()
+  let t ← Lean.Meta.inferType expr
+  addTest $ LSpec.check "typing" ((toString (← serialize_expression_ast t)) =
+    "((:c LE.le) (:c Nat) (:c instLENat) ((:c OfNat.ofNat) (:mv _uniq.2) (:lit 2) (:mv _uniq.3)) ((:c OfNat.ofNat) (:mv _uniq.14) (:lit 5) (:mv _uniq.15)))")
+  return ()
+
+
+
 def startProof (expr: String): TestM (Option GoalState) := do
   let env ← Lean.MonadEnv.getEnv
   let syn? := syntax_from_str env expr
@@ -140,8 +161,9 @@ def test_m_couple_simp: TestM Unit := do
       return ()
   let rootStr: String := toString (← Lean.Meta.ppExpr root)
   addTest $ LSpec.check "(5 root)" (rootStr = "Nat.le_trans (of_eq_true (Init.Data.Nat.Basic._auxLemma.4 2)) (of_eq_true (eq_true_of_decide (Eq.refl true)))")
-  let rootStr: String := toString (← Lean.Meta.ppExpr (← unfoldAuxLemmas root))
-  addTest $ LSpec.check "(5 root)" (rootStr = "Nat.le_trans (of_eq_true (eq_true (Nat.le_refl 2))) (of_eq_true (eq_true_of_decide (Eq.refl true)))")
+  let unfoldedRoot ←  unfoldAuxLemmas root
+  addTest $ LSpec.check "(5 root)" ((toString (← Lean.Meta.ppExpr unfoldedRoot)) =
+    "Nat.le_trans (of_eq_true (eq_true (Nat.le_refl 2))) (of_eq_true (eq_true_of_decide (Eq.refl true)))")
   return ()
 
 def test_proposition_generation: TestM Unit := do
@@ -252,6 +274,7 @@ def suite: IO LSpec.TestSeq := do
     (opts := {})
     (trustLevel := 1)
   let tests := [
+    ("Instantiate", test_instantiate_mvar),
     ("2 < 5", test_m_couple),
     ("2 < 5", test_m_couple_simp),
     ("Proposition Generation", test_proposition_generation),
