@@ -18,10 +18,6 @@ namespace Pantograph
 def unfoldAuxLemmas (e : Lean.Expr) : Lean.MetaM Lean.Expr := do
   Lean.Meta.deltaExpand e Lean.Name.isAuxLemma
 
-def instantiateAll (e: Lean.Expr) : Lean.MetaM Lean.Expr := do
-  let e ← unfoldAuxLemmas e
-  instantiateMVars (← Lean.Meta.whnf e)
-
 --- Input Functions ---
 
 /-- Read syntax object from string -/
