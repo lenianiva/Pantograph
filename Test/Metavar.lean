@@ -17,12 +17,12 @@ def addTest (test: LSpec.TestSeq): TestM Unit := do
 def test_instantiate_mvar: TestM Unit := do
   let env ← Lean.MonadEnv.getEnv
   let value := "@Nat.le_trans 2 2 5 (@of_eq_true (@LE.le Nat instLENat 2 2) (@eq_true (@LE.le Nat instLENat 2 2) (@Nat.le_refl 2))) (@of_eq_true (@LE.le Nat instLENat 2 5) (@eq_true_of_decide (@LE.le Nat instLENat 2 5) (@Nat.decLe 2 5) (@Eq.refl Bool Bool.true)))"
-  let syn ← match syntax_from_str env value with
+  let syn ← match parseTerm env value with
     | .ok s => pure $ s
     | .error e => do
       addTest $ assertUnreachable e
       return ()
-  let expr ← match ← syntax_to_expr syn with
+  let expr ← match ← elabTerm syn with
     | .ok expr => pure $ expr
     | .error e => do
       addTest $ assertUnreachable e
@@ -36,14 +36,14 @@ def test_instantiate_mvar: TestM Unit := do
 
 def startProof (expr: String): TestM (Option GoalState) := do
   let env ← Lean.MonadEnv.getEnv
-  let syn? := syntax_from_str env expr
+  let syn? := parseTerm env expr
   addTest $ LSpec.check s!"Parsing {expr}" (syn?.isOk)
   match syn? with
   | .error error =>
     IO.println error
     return Option.none
   | .ok syn =>
-    let expr? ← syntax_to_expr_type syn
+    let expr? ← elabType syn
     addTest $ LSpec.check s!"Elaborating" expr?.isOk
     match expr? with
     | .error error =>

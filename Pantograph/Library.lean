@@ -109,21 +109,34 @@ def envAdd (name: String) (type: String) (value: String) (isTheorem: Bool):
     Lean.CoreM (Protocol.CR Protocol.EnvAddResult) :=
   Environment.addDecl { name, type, value, isTheorem }
 
-/-- This must be a TermElabM since the parsed expr contains extra information -/
-def exprParse (s: String): Lean.Elab.TermElabM (Protocol.CR Lean.Expr) := do
+def typeParse (typeParse: String): Lean.Elab.TermElabM (Protocol.CR Lean.Expr) := do
   let env ← Lean.MonadEnv.getEnv
-  let syn ← match syntax_from_str env s with
+  let syn ← match parseTerm env typeParse with
     | .error str => return .error $ errorI "parsing" str
     | .ok syn => pure syn
-  match ← syntax_to_expr syn with
+  match ← elabType syn with
+  | .error str => return .error $ errorI "elab" str
+  | .ok expr => return .ok expr
+
+/-- This must be a TermElabM since the parsed expr contains extra information -/
+def exprParse (exprStr: String) (expectedType?: Option String := .none): Lean.Elab.TermElabM (Protocol.CR Lean.Expr) := do
+  let env ← Lean.MonadEnv.getEnv
+  let expectedType? ← match ← expectedType?.mapM typeParse with
+    | .none => pure $ .none
+    | .some (.ok t) => pure $ .some t
+    | .some (.error e) => return .error e
+  let syn ← match parseTerm env exprStr with
+    | .error str => return .error $ errorI "parsing" str
+    | .ok syn => pure syn
+  match ← elabTerm syn expectedType? with
   | .error str => return .error $ errorI "elab" str
   | .ok expr => return .ok expr
 
 @[export pantograph_expr_echo_m]
-def exprEcho (expr: String) (options: @&Protocol.Options):
+def exprEcho (expr: String) (expectedType?: Option String := .none) (options: @&Protocol.Options):
     Lean.CoreM (Protocol.CR Protocol.ExprEchoResult) := do
   let termElabM: Lean.Elab.TermElabM _ := do
-    let expr ← match ← exprParse expr with
+    let expr ← match ← exprParse expr expectedType? with
       | .error e => return .error e
       | .ok expr => pure expr
     try

@@ -71,7 +71,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     Environment.addDecl args
   expr_echo (args: Protocol.ExprEcho): MainM (CR Protocol.ExprEchoResult) := do
     let state ← get
-    exprEcho args.expr state.options
+    exprEcho args.expr args.type state.options
   options_set (args: Protocol.OptionsSet): MainM (CR Protocol.OptionsSetResult) := do
     let state ← get
     let options := state.options
