@@ -109,9 +109,9 @@ def envAdd (name: String) (type: String) (value: String) (isTheorem: Bool):
     Lean.CoreM (Protocol.CR Protocol.EnvAddResult) :=
   Environment.addDecl { name, type, value, isTheorem }
 
-def typeParse (typeParse: String): Lean.Elab.TermElabM (Protocol.CR Lean.Expr) := do
+def parseElabType (type: String): Lean.Elab.TermElabM (Protocol.CR Lean.Expr) := do
   let env ← Lean.MonadEnv.getEnv
-  let syn ← match parseTerm env typeParse with
+  let syn ← match parseTerm env type with
     | .error str => return .error $ errorI "parsing" str
     | .ok syn => pure syn
   match ← elabType syn with
@@ -119,13 +119,13 @@ def typeParse (typeParse: String): Lean.Elab.TermElabM (Protocol.CR Lean.Expr) :
   | .ok expr => return .ok expr
 
 /-- This must be a TermElabM since the parsed expr contains extra information -/
-def exprParse (exprStr: String) (expectedType?: Option String := .none): Lean.Elab.TermElabM (Protocol.CR Lean.Expr) := do
+def parseElabExpr (expr: String) (expectedType?: Option String := .none): Lean.Elab.TermElabM (Protocol.CR Lean.Expr) := do
   let env ← Lean.MonadEnv.getEnv
-  let expectedType? ← match ← expectedType?.mapM typeParse with
+  let expectedType? ← match ← expectedType?.mapM parseElabType with
     | .none => pure $ .none
     | .some (.ok t) => pure $ .some t
     | .some (.error e) => return .error e
-  let syn ← match parseTerm env exprStr with
+  let syn ← match parseTerm env expr with
     | .error str => return .error $ errorI "parsing" str
     | .ok syn => pure syn
   match ← elabTerm syn expectedType? with
@@ -136,7 +136,7 @@ def exprParse (exprStr: String) (expectedType?: Option String := .none): Lean.El
 def exprEcho (expr: String) (expectedType?: Option String := .none) (options: @&Protocol.Options):
     Lean.CoreM (Protocol.CR Protocol.ExprEchoResult) := do
   let termElabM: Lean.Elab.TermElabM _ := do
-    let expr ← match ← exprParse expr expectedType? with
+    let expr ← match ← parseElabExpr expr expectedType? with
       | .error e => return .error e
       | .ok expr => pure expr
     try
@@ -152,7 +152,7 @@ def exprEcho (expr: String) (expectedType?: Option String := .none) (options: @&
 @[export pantograph_goal_start_expr_m]
 def goalStartExpr (expr: String): Lean.CoreM (Protocol.CR GoalState) :=
   let termElabM: Lean.Elab.TermElabM _ := do
-    let expr ← match ← typeParse expr with
+    let expr ← match ← parseElabType expr with
       | .error e => return .error e
       | .ok expr => pure $ expr
     return .ok $ ← GoalState.create expr
