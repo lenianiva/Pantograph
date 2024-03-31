@@ -98,13 +98,13 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): CoreM (Pr
 def addDecl (args: Protocol.EnvAdd): CoreM (Protocol.CR Protocol.EnvAddResult) := do
   let env ← Lean.MonadEnv.getEnv
   let tvM: Elab.TermElabM (Except String (Expr × Expr)) := do
-    let type ← match syntax_from_str env args.type with
+    let type ← match parseTerm env args.type with
       | .ok syn => do
-        match ← syntax_to_expr syn with
+        match ← elabTerm syn with
         | .error e => return .error e
         | .ok expr => pure expr
       | .error e => return .error e
-    let value ← match syntax_from_str env args.value with
+    let value ← match parseTerm env args.value with
       | .ok syn => do
         try
           let expr ← Elab.Term.elabTerm (stx := syn) (expectedType? := .some type)

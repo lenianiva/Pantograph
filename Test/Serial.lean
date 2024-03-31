@@ -55,8 +55,8 @@ def test_sexp_of_expr (env: Environment): IO LSpec.TestSeq := do
   ]
   let termElabM: Elab.TermElabM LSpec.TestSeq := entries.foldlM (λ suites (source, target) => do
     let env ← MonadEnv.getEnv
-    let s := syntax_from_str env source |>.toOption |>.get!
-    let expr := (← syntax_to_expr s) |>.toOption |>.get!
+    let s := parseTerm env source |>.toOption |>.get!
+    let expr := (← elabTerm s) |>.toOption |>.get!
     let test := LSpec.check source ((← serialize_expression_ast expr) = target)
     return LSpec.TestSeq.append suites test) LSpec.TestSeq.done
   let metaM := termElabM.run' (ctx := defaultTermElabMContext)
@@ -67,8 +67,8 @@ def test_instance (env: Environment): IO LSpec.TestSeq := do
   let metaM: MetaM LSpec.TestSeq := do
     let env ← MonadEnv.getEnv
     let source := "λ x y: Nat => HAdd.hAdd Nat Nat Nat (instHAdd Nat instAddNat) x y"
-    let s := syntax_from_str env source |>.toOption |>.get!
-    let _expr := (← runTermElabMInMeta <| syntax_to_expr s) |>.toOption |>.get!
+    let s := parseTerm env source |>.toOption |>.get!
+    let _expr := (← runTermElabMInMeta <| elabTerm s) |>.toOption |>.get!
     return LSpec.TestSeq.done
   runMetaMSeq env metaM
 

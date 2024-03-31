@@ -24,6 +24,9 @@ def Goal.devolatilize (goal: Goal): Goal :=
 deriving instance DecidableEq, Repr for Expression
 deriving instance DecidableEq, Repr for Variable
 deriving instance DecidableEq, Repr for Goal
+deriving instance DecidableEq, Repr for ExprEchoResult
+deriving instance DecidableEq, Repr for InteractionError
+deriving instance DecidableEq, Repr for Option
 end Protocol
 
 def TacticResult.toString : TacticResult → String
@@ -38,8 +41,8 @@ def assertUnreachable (message: String): LSpec.TestSeq := LSpec.check message fa
 
 open Lean
 
-def runCoreMSeq (env: Environment) (coreM: CoreM LSpec.TestSeq): IO LSpec.TestSeq := do
-  let coreContext: Core.Context ← createCoreContext #[]
+def runCoreMSeq (env: Environment) (coreM: CoreM LSpec.TestSeq) (options: Array String := #[]): IO LSpec.TestSeq := do
+  let coreContext: Core.Context ← createCoreContext options
   match ← (coreM.run' coreContext { env := env }).toBaseIO with
   | .error exception =>
     return LSpec.test "Exception" (s!"internal exception #{← exception.toMessageData.toString}" = "")

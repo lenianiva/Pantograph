@@ -1,7 +1,8 @@
 import LSpec
 import Test.Environment
-import Test.Metavar
 import Test.Integration
+import Test.Library
+import Test.Metavar
 import Test.Proofs
 import Test.Serial
 
@@ -11,11 +12,12 @@ def main := do
   Lean.initSearchPath (← Lean.findSysroot)
 
   let suites := [
-    Metavar.suite,
+    Environment.suite,
     Integration.suite,
+    Library.suite,
+    Metavar.suite,
     Proofs.suite,
     Serial.suite,
-    Environment.suite
   ]
   let all ← suites.foldlM (λ acc m => do pure $ acc ++ (← m)) LSpec.TestSeq.done
   LSpec.lspecIO $ all

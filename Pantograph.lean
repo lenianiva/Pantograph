@@ -71,7 +71,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     Environment.addDecl args
   expr_echo (args: Protocol.ExprEcho): MainM (CR Protocol.ExprEchoResult) := do
     let state ← get
-    exprEcho args.expr state.options
+    exprEcho args.expr args.type? state.options
   options_set (args: Protocol.OptionsSet): MainM (CR Protocol.OptionsSetResult) := do
     let state ← get
     let options := state.options
@@ -93,11 +93,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     let state ← get
     let env ← Lean.MonadEnv.getEnv
     let expr?: Except _ GoalState ← runTermElabM (match args.expr, args.copyFrom with
-      | .some expr, .none => do
-        let expr ← match ← exprParse expr with
-          | .error e => return .error e
-          | .ok expr => pure $ expr
-        return .ok $ ← GoalState.create expr
+      | .some expr, .none => goalStartExpr expr
       | .none, .some copyFrom =>
         (match env.find? <| copyFrom.toName with
         | .none => return .error <| errorIndex s!"Symbol not found: {copyFrom}"
@@ -152,7 +148,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
         | .some branchId, .none => do
           match state.goalStates.find? branchId with
           | .none => return .error $ errorIndex s!"Invalid state index {branchId}"
-          | .some branch => pure $ target.continue branch
+          | .some branch => pure $ goalContinue target branch
         | .none, .some goals =>
           pure $ goalResume target goals
         | _, _ => return .error <| errorI "arguments" "Exactly one of {branch, goals} must be supplied"

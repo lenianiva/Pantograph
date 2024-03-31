@@ -21,23 +21,22 @@ def unfoldAuxLemmas (e : Lean.Expr) : Lean.CoreM Lean.Expr := do
 --- Input Functions ---
 
 /-- Read syntax object from string -/
-def syntax_from_str (env: Environment) (s: String): Except String Syntax :=
+def parseTerm (env: Environment) (s: String): Except String Syntax :=
   Parser.runParserCategory
     (env := env)
     (catName := `term)
     (input := s)
     (fileName := "<stdin>")
 
-
 /-- Parse a syntax object. May generate additional metavariables! -/
-def syntax_to_expr_type (syn: Syntax): Elab.TermElabM (Except String Expr) := do
+def elabType (syn: Syntax): Elab.TermElabM (Except String Expr) := do
   try
     let expr ← Elab.Term.elabType syn
     return .ok expr
   catch ex => return .error (← ex.toMessageData.toString)
-def syntax_to_expr (syn: Syntax): Elab.TermElabM (Except String Expr) := do
+def elabTerm (syn: Syntax) (expectedType? : Option Expr := .none): Elab.TermElabM (Except String Expr) := do
   try
-    let expr ← Elab.Term.elabTerm (stx := syn) (expectedType? := .none)
+    let expr ← Elab.Term.elabTerm (stx := syn) expectedType?
     return .ok expr
   catch ex => return .error (← ex.toMessageData.toString)
 

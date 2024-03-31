@@ -72,7 +72,7 @@ where the application of `assumption` should lead to a failure.
 
 See `Pantograph/Protocol.lean` for a description of the parameters and return values in JSON.
 - `reset`: Delete all cached expressions and proof trees
-- `expr.echo {"expr": <expr>}`: Determine the type of an expression and round-trip it
+- `expr.echo {"expr": <expr>, "type": <optional expected type>}`: Determine the type of an expression and round-trip it
 - `env.catalog`: Display a list of all safe Lean symbols in the current environment
 - `env.inspect {"name": <name>, "value": <bool>}`: Show the type and package of a
   given symbol; If value flag is set, the value is printed or hidden. By default

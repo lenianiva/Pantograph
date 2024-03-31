@@ -32,14 +32,14 @@ def startProof (start: Start): TestM (Option GoalState) := do
     | .none =>
       return Option.none
   | .expr expr =>
-    let syn? := syntax_from_str env expr
+    let syn? := parseTerm env expr
     addTest $ LSpec.check s!"Parsing {expr}" (syn?.isOk)
     match syn? with
     | .error error =>
       IO.println error
       return Option.none
     | .ok syn =>
-      let expr? ← syntax_to_expr_type syn
+      let expr? ← elabType syn
       addTest $ LSpec.check s!"Elaborating" expr?.isOk
       match expr? with
       | .error error =>
