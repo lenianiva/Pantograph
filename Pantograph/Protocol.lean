@@ -98,7 +98,7 @@ structure StatResult where
 -- Return the type of an expression
 structure ExprEcho where
   expr: String
-  type: Option String
+  type?: Option String
   deriving Lean.FromJson
 structure ExprEchoResult where
   expr: Expression
