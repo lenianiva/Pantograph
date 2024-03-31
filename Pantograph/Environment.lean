@@ -64,7 +64,7 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): CoreM (Pr
       else .none,
     valueDependency? := ← if args.dependency?.getD false
       then info.value?.mapM (λ e => do
-        let e ← (unfoldAuxLemmas e).run'
+        let e ← unfoldAuxLemmas e
         pure $ e.getUsedConstants.filter (!isNameInternal ·) |>.map (λ n => name_to_ast n) )
       else pure (.none),
     module? := module?
