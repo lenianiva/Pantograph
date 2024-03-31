@@ -152,7 +152,7 @@ def exprEcho (expr: String) (expectedType?: Option String := .none) (options: @&
 @[export pantograph_goal_start_expr_m]
 def goalStartExpr (expr: String): Lean.CoreM (Protocol.CR GoalState) :=
   let termElabM: Lean.Elab.TermElabM _ := do
-    let expr ← match ← exprParse expr with
+    let expr ← match ← typeParse expr with
       | .error e => return .error e
       | .ok expr => pure $ expr
     return .ok $ ← GoalState.create expr
