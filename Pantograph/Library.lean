@@ -116,7 +116,7 @@ def parseElabType (type: String): Lean.Elab.TermElabM (Protocol.CR Lean.Expr) :=
     | .ok syn => pure syn
   match ← elabType syn with
   | .error str => return .error $ errorI "elab" str
-  | .ok expr => return .ok expr
+  | .ok expr => return .ok (← Lean.instantiateMVars expr)
 
 /-- This must be a TermElabM since the parsed expr contains extra information -/
 def parseElabExpr (expr: String) (expectedType?: Option String := .none): Lean.Elab.TermElabM (Protocol.CR Lean.Expr) := do
@@ -130,7 +130,7 @@ def parseElabExpr (expr: String) (expectedType?: Option String := .none): Lean.E
     | .ok syn => pure syn
   match ← elabTerm syn expectedType? with
   | .error str => return .error $ errorI "elab" str
-  | .ok expr => return .ok expr
+  | .ok expr => return .ok (← Lean.instantiateMVars expr)
 
 @[export pantograph_expr_echo_m]
 def exprEcho (expr: String) (expectedType?: Option String := .none) (options: @&Protocol.Options):
