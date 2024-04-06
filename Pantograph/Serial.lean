@@ -251,9 +251,7 @@ protected def GoalState.serializeGoals
     MetaM (Array Protocol.Goal):= do
   state.restoreMetaM
   let goals := state.goals.toArray
-  let parentDecl? := parent.bind (λ parentState =>
-    let parentGoal := parentState.goals.get! state.parentGoalId
-    parentState.mctx.findDecl? parentGoal)
+  let parentDecl? := parent.bind (λ parentState => parentState.mctx.findDecl? state.parentMVar.get!)
   goals.mapM fun goal => do
     match state.mctx.findDecl? goal with
     | .some mvarDecl =>

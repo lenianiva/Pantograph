@@ -160,7 +160,7 @@ def goalStartExpr (expr: String): Lean.CoreM (Protocol.CR GoalState) :=
 
 @[export pantograph_goal_tactic_m]
 def goalTactic (state: GoalState) (goalId: Nat) (tactic: String): Lean.CoreM TacticResult :=
-  runTermElabM <| GoalState.execute state goalId tactic
+  runTermElabM <| GoalState.tryTactic state goalId tactic
 
 @[export pantograph_goal_try_assign_m]
 def goalTryAssign (state: GoalState) (goalId: Nat) (expr: String): Lean.CoreM TacticResult :=
