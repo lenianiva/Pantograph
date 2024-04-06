@@ -201,6 +201,11 @@ structure GoalTactic where
   -- One of the fields here must be filled
   tactic?: Option String := .none
   expr?: Option String := .none
+  have?: Option String := .none
+
+  -- In case of the `have` tactic, the new free variable name
+  binderName?: Option String := .none
+
   deriving Lean.FromJson
 structure GoalTacticResult where
   -- The next goal state id. Existence of this field shows success

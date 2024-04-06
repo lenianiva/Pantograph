@@ -114,12 +114,15 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     match state.goalStates.find? args.stateId with
     | .none => return .error $ errorIndex s!"Invalid state index {args.stateId}"
     | .some goalState => do
-      let nextGoalState?: Except _ GoalState ← match args.tactic?, args.expr? with
-        | .some tactic, .none => do
+      let nextGoalState?: Except _ GoalState ← match args.tactic?, args.expr?, args.have? with
+        | .some tactic, .none, .none => do
           pure ( Except.ok (← goalTactic goalState args.goalId tactic))
-        | .none, .some expr => do
-          pure ( Except.ok (← goalTryAssign goalState args.goalId expr))
-        | _, _ => pure (Except.error <| errorI "arguments" "Exactly one of {tactic, expr} must be supplied")
+        | .none, .some expr, .none => do
+          pure ( Except.ok (← goalAssign goalState args.goalId expr))
+        | .none, .none, .some type => do
+          let binderName := args.binderName?.getD ""
+          pure ( Except.ok (← goalHave goalState args.goalId binderName type))
+        | _, _, _ => pure (Except.error <| errorI "arguments" "Exactly one of {tactic, expr, have} must be supplied")
       match nextGoalState? with
       | .error error => return .error error
       | .ok (.success nextGoalState) =>

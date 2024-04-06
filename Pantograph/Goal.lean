@@ -1,3 +1,8 @@
+/-
+Functions for handling metavariables
+
+All the functions starting with `try` resume their inner monadic state.
+-/
 import Pantograph.Protocol
 import Lean
 
