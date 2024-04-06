@@ -6,8 +6,33 @@ import Test.Metavar
 import Test.Proofs
 import Test.Serial
 
+-- Test running infrastructure
+
+namespace Pantograph.Test
+
+def addPrefix (pref: String) (tests: List (String × α)): List (String  × α) :=
+  tests.map (λ (name, x) => (pref ++ "/" ++ name, x))
+
+/-- Runs test in parallel. Filters test name if given -/
+def runTestGroup (filter: Option String) (tests: List (String × IO LSpec.TestSeq)): IO LSpec.TestSeq := do
+  let tests: List (String × IO LSpec.TestSeq) := match filter with
+    | .some filter => tests.filter (λ (name, _) => filter.isPrefixOf name)
+    | .none => tests
+  let tasks: List (String × Task _) ← tests.mapM (λ (name, task) => do
+    return (name, ← EIO.asTask task))
+  let all := tasks.foldl (λ acc (name, task) =>
+    let v: Except IO.Error LSpec.TestSeq := Task.get task
+    match v with
+    | .ok case => acc ++ (LSpec.group name case)
+    | .error e => acc ++ (expectationFailure name e.toString)
+    ) LSpec.TestSeq.done
+  return all
+
+end Pantograph.Test
+
 open Pantograph.Test
 
+/-- Main entry of tests; Provide an argument to filter tests by prefix -/
 def main (args: List String) := do
   let name_filter := args.head?
   Lean.initSearchPath (← Lean.findSysroot)
