@@ -72,17 +72,13 @@ def test_instance (env: Environment): IO LSpec.TestSeq := do
     return LSpec.TestSeq.done
   runMetaMSeq env metaM
 
-def suite: IO LSpec.TestSeq := do
-  let env: Environment ← importModules
-    (imports := #["Init"].map (λ str => { module := str.toName, runtimeOnly := false }))
-    (opts := {})
-    (trustLevel := 1)
-
-  return LSpec.group "Serialization" $
-    (LSpec.group "name_to_ast" test_name_to_ast) ++
-    (LSpec.group "Expression binder" (← test_expr_to_binder env)) ++
-    (LSpec.group "Sexp from symbol" (← test_sexp_of_symbol env)) ++
-    (LSpec.group "Sexp from expr" (← test_sexp_of_expr env)) ++
-    (LSpec.group "Instance" (← test_instance env))
+def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
+  [
+    ("name_to_ast", do pure test_name_to_ast),
+    ("Expression binder", test_expr_to_binder env),
+    ("Sexp from symbol", test_sexp_of_symbol env),
+    ("Sexp from expr", test_sexp_of_expr env),
+    ("Instance", test_instance env),
+  ]
 
 end Pantograph.Test.Serial

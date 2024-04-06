@@ -268,11 +268,7 @@ def test_partial_continuation: TestM Unit := do
   return ()
 
 
-def suite: IO LSpec.TestSeq := do
-  let env: Lean.Environment ← Lean.importModules
-    (imports := #["Init"].map (λ str => { module := str.toName, runtimeOnly := false }))
-    (opts := {})
-    (trustLevel := 1)
+def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
     ("Instantiate", test_instantiate_mvar),
     ("2 < 5", test_m_couple),
@@ -280,11 +276,6 @@ def suite: IO LSpec.TestSeq := do
     ("Proposition Generation", test_proposition_generation),
     ("Partial Continuation", test_partial_continuation)
   ]
-  let tests ← tests.foldlM (fun acc tests => do
-    let (name, tests) := tests
-    let tests ← proofRunner env tests
-    return acc ++ (LSpec.group name tests)) LSpec.TestSeq.done
-
-  return LSpec.group "Metavar" tests
+  tests.map (fun (name, test) => (name, proofRunner env test))
 
 end Pantograph.Test.Metavar

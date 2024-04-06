@@ -94,10 +94,11 @@ def test_inspect: IO LSpec.TestSeq := do
     ) LSpec.TestSeq.done
   runCoreMSeq env inner
 
-def suite: IO LSpec.TestSeq := do
-  return LSpec.group "Environment" $
-    (LSpec.group "Catalog" (← test_catalog)) ++
-    (LSpec.group "Symbol visibility" (← test_symbol_visibility)) ++
-    (LSpec.group "Inspect" (← test_inspect))
+def suite: List (String × IO LSpec.TestSeq) :=
+  [
+    ("Catalog", test_catalog),
+    ("Symbol Visibility", test_symbol_visibility),
+    ("Inspect", test_inspect),
+  ]
 
 end Pantograph.Test.Environment

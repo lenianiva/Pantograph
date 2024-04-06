@@ -112,7 +112,7 @@ def test_tactic : IO LSpec.TestSeq :=
       Protocol.GoalTacticResult))
   ]
 
-def test_env : IO LSpec.TestSeq :=
+def test_env_add_inspect : IO LSpec.TestSeq :=
   let name1 := "Pantograph.mystery"
   let name2 := "Pantograph.mystery2"
   subroutine_runner [
@@ -148,13 +148,13 @@ def test_env : IO LSpec.TestSeq :=
       Protocol.EnvInspectResult))
   ]
 
-def suite: IO LSpec.TestSeq := do
-
-  return LSpec.group "Integration" $
-    (LSpec.group "Option modify" (← test_option_modify)) ++
-    (LSpec.group "Malformed command" (← test_malformed_command)) ++
-    (LSpec.group "Tactic" (← test_tactic)) ++
-    (LSpec.group "Env" (← test_env))
+def suite: List (String × IO LSpec.TestSeq) :=
+  [
+    ("Option modify", test_option_modify),
+    ("Malformed command", test_malformed_command),
+    ("Tactic", test_tactic),
+    ("env.add env.inspect", test_env_add_inspect),
+  ]
 
 
 end Pantograph.Test.Integration

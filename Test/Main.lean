@@ -8,16 +8,21 @@ import Test.Serial
 
 open Pantograph.Test
 
-def main := do
+def main (args: List String) := do
+  let name_filter := args.head?
   Lean.initSearchPath (← Lean.findSysroot)
+  let env_default: Lean.Environment ← Lean.importModules
+    (imports := #[`Init])
+    (opts := {})
+    (trustLevel := 1)
 
-  let suites := [
-    Environment.suite,
-    Integration.suite,
-    Library.suite,
-    Metavar.suite,
-    Proofs.suite,
-    Serial.suite,
+  let suites: List (String × List (String × IO LSpec.TestSeq)) := [
+    ("Environment", Environment.suite),
+    ("Integration", Integration.suite),
+    ("Library", Library.suite env_default),
+    ("Metavar", Metavar.suite env_default),
+    ("Proofs", Proofs.suite env_default),
+    ("Serial", Serial.suite env_default),
   ]
-  let all ← suites.foldlM (λ acc m => do pure $ acc ++ (← m)) LSpec.TestSeq.done
-  LSpec.lspecIO $ all
+  let tests: List (String × IO LSpec.TestSeq) := suites.foldl (λ acc (name, suite) => acc ++ (addPrefix name suite)) []
+  LSpec.lspecIO (← runTestGroup name_filter tests)

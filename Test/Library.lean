@@ -8,11 +8,7 @@ open Pantograph
 
 namespace Pantograph.Test.Library
 
-def test_expr_echo: IO LSpec.TestSeq := do
-  let env: Environment ← importModules
-    (imports := #[`Init])
-    (opts := {})
-    (trustLevel := 1)
+def test_expr_echo (env: Environment): IO LSpec.TestSeq := do
   let inner: CoreM LSpec.TestSeq := do
     let prop_and_proof := "⟨∀ (x: Prop), x → x, λ (x: Prop) (h: x) => h⟩"
     let tests := LSpec.TestSeq.done
@@ -34,9 +30,9 @@ def test_expr_echo: IO LSpec.TestSeq := do
     return tests
   runCoreMSeq env (options := #["pp.proofs.threshold=100"]) inner
 
-def suite: IO LSpec.TestSeq := do
-
-  return LSpec.group "Library" $
-    (LSpec.group "ExprEcho" (← test_expr_echo))
+def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
+  [
+    ("expr_echo", test_expr_echo env),
+  ]
 
 end Pantograph.Test.Library

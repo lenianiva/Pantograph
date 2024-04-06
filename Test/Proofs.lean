@@ -293,12 +293,7 @@ def proof_or_comm: TestM Unit := do
       ]
     }
 
-
-def suite: IO LSpec.TestSeq := do
-  let env: Lean.Environment ← Lean.importModules
-    (imports := #[{ module := "Init".toName, runtimeOnly := false}])
-    (opts := {})
-    (trustLevel := 1)
+def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
     ("Nat.add_comm", proof_nat_add_comm false),
     ("Nat.add_comm manual", proof_nat_add_comm true),
@@ -306,11 +301,6 @@ def suite: IO LSpec.TestSeq := do
     ("arithmetic", proof_arith),
     ("Or.comm", proof_or_comm)
   ]
-  let tests ← tests.foldlM (fun acc tests => do
-    let (name, tests) := tests
-    let tests ← proofRunner env tests
-    return acc ++ (LSpec.group name tests)) LSpec.TestSeq.done
-
-  return LSpec.group "Proofs" tests
+  tests.map (fun (name, test) => (name, proofRunner env test))
 
 end Pantograph.Test.Proofs

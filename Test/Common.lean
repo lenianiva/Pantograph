@@ -8,6 +8,7 @@ open Lean
 
 namespace Pantograph
 
+-- Auxiliary functions
 namespace Protocol
 /-- Set internal names to "" -/
 def Goal.devolatilize (goal: Goal): Goal :=
@@ -37,9 +38,32 @@ def TacticResult.toString : TacticResult → String
   | .parseError error => s!".parseError {error}"
   | .indexError index => s!".indexError {index}"
 
-def assertUnreachable (message: String): LSpec.TestSeq := LSpec.check message false
+namespace Test
 
-open Lean
+def expectationFailure (desc: String) (error: String): LSpec.TestSeq := LSpec.test desc (LSpec.ExpectationFailure "ok _" error)
+
+-- Test running infrastructure
+
+def addPrefix (pref: String) (tests: List (String × α)): List (String  × α) :=
+  tests.map (λ (name, x) => (pref ++ "/" ++ name, x))
+
+/-- Runs test in parallel. Filters test name if given -/
+def runTestGroup (filter: Option String) (tests: List (String × IO LSpec.TestSeq)): IO LSpec.TestSeq := do
+  let tests: List (String × IO LSpec.TestSeq) := match filter with
+    | .some filter => tests.filter (λ (name, _) => filter.isPrefixOf name)
+    | .none => tests
+  let tasks: List (String × Task _) ← tests.mapM (λ (name, task) => do
+    return (name, ← EIO.asTask task))
+  let all := tasks.foldl (λ acc (name, task) =>
+    let v: Except IO.Error LSpec.TestSeq := Task.get task
+    match v with
+    | .ok case => acc ++ (LSpec.group name case)
+    | .error e => acc ++ (expectationFailure name e.toString)
+    ) LSpec.TestSeq.done
+  return all
+
+
+def assertUnreachable (message: String): LSpec.TestSeq := LSpec.check message false
 
 def runCoreMSeq (env: Environment) (coreM: CoreM LSpec.TestSeq) (options: Array String := #[]): IO LSpec.TestSeq := do
   let coreContext: Core.Context ← createCoreContext options
@@ -59,5 +83,6 @@ def defaultTermElabMContext: Lean.Elab.Term.Context := {
     declName? := some "_pantograph".toName,
     errToSorry := false
   }
+end Test
 
 end Pantograph
