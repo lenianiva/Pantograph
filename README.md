@@ -132,8 +132,5 @@ requires the presence of `lean-all`.
 
 To run tests:
 ``` sh
-nix build .#checks.${system}.test
+nix flake check
 ```
-
-For example, `${system}` could be `x86_64-linux`. Using `nix develop` drops the
-current session into a development shell with fixed Lean version.
