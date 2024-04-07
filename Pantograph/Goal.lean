@@ -55,10 +55,13 @@ protected def GoalState.env (state: GoalState): Environment :=
   state.savedState.term.meta.core.env
 private def GoalState.mvars (state: GoalState): SSet MVarId :=
   state.mctx.decls.foldl (init := .empty) fun acc k _ => acc.insert k
-private def GoalState.restoreElabM (state: GoalState): Elab.TermElabM Unit :=
-  state.savedState.term.restore
 protected def GoalState.restoreMetaM (state: GoalState): MetaM Unit :=
   state.savedState.term.meta.restore
+private def GoalState.restoreElabM (state: GoalState): Elab.TermElabM Unit :=
+  state.savedState.term.restore
+private def GoalState.restoreTacticM (state: GoalState) (goal: MVarId): Elab.Tactic.TacticM Unit := do
+  state.savedState.restore
+  Elab.Tactic.setGoals [goal]
 
 /-- Inner function for executing tactic on goal state -/
 def executeTactic (state: Elab.Tactic.SavedState) (goal: MVarId) (tactic: Syntax) :
@@ -245,6 +248,84 @@ protected def GoalState.tryHave (state: GoalState) (goalId: Nat) (binderName: St
     }
   catch exception =>
     return .failure #[← exception.toMessageData.toString]
+
+/-- Enter conv tactic mode -/
+protected def GoalState.tryConv (state: GoalState) (goalId: Nat):
+      Elab.TermElabM TacticResult := do
+  let goal ← match state.savedState.tactic.goals.get? goalId with
+    | .some goal => pure goal
+    | .none => return .indexError goalId
+  let tacticM :  Elab.Tactic.TacticM Elab.Tactic.SavedState:= do
+    state.restoreTacticM goal
+    --let mm ← Meta.matchEq? (← goal.getType)
+    --if let .some (_, _, rhs) := mm then
+    --  if rhs.getAppFn.isMVar then
+    --    IO.println "isMVar ok"
+    --  else
+    --    IO.println "isMVar failed"
+    --else
+    --  IO.println "matchEq? failed"
+    IO.println s!"Old goals: {(← Elab.Tactic.getGoals).map (λ x => x.name.toString)}"
+    --Elab.Tactic.Conv.remarkAsConvGoal
+    let goalNew ← Elab.Tactic.Conv.markAsConvGoal goal
+    -- TODO: Error if `goal == goalNew`
+    Elab.Tactic.setGoals [goalNew]
+    --Elab.Tactic.Conv.remarkAsConvGoal
+    IO.println s!"New goals: {(← Elab.Tactic.getGoals).map (λ x => x.name.toString)}"
+    MonadBacktrack.saveState
+  let nextSavedState ← tacticM { elaborator := .anonymous } |>.run' state.savedState.tactic
+  let prevMCtx := state.savedState.term.meta.meta.mctx
+  let nextMCtx := nextSavedState.term.meta.meta.mctx
+  -- Generate a list of mvarIds that exist in the parent state; Also test the
+  -- assertion that the types have not changed on any mvars.
+  let newMVars ← nextMCtx.decls.foldlM (fun acc mvarId mvarDecl => do
+    if let .some prevMVarDecl := prevMCtx.decls.find? mvarId then
+      assert! prevMVarDecl.type == mvarDecl.type
+      return acc
+    else
+      return acc.insert mvarId
+    ) SSet.empty
+  return .success {
+    root := state.root,
+    savedState := nextSavedState
+    newMVars,
+    parentMVar := .some goal,
+  }
+
+protected def GoalState.tryConvTactic (state: GoalState) (goalId: Nat) (convTactic: String):
+      Elab.TermElabM TacticResult := do
+  let goal ← match state.savedState.tactic.goals.get? goalId with
+    | .some goal => pure goal
+    | .none => return .indexError goalId
+  let convTactic ← match Parser.runParserCategory
+    (env := ← MonadEnv.getEnv)
+    (catName := `conv)
+    (input := convTactic)
+    (fileName := filename) with
+    | .ok stx => pure $ stx
+    | .error error => return .parseError error
+  let tacticM :  Elab.Tactic.TacticM Elab.Tactic.SavedState:= do
+    state.restoreTacticM goal
+    Elab.Tactic.Conv.evalConvTactic convTactic
+    MonadBacktrack.saveState
+  let nextSavedState ← tacticM { elaborator := .anonymous } |>.run' state.savedState.tactic
+  let nextMCtx := nextSavedState.term.meta.meta.mctx
+  let prevMCtx := state.savedState.term.meta.meta.mctx
+  -- Generate a list of mvarIds that exist in the parent state; Also test the
+  -- assertion that the types have not changed on any mvars.
+  let newMVars ← nextMCtx.decls.foldlM (fun acc mvarId mvarDecl => do
+    if let .some prevMVarDecl := prevMCtx.decls.find? mvarId then
+      assert! prevMVarDecl.type == mvarDecl.type
+      return acc
+    else
+      return acc.insert mvarId
+    ) SSet.empty
+  return .success {
+    root := state.root,
+    savedState := nextSavedState
+    newMVars,
+    parentMVar := .some goal,
+  }
 
 
 /--

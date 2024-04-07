@@ -157,12 +157,13 @@ def test_arith: TestM Unit := do
       addTest $ assertUnreachable "Goal could not parse"
       return ()
 
-  let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := "intros") with
+  let tactic := "intros"
+  let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := tactic) with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.check "intros" (state1.goals.length = 1)
+  addTest $ LSpec.check tactic (state1.goals.length = 1)
   addTest $ LSpec.test "(1 root)" state1.rootExpr?.isNone
   let state2 ← match ← state1.tryTactic (goalId := 0) (tactic := "simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm, Nat.mul_comm, Nat.mul_assoc, Nat.mul_left_comm] at *") with
     | .success state => pure state
@@ -171,12 +172,13 @@ def test_arith: TestM Unit := do
       return ()
   addTest $ LSpec.check "simp ..." (state2.goals.length = 1)
   addTest $ LSpec.check "(2 root)" state2.rootExpr?.isNone
-  let state3 ← match ← state2.tryTactic (goalId := 0) (tactic := "assumption") with
+  let tactic := "assumption"
+  let state3 ← match ← state2.tryTactic (goalId := 0) (tactic := tactic) with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.test "assumption" state3.goals.isEmpty
+  addTest $ LSpec.test tactic state3.goals.isEmpty
   addTest $ LSpec.check "(3 root)" state3.rootExpr?.isSome
   return ()
 
@@ -385,13 +387,39 @@ def test_conv: TestM Unit := do
 
   -- This solves the state in one-shot
   let tactic := "conv => { lhs; congr; rw [Nat.add_comm]; rfl }"
-  let state2 ← match ← state1.tryTactic (goalId := 0) (tactic := tactic) with
+  let stateT ← match ← state1.tryTactic (goalId := 0) (tactic := tactic) with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.check tactic ((← state2.serializeGoals (options := ← read)).map (·.devolatilize) =
+  addTest $ LSpec.check tactic ((← stateT.serializeGoals (options := ← read)).map (·.devolatilize) =
     #[])
+
+  let state2 ← match ← state1.tryConv (goalId := 0) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check "conv => ..." ((← state2.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[{ buildGoal [("a", "Nat"), ("b", "Nat"), ("c", "Nat")] "a + b + c" with isConversion := true }])
+
+  let convTactic := "lhs"
+  let state3L ← match ← state2.tryConvTactic (goalId := 0) (convTactic := convTactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check s!"  {convTactic}" ((← state3L.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[{ buildGoal [("a", "Nat"), ("b", "Nat"), ("c", "Nat")] "a + b + c" with isConversion := true }])
+
+  let convTactic := "rhs"
+  let state3R ← match ← state2.tryConvTactic (goalId := 0) (convTactic := convTactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check s!"  {convTactic}" ((← state3R.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[{ buildGoal [("a", "Nat"), ("b", "Nat"), ("c", "Nat")] "b + a + c" with isConversion := true }])
 
 example : ∀ (a: Nat), 1 + a + 1 = a + 2 := by
   intro a
