@@ -43,6 +43,9 @@ namespace Test
 def expectationFailure (desc: String) (error: String): LSpec.TestSeq := LSpec.test desc (LSpec.ExpectationFailure "ok _" error)
 def assertUnreachable (message: String): LSpec.TestSeq := LSpec.check message false
 
+def parseFailure (error: String) := expectationFailure "parse" error
+def elabFailure (error: String) := expectationFailure "elab" error
+
 def runCoreMSeq (env: Environment) (coreM: CoreM LSpec.TestSeq) (options: Array String := #[]): IO LSpec.TestSeq := do
   let coreContext: Core.Context ← createCoreContext options
   match ← (coreM.run' coreContext { env := env }).toBaseIO with
@@ -52,15 +55,8 @@ def runCoreMSeq (env: Environment) (coreM: CoreM LSpec.TestSeq) (options: Array 
 def runMetaMSeq (env: Environment) (metaM: MetaM LSpec.TestSeq): IO LSpec.TestSeq :=
   runCoreMSeq env metaM.run'
 def runTermElabMInMeta { α } (termElabM: Lean.Elab.TermElabM α): Lean.MetaM α :=
-  termElabM.run' (ctx := {
-    declName? := .none,
-    errToSorry := false,
-  })
+  termElabM.run' (ctx := Pantograph.defaultTermElabMContext)
 
-def defaultTermElabMContext: Lean.Elab.Term.Context := {
-    declName? := some "_pantograph".toName,
-    errToSorry := false
-  }
 end Test
 
 end Pantograph

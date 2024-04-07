@@ -32,6 +32,16 @@ def subroutine_runner (steps: List (MainM LSpec.TestSeq)): IO LSpec.TestSeq := d
   catch ex =>
     return LSpec.check s!"Uncaught IO exception: {ex.toString}" false
 
+def test_elab : IO LSpec.TestSeq :=
+  subroutine_runner [
+    subroutine_step "expr.echo"
+      [("expr", .str "λ {α : Sort (u + 1)} => List α")]
+     (Lean.toJson ({
+       type := { pp? := .some "{α : Type u} → Type u" },
+       expr := { pp? := .some "fun {α} => List α" }
+     }: Protocol.ExprEchoResult)),
+  ]
+
 def test_option_modify : IO LSpec.TestSeq :=
   let pp? := Option.some "∀ (n : Nat), n + 1 = n.succ"
   let sexp? := Option.some "(:forall n (:c Nat) ((:c Eq) (:c Nat) ((:c HAdd.hAdd) (:c Nat) (:c Nat) (:c Nat) ((:c instHAdd) (:c Nat) (:c instAddNat)) 0 ((:c OfNat.ofNat) (:c Nat) (:lit 1) ((:c instOfNatNat) (:lit 1)))) ((:c Nat.succ) 0)))"
@@ -150,6 +160,7 @@ def test_env_add_inspect : IO LSpec.TestSeq :=
 
 def suite: List (String × IO LSpec.TestSeq) :=
   [
+    ("Elab", test_elab),
     ("Option modify", test_option_modify),
     ("Malformed command", test_malformed_command),
     ("Tactic", test_tactic),
