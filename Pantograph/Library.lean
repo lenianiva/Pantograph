@@ -36,13 +36,15 @@ end Lean
 
 namespace Pantograph
 
+def defaultTermElabMContext: Lean.Elab.Term.Context := {
+    autoBoundImplicit := true,
+    declName? := some "_pantograph".toName,
+    errToSorry := false
+  }
 def runMetaM { α } (metaM: Lean.MetaM α): Lean.CoreM α :=
   metaM.run'
 def runTermElabM { α } (termElabM: Lean.Elab.TermElabM α): Lean.CoreM α :=
-  termElabM.run' (ctx := {
-    declName? := .none,
-    errToSorry := false,
-  }) |>.run'
+  termElabM.run' (ctx := defaultTermElabMContext) |>.run'
 
 def errorI (type desc: String): Protocol.InteractionError := { error := type, desc := desc }
 
