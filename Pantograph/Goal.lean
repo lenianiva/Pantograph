@@ -63,6 +63,15 @@ private def GoalState.restoreTacticM (state: GoalState) (goal: MVarId): Elab.Tac
   state.savedState.restore
   Elab.Tactic.setGoals [goal]
 
+private def newMVarSet (mctxOld: @&MetavarContext) (mctxNew: @&MetavarContext): SSet MVarId :=
+  mctxNew.decls.foldl (fun acc mvarId mvarDecl =>
+    if let .some prevMVarDecl := mctxOld.decls.find? mvarId then
+      assert! prevMVarDecl.type == mvarDecl.type
+      acc
+    else
+      acc.insert mvarId
+    ) SSet.empty
+
 /-- Inner function for executing tactic on goal state -/
 def executeTactic (state: Elab.Tactic.SavedState) (goal: MVarId) (tactic: Syntax) :
     Elab.TermElabM (Except (Array String) Elab.Tactic.SavedState):= do
@@ -116,17 +125,10 @@ protected def GoalState.tryTactic (state: GoalState) (goalId: Nat) (tactic: Stri
     let prevMCtx := state.savedState.term.meta.meta.mctx
     -- Generate a list of mvarIds that exist in the parent state; Also test the
     -- assertion that the types have not changed on any mvars.
-    let newMVars ← nextMCtx.decls.foldlM (fun acc mvarId mvarDecl => do
-      if let .some prevMVarDecl := prevMCtx.decls.find? mvarId then
-        assert! prevMVarDecl.type == mvarDecl.type
-        return acc
-      else
-        return acc.insert mvarId
-      ) SSet.empty
     return .success {
       root := state.root,
       savedState := nextSavedState
-      newMVars,
+      newMVars := newMVarSet prevMCtx nextMCtx,
       parentMVar := .some goal,
     }
 
@@ -156,21 +158,15 @@ protected def GoalState.assign (state: GoalState) (goal: MVarId) (expr: Expr):
       let nextMCtx ← getMCtx
       -- Generate a list of mvarIds that exist in the parent state; Also test the
       -- assertion that the types have not changed on any mvars.
-      let newMVars ← nextMCtx.decls.foldlM (fun acc mvarId mvarDecl => do
-        if let .some prevMVarDecl := prevMCtx.decls.find? mvarId then
-          assert! prevMVarDecl.type == mvarDecl.type
-          return acc
-        else
-          return mvarId :: acc
-        ) []
-      let nextGoals ← newMVars.filterM (λ mvar => do pure !(← mvar.isAssigned))
+      let newMVars := newMVarSet prevMCtx nextMCtx
+      let nextGoals ← newMVars.toList.filterM (λ mvar => do pure !(← mvar.isAssigned))
       return .success {
         root := state.root,
         savedState := {
           term := ← MonadBacktrack.saveState,
           tactic := { goals := nextGoals }
         },
-        newMVars := newMVars.toSSet,
+        newMVars,
         parentMVar := .some goal,
       }
   catch exception =>
@@ -276,19 +272,10 @@ protected def GoalState.tryConv (state: GoalState) (goalId: Nat):
   let nextSavedState ← tacticM { elaborator := .anonymous } |>.run' state.savedState.tactic
   let prevMCtx := state.savedState.term.meta.meta.mctx
   let nextMCtx := nextSavedState.term.meta.meta.mctx
-  -- Generate a list of mvarIds that exist in the parent state; Also test the
-  -- assertion that the types have not changed on any mvars.
-  let newMVars ← nextMCtx.decls.foldlM (fun acc mvarId mvarDecl => do
-    if let .some prevMVarDecl := prevMCtx.decls.find? mvarId then
-      assert! prevMVarDecl.type == mvarDecl.type
-      return acc
-    else
-      return acc.insert mvarId
-    ) SSet.empty
   return .success {
     root := state.root,
     savedState := nextSavedState
-    newMVars,
+    newMVars := newMVarSet prevMCtx nextMCtx,
     parentMVar := .some goal,
   }
 
@@ -311,19 +298,10 @@ protected def GoalState.tryConvTactic (state: GoalState) (goalId: Nat) (convTact
   let nextSavedState ← tacticM { elaborator := .anonymous } |>.run' state.savedState.tactic
   let nextMCtx := nextSavedState.term.meta.meta.mctx
   let prevMCtx := state.savedState.term.meta.meta.mctx
-  -- Generate a list of mvarIds that exist in the parent state; Also test the
-  -- assertion that the types have not changed on any mvars.
-  let newMVars ← nextMCtx.decls.foldlM (fun acc mvarId mvarDecl => do
-    if let .some prevMVarDecl := prevMCtx.decls.find? mvarId then
-      assert! prevMVarDecl.type == mvarDecl.type
-      return acc
-    else
-      return acc.insert mvarId
-    ) SSet.empty
   return .success {
     root := state.root,
     savedState := nextSavedState
-    newMVars,
+    newMVars := newMVarSet prevMCtx nextMCtx,
     parentMVar := .some goal,
   }
 
