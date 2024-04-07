@@ -8,7 +8,7 @@ namespace Pantograph.Test.Metavar
 open Pantograph
 open Lean
 
-abbrev TestM := StateRefT LSpec.TestSeq (ReaderT Protocol.Options M)
+abbrev TestM := StateRefT LSpec.TestSeq (ReaderT Protocol.Options Elab.TermElabM)
 
 def addTest (test: LSpec.TestSeq): TestM Unit := do
   set $ (← get) ++ test
