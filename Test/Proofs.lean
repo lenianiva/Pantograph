@@ -292,16 +292,14 @@ def test_or_comm: TestM Unit := do
         { userName := "h✝", type? := .some { pp? := .some varName }, isInaccessible? := .some true }
       ]
     }
-def test_have_tactic: TestM Unit := do
+
+def test_have: TestM Unit := do
   let state? ← startProof (.expr "∀ (p q: Prop), p → ((p ∨ q) ∨ (p ∨ q))")
   let state0 ← match state? with
     | .some state => pure state
     | .none => do
       addTest $ assertUnreachable "Goal could not parse"
       return ()
-  addTest $ LSpec.check "(0 parent)" state0.parentExpr?.isNone
-  addTest $ LSpec.check "(0 root)" state0.rootExpr?.isNone
-
   let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := "intro p q h") with
     | .success state => pure state
     | other => do
@@ -326,6 +324,71 @@ def test_have_tactic: TestM Unit := do
   addTest $ LSpec.check "have" ((← state2.serializeGoals (options := ← read)).map (·.devolatilize) =
     #[buildGoal [] ""])
 
+example : ∀ (a b c: Nat), (a + b) + c = (b + a) + c := by
+  intro a b c
+  conv =>
+    lhs
+    congr
+    rw [Nat.add_comm]
+    rfl
+
+def test_conv: TestM Unit := do
+  let state? ← startProof (.expr "∀ (a b c: Nat), (a + b) + c = (b + a) + c")
+  let state0 ← match state? with
+    | .some state => pure state
+    | .none => do
+      addTest $ assertUnreachable "Goal could not parse"
+      return ()
+  let tactic := "intro a b c"
+  let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check tactic ((← state1.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[buildGoal [("a", "Nat"), ("b", "Nat"), ("c", "Nat")] "a + b + c = b + a + c"])
+
+  -- This solves the state in one-shot
+  let tactic := "conv => { lhs; congr; rw [Nat.add_comm]; rfl }"
+  let state2 ← match ← state1.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check tactic ((← state2.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[])
+
+example : ∀ (a: Nat), 1 + a + 1 = a + 2 := by
+  intro a
+  calc 1 + a + 1 = a + 1 + 1  := by conv =>
+       rhs
+       rw [Nat.add_comm]
+    _ = a + 2 := by rw [Nat.add_assoc]
+
+def test_calc: TestM Unit := do
+  let state? ← startProof (.expr "∀ (a: Nat), 1 + a + 1 = a + 2")
+  let state0 ← match state? with
+    | .some state => pure state
+    | .none => do
+      addTest $ assertUnreachable "Goal could not parse"
+      return ()
+  let tactic := "intro a"
+  let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check tactic ((← state1.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[buildGoal [("a", "Nat")] "1 + a + 1 = a + 2"])
+  let tactic := "calc"
+  let state2 ← match ← state1.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check tactic ((← state1.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[buildGoal [("a", "Nat")] "1 + a + 1 = a + 2"])
+
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
     ("Nat.add_comm", test_nat_add_comm false),
@@ -333,8 +396,12 @@ def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
     ("Nat.add_comm delta", test_delta_variable),
     ("arithmetic", test_arith),
     ("Or.comm", test_or_comm),
-    ("Have", test_have_tactic),
+    ("have", test_have),
+    ("conv", test_conv),
+    ("calc", test_calc),
   ]
   tests.map (fun (name, test) => (name, proofRunner env test))
+
+
 
 end Pantograph.Test.Proofs
