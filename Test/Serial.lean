@@ -51,12 +51,18 @@ def test_sexp_of_symbol (env: Environment): IO LSpec.TestSeq := do
 def test_sexp_of_expr (env: Environment): IO LSpec.TestSeq := do
   let entries: List (String × String) := [
     ("λ x: Nat × Bool => x.1", "(:lambda x ((:c Prod) (:c Nat) (:c Bool)) ((:c Prod.fst) (:c Nat) (:c Bool) 0))"),
-    ("λ x: Array Nat => x.data", "(:lambda x ((:c Array) (:c Nat)) ((:c Array.data) (:c Nat) 0))")
+    ("λ x: Array Nat => x.data", "(:lambda x ((:c Array) (:c Nat)) ((:c Array.data) (:c Nat) 0))"),
+    -- This tests `autoBoundImplicit`
+    ("λ {α : Sort (u + 1)} => List α", "(:lambda α (:sort (+ u 1)) ((:c List) 0) :implicit)"),
   ]
   let termElabM: Elab.TermElabM LSpec.TestSeq := entries.foldlM (λ suites (source, target) => do
     let env ← MonadEnv.getEnv
-    let s := parseTerm env source |>.toOption |>.get!
-    let expr := (← elabTerm s) |>.toOption |>.get!
+    let s ← match parseTerm env source with
+      | .ok s => pure s
+      | .error e => return parseFailure e
+    let expr ← match (← elabTerm s) with
+      | .ok expr => pure expr
+      | .error e => return elabFailure e
     let test := LSpec.check source ((← serialize_expression_ast expr) = target)
     return LSpec.TestSeq.append suites test) LSpec.TestSeq.done
   let metaM := termElabM.run' (ctx := defaultTermElabMContext)
