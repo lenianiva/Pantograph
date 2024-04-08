@@ -31,6 +31,9 @@ structure GoalState where
   -- Parent state metavariable source
   parentMVar: Option MVarId
 
+  -- Existence of this field shows that we are currently in `conv` mode.
+  convMVar: Option (MVarId × MVarId × List MVarId) := .none
+
 protected def GoalState.create (expr: Expr): Elab.TermElabM GoalState := do
   -- May be necessary to immediately synthesise all metavariables if we need to leave the elaboration context.
   -- See https://leanprover.zulipchat.com/#narrow/stream/270676-lean4/topic/Unknown.20universe.20metavariable/near/360130070
@@ -100,6 +103,8 @@ inductive TacticResult where
   | parseError (message: String)
   -- The goal index is out of bounds
   | indexError (goalId: Nat)
+  -- The given action cannot be executed in the state
+  | invalidAction (message: String)
 
 /-- Execute tactic on given state -/
 protected def GoalState.tryTactic (state: GoalState) (goalId: Nat) (tactic: String):
@@ -122,11 +127,11 @@ protected def GoalState.tryTactic (state: GoalState) (goalId: Nat) (tactic: Stri
   | .ok nextSavedState =>
     -- Assert that the definition of metavariables are the same
     let nextMCtx := nextSavedState.term.meta.meta.mctx
-    let prevMCtx := state.savedState.term.meta.meta.mctx
+    let prevMCtx := state.mctx
     -- Generate a list of mvarIds that exist in the parent state; Also test the
     -- assertion that the types have not changed on any mvars.
     return .success {
-      root := state.root,
+      state with
       savedState := nextSavedState
       newMVars := newMVarSet prevMCtx nextMCtx,
       parentMVar := .some goal,
@@ -146,7 +151,7 @@ protected def GoalState.assign (state: GoalState) (goal: MVarId) (expr: Expr):
         return .some s!"{← Meta.ppExpr expr} : {← Meta.ppExpr exprType} != {← Meta.ppExpr goalType}"
     )
     if let .some error := error? then
-      return .failure #["Type unification failed", error]
+      return .parseError error
     goal.checkNotAssigned `GoalState.assign
     goal.assign expr
     if (← getThe Core.State).messages.hasErrors then
@@ -246,35 +251,45 @@ protected def GoalState.tryHave (state: GoalState) (goalId: Nat) (binderName: St
     return .failure #[← exception.toMessageData.toString]
 
 /-- Enter conv tactic mode -/
-protected def GoalState.tryConv (state: GoalState) (goalId: Nat):
+protected def GoalState.conv (state: GoalState) (goalId: Nat):
       Elab.TermElabM TacticResult := do
+  if state.convMVar.isSome then
+    return .invalidAction "Already in conv state"
   let goal ← match state.savedState.tactic.goals.get? goalId with
     | .some goal => pure goal
     | .none => return .indexError goalId
-  let tacticM :  Elab.Tactic.TacticM Elab.Tactic.SavedState:= do
+  let tacticM :  Elab.Tactic.TacticM (Elab.Tactic.SavedState × MVarId) := do
     state.restoreTacticM goal
 
     -- TODO: Fail if this is already in conv
 
     -- See Lean.Elab.Tactic.Conv.convTarget
-    Elab.Tactic.withMainContext do
+    let convMVar ← Elab.Tactic.withMainContext do
       -- TODO: Memorize this `rhs` as a conv resultant goal
       let (rhs, newGoal) ← Elab.Tactic.Conv.mkConvGoalFor (← Elab.Tactic.getMainTarget)
       Elab.Tactic.setGoals [newGoal.mvarId!]
-    --Elab.Tactic.liftMetaTactic1 fun mvarId => mvarId.replaceTargetEq rhs proof
-    MonadBacktrack.saveState
-  let nextSavedState ← tacticM { elaborator := .anonymous } |>.run' state.savedState.tactic
-  let prevMCtx := state.savedState.term.meta.meta.mctx
-  let nextMCtx := nextSavedState.term.meta.meta.mctx
-  return .success {
-    root := state.root,
-    savedState := nextSavedState
-    newMVars := newMVarSet prevMCtx nextMCtx,
-    parentMVar := .some goal,
-  }
+      pure rhs.mvarId!
+    return (← MonadBacktrack.saveState, convMVar)
+  try
+    let (nextSavedState, convRhs) ← tacticM { elaborator := .anonymous } |>.run' state.savedState.tactic
+    let prevMCtx := state.mctx
+    let nextMCtx := nextSavedState.term.meta.meta.mctx
+    return .success {
+      root := state.root,
+      savedState := nextSavedState
+      newMVars := newMVarSet prevMCtx nextMCtx,
+      parentMVar := .some goal,
+      convMVar := .some (convRhs, goal, state.goals),
+    }
+  catch exception =>
+    return .failure #[← exception.toMessageData.toString]
 
+/-- Execute a tactic in conv mode -/
 protected def GoalState.tryConvTactic (state: GoalState) (goalId: Nat) (convTactic: String):
       Elab.TermElabM TacticResult := do
+  let _ ← match state.convMVar with
+    | .some mvar => pure mvar
+    | .none => return .invalidAction "Not in conv state"
   let goal ← match state.savedState.tactic.goals.get? goalId with
     | .some goal => pure goal
     | .none => return .indexError goalId
@@ -289,15 +304,60 @@ protected def GoalState.tryConvTactic (state: GoalState) (goalId: Nat) (convTact
     state.restoreTacticM goal
     Elab.Tactic.evalTactic convTactic
     MonadBacktrack.saveState
-  let nextSavedState ← tacticM { elaborator := .anonymous } |>.run' state.savedState.tactic
-  let nextMCtx := nextSavedState.term.meta.meta.mctx
-  let prevMCtx := state.savedState.term.meta.meta.mctx
-  return .success {
-    root := state.root,
-    savedState := nextSavedState
-    newMVars := newMVarSet prevMCtx nextMCtx,
-    parentMVar := .some goal,
-  }
+  try
+    let prevMCtx := state.mctx
+    let nextSavedState ← tacticM { elaborator := .anonymous } |>.run' state.savedState.tactic
+    let nextMCtx := nextSavedState.term.meta.meta.mctx
+    return .success {
+      state with
+      savedState := nextSavedState
+      newMVars := newMVarSet prevMCtx nextMCtx,
+      parentMVar := .some goal,
+    }
+  catch exception =>
+    return .failure #[← exception.toMessageData.toString]
+
+protected def GoalState.convExit (state: GoalState):
+      Elab.TermElabM TacticResult := do
+  let (convRhs, convGoal, savedGoals) ← match state.convMVar with
+    | .some mvar => pure mvar
+    | .none => return .invalidAction "Not in conv state"
+  let tacticM :  Elab.Tactic.TacticM Elab.Tactic.SavedState:= do
+    -- Vide `Lean.Elab.Tactic.Conv.convert`
+    state.savedState.restore
+
+    IO.println "Restored state"
+
+    -- Close all existing goals with `refl`
+    for mvarId in (← Elab.Tactic.getGoals) do
+      liftM <| mvarId.refl <|> mvarId.inferInstance <|> pure ()
+    Elab.Tactic.pruneSolvedGoals
+    unless (← Elab.Tactic.getGoals).isEmpty do
+      throwError "convert tactic failed, there are unsolved goals\n{Elab.goalsToMessageData (← Elab.Tactic.getGoals)}"
+
+    IO.println "Caching"
+    Elab.Tactic.setGoals savedGoals
+
+    let targetNew ← instantiateMVars (.mvar convRhs)
+    let proof ← instantiateMVars (.mvar convGoal)
+
+    Elab.Tactic.liftMetaTactic1 fun mvarId => mvarId.replaceTargetEq targetNew proof
+    MonadBacktrack.saveState
+  try
+    let nextSavedState ← tacticM { elaborator := .anonymous } |>.run' state.savedState.tactic
+    IO.println "Finished caching"
+    let nextMCtx := nextSavedState.term.meta.meta.mctx
+    let prevMCtx := state.savedState.term.meta.meta.mctx
+    return .success {
+      root := state.root,
+      savedState := nextSavedState
+      newMVars := newMVarSet prevMCtx nextMCtx,
+      parentMVar := .some convGoal,
+      convMVar := .none
+    }
+  catch exception =>
+    return .failure #[← exception.toMessageData.toString]
+
 
 
 /--

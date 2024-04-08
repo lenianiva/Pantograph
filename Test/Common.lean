@@ -37,6 +37,7 @@ def TacticResult.toString : TacticResult → String
     s!".failure {messages}"
   | .parseError error => s!".parseError {error}"
   | .indexError index => s!".indexError {index}"
+  | .invalidAction error => s!".invalidAction {error}"
 
 namespace Test
 

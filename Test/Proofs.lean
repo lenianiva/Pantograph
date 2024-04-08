@@ -361,47 +361,48 @@ def test_have: TestM Unit := do
 
   addTest $ LSpec.check "(4 root)" state4.rootExpr?.isSome
 
-example : ∀ (a b c: Nat), (a + b) + c = (b + a) + c := by
-  intro a b c
+example : ∀ (a b c1 c2: Nat), (b + a) + c1 = (b + a) + c2 → (a + b) + c1 = (b + a) + c2 := by
+  intro a b c1 c2 h
   conv =>
     lhs
     congr
-    rw [Nat.add_comm]
-    rfl
+    . rw [Nat.add_comm]
+    . rfl
+  exact h
 
 def test_conv: TestM Unit := do
-  let state? ← startProof (.expr "∀ (a b c: Nat), (a + b) + c = (b + a) + c")
+  let state? ← startProof (.expr "∀ (a b c1 c2: Nat), (b + a) + c1 = (b + a) + c2 → (a + b) + c1 = (b + a) + c2")
   let state0 ← match state? with
     | .some state => pure state
     | .none => do
       addTest $ assertUnreachable "Goal could not parse"
       return ()
-  let tactic := "intro a b c"
+
+  let tactic := "intro a b c1 c2 h"
   let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := tactic) with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check tactic ((← state1.serializeGoals (options := ← read)).map (·.devolatilize) =
-    #[buildGoal [("a", "Nat"), ("b", "Nat"), ("c", "Nat")] "a + b + c = b + a + c"])
+    #[interiorGoal [] "a + b + c1 = b + a + c2"])
 
-  -- This solves the state in one-shot
-  let tactic := "conv => { lhs; congr; rw [Nat.add_comm]; rfl }"
-  let stateT ← match ← state1.tryTactic (goalId := 0) (tactic := tactic) with
-    | .success state => pure state
-    | other => do
-      addTest $ assertUnreachable $ other.toString
-      return ()
-  addTest $ LSpec.check tactic ((← stateT.serializeGoals (options := ← read)).map (·.devolatilize) =
-    #[])
-
-  let state2 ← match ← state1.tryConv (goalId := 0) with
+  let state2 ← match ← state1.conv (goalId := 0) with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "conv => ..." ((← state2.serializeGoals (options := ← read)).map (·.devolatilize) =
-    #[{ buildGoal [("a", "Nat"), ("b", "Nat"), ("c", "Nat")] "a + b + c = b + a + c" with isConversion := true }])
+    #[{ interiorGoal [] "a + b + c1 = b + a + c2" with isConversion := true }])
+
+  let convTactic := "rhs"
+  let state3R ← match ← state2.tryConvTactic (goalId := 0) (convTactic := convTactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check s!"  {convTactic} (discard)" ((← state3R.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[{ interiorGoal [] "b + a + c2" with isConversion := true }])
 
   let convTactic := "lhs"
   let state3L ← match ← state2.tryConvTactic (goalId := 0) (convTactic := convTactic) with
@@ -410,16 +411,73 @@ def test_conv: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check s!"  {convTactic}" ((← state3L.serializeGoals (options := ← read)).map (·.devolatilize) =
-    #[{ buildGoal [("a", "Nat"), ("b", "Nat"), ("c", "Nat")] "a + b + c" with isConversion := true }])
+    #[{ interiorGoal [] "a + b + c1" with isConversion := true }])
 
-  let convTactic := "rhs"
-  let state3R ← match ← state2.tryConvTactic (goalId := 0) (convTactic := convTactic) with
+  let convTactic := "congr"
+  let state4 ← match ← state3L.tryConvTactic (goalId := 0) (convTactic := convTactic) with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.check s!"  {convTactic}" ((← state3R.serializeGoals (options := ← read)).map (·.devolatilize) =
-    #[{ buildGoal [("a", "Nat"), ("b", "Nat"), ("c", "Nat")] "b + a + c" with isConversion := true }])
+  addTest $ LSpec.check s!"  {convTactic}" ((← state4.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[
+      { interiorGoal [] "a + b" with isConversion := true, userName? := .some "a" },
+      { interiorGoal [] "c1" with isConversion := true, userName? := .some "a" }
+    ])
+
+  let convTactic := "rw [Nat.add_comm]"
+  let state5_1 ← match ← state4.tryConvTactic (goalId := 0) (convTactic := convTactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check s!"  · {convTactic}" ((← state5_1.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[{ interiorGoal [] "b + a" with isConversion := true, userName? := .some "a" }])
+
+  let convTactic := "rfl"
+  let state6_1 ← match ← state5_1.tryConvTactic (goalId := 0) (convTactic := convTactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check s!"    {convTactic}" ((← state6_1.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[])
+
+  let state4_1 ← match state6_1.continue state4 with
+    | .ok state => pure state
+    | .error e => do
+      addTest $ expectationFailure "continue" e
+      return ()
+
+  let convTactic := "rfl"
+  let state6 ← match ← state4_1.tryConvTactic (goalId := 0) (convTactic := convTactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check s!"  · {convTactic}" ((← state6.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[])
+
+  let state1_1 ← match ← state6.convExit with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+
+  let tactic := "exact h"
+  let stateF ← match ← state1_1.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check tactic ((← stateF.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[])
+
+  where
+    h := "b + a + c1 = b + a + c2"
+    interiorGoal (free: List (String × String)) (target: String) :=
+      let free := [("a", "Nat"), ("b", "Nat"), ("c1", "Nat"), ("c2", "Nat"), ("h", h)] ++ free
+      buildGoal free target
 
 example : ∀ (a: Nat), 1 + a + 1 = a + 2 := by
   intro a

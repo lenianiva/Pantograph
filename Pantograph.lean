@@ -140,6 +140,8 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
         return .ok { parseError? := .some message }
       | .ok (.indexError goalId) =>
         return .error $ errorIndex s!"Invalid goal id index {goalId}"
+      | .ok (.invalidAction message) =>
+        return .error $ errorI "invalid" message
       | .ok (.failure messages) =>
         return .ok { tacticErrors? := .some messages }
   goal_continue (args: Protocol.GoalContinue): MainM (CR Protocol.GoalContinueResult) := do
