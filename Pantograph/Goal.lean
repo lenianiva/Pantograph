@@ -327,6 +327,16 @@ protected def GoalState.convExit (state: GoalState):
 
 
 
+protected def GoalState.focus (state: GoalState) (goalId: Nat): Option GoalState := do
+  let goal ← state.savedState.tactic.goals.get? goalId
+  return {
+    state with
+    savedState := {
+      state.savedState with
+      tactic := { goals := [goal] },
+    },
+  }
+
 /--
 Brings into scope a list of goals
 -/
@@ -345,7 +355,6 @@ protected def GoalState.resume (state: GoalState) (goals: List MVarId): Except S
         tactic := { goals := unassigned },
       },
     }
-
 /--
 Brings into scope all goals from `branch`
 -/
