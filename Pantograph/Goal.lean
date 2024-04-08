@@ -50,6 +50,8 @@ protected def GoalState.create (expr: Expr): Elab.TermElabM GoalState := do
     newMVars := SSet.insert .empty root,
     parentMVar := .none,
   }
+protected def GoalState.isConv (state: GoalState): Bool :=
+  state.convMVar.isSome
 protected def GoalState.goals (state: GoalState): List MVarId :=
   state.savedState.tactic.goals
 protected def GoalState.mctx (state: GoalState): MetavarContext :=
@@ -116,7 +118,7 @@ protected def GoalState.tryTactic (state: GoalState) (goalId: Nat) (tactic: Stri
   goal.checkNotAssigned `GoalState.tryTactic
   let tactic ← match Parser.runParserCategory
     (env := ← MonadEnv.getEnv)
-    (catName := `tactic)
+    (catName := if state.isConv then `conv else `tactic)
     (input := tactic)
     (fileName := filename) with
     | .ok stx => pure $ stx
@@ -284,39 +286,7 @@ protected def GoalState.conv (state: GoalState) (goalId: Nat):
   catch exception =>
     return .failure #[← exception.toMessageData.toString]
 
-/-- Execute a tactic in conv mode -/
-protected def GoalState.tryConvTactic (state: GoalState) (goalId: Nat) (convTactic: String):
-      Elab.TermElabM TacticResult := do
-  let _ ← match state.convMVar with
-    | .some mvar => pure mvar
-    | .none => return .invalidAction "Not in conv state"
-  let goal ← match state.savedState.tactic.goals.get? goalId with
-    | .some goal => pure goal
-    | .none => return .indexError goalId
-  let convTactic ← match Parser.runParserCategory
-    (env := ← MonadEnv.getEnv)
-    (catName := `conv)
-    (input := convTactic)
-    (fileName := filename) with
-    | .ok stx => pure $ stx
-    | .error error => return .parseError error
-  let tacticM :  Elab.Tactic.TacticM Elab.Tactic.SavedState:= do
-    state.restoreTacticM goal
-    Elab.Tactic.evalTactic convTactic
-    MonadBacktrack.saveState
-  try
-    let prevMCtx := state.mctx
-    let nextSavedState ← tacticM { elaborator := .anonymous } |>.run' state.savedState.tactic
-    let nextMCtx := nextSavedState.term.meta.meta.mctx
-    return .success {
-      state with
-      savedState := nextSavedState
-      newMVars := newMVarSet prevMCtx nextMCtx,
-      parentMVar := .some goal,
-    }
-  catch exception =>
-    return .failure #[← exception.toMessageData.toString]
-
+/-- Exit from `conv` mode. Resumes all goals before the mode starts and applys the conv -/
 protected def GoalState.convExit (state: GoalState):
       Elab.TermElabM TacticResult := do
   let (convRhs, convGoal, savedGoals) ← match state.convMVar with

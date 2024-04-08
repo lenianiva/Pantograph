@@ -396,7 +396,7 @@ def test_conv: TestM Unit := do
     #[{ interiorGoal [] "a + b + c1 = b + a + c2" with isConversion := true }])
 
   let convTactic := "rhs"
-  let state3R ← match ← state2.tryConvTactic (goalId := 0) (convTactic := convTactic) with
+  let state3R ← match ← state2.tryTactic (goalId := 0) convTactic with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -405,7 +405,7 @@ def test_conv: TestM Unit := do
     #[{ interiorGoal [] "b + a + c2" with isConversion := true }])
 
   let convTactic := "lhs"
-  let state3L ← match ← state2.tryConvTactic (goalId := 0) (convTactic := convTactic) with
+  let state3L ← match ← state2.tryTactic (goalId := 0) convTactic with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -414,7 +414,7 @@ def test_conv: TestM Unit := do
     #[{ interiorGoal [] "a + b + c1" with isConversion := true }])
 
   let convTactic := "congr"
-  let state4 ← match ← state3L.tryConvTactic (goalId := 0) (convTactic := convTactic) with
+  let state4 ← match ← state3L.tryTactic (goalId := 0) convTactic with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -426,7 +426,7 @@ def test_conv: TestM Unit := do
     ])
 
   let convTactic := "rw [Nat.add_comm]"
-  let state5_1 ← match ← state4.tryConvTactic (goalId := 0) (convTactic := convTactic) with
+  let state5_1 ← match ← state4.tryTactic (goalId := 0) convTactic with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -435,7 +435,7 @@ def test_conv: TestM Unit := do
     #[{ interiorGoal [] "b + a" with isConversion := true, userName? := .some "a" }])
 
   let convTactic := "rfl"
-  let state6_1 ← match ← state5_1.tryConvTactic (goalId := 0) (convTactic := convTactic) with
+  let state6_1 ← match ← state5_1.tryTactic (goalId := 0) convTactic with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -450,7 +450,7 @@ def test_conv: TestM Unit := do
       return ()
 
   let convTactic := "rfl"
-  let state6 ← match ← state4_1.tryConvTactic (goalId := 0) (convTactic := convTactic) with
+  let state6 ← match ← state4_1.tryTactic (goalId := 0) convTactic with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
