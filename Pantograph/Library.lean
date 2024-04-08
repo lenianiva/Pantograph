@@ -162,15 +162,23 @@ def goalStartExpr (expr: String): Lean.CoreM (Protocol.CR GoalState) :=
 
 @[export pantograph_goal_tactic_m]
 def goalTactic (state: GoalState) (goalId: Nat) (tactic: String): Lean.CoreM TacticResult :=
-  runTermElabM <| GoalState.tryTactic state goalId tactic
+  runTermElabM <| state.tryTactic goalId tactic
 
 @[export pantograph_goal_assign_m]
 def goalAssign (state: GoalState) (goalId: Nat) (expr: String): Lean.CoreM TacticResult :=
-  runTermElabM <| GoalState.tryAssign state goalId expr
+  runTermElabM <| state.tryAssign goalId expr
 
 @[export pantograph_goal_have_m]
 def goalHave (state: GoalState) (goalId: Nat) (binderName: String) (type: String): Lean.CoreM TacticResult :=
-  runTermElabM <| GoalState.tryHave state goalId binderName type
+  runTermElabM <| state.tryHave goalId binderName type
+
+@[export pantograph_goal_conv_m]
+def goalConv (state: GoalState) (goalId: Nat): Lean.CoreM TacticResult :=
+  runTermElabM <| state.conv goalId
+
+@[export pantograph_goal_conv_exit_m]
+def goalConvExit (state: GoalState): Lean.CoreM TacticResult :=
+  runTermElabM <| state.convExit
 
 @[export pantograph_goal_continue]
 def goalContinue (target: GoalState) (branch: GoalState): Except String GoalState :=
