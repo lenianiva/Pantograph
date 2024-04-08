@@ -160,14 +160,12 @@ partial def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): Meta
   of_name (name: Name) := name_to_ast name sanitize
 
 def serialize_expression (options: @&Protocol.Options) (e: Expr): MetaM Protocol.Expression := do
-  let pp := toString (← Meta.ppExpr e)
-  let pp?: Option String := match options.printExprPretty with
-    | true => .some pp
-    | false => .none
-  let sexp: String ← serialize_expression_ast e
-  let sexp?: Option String := match options.printExprAST with
-    | true => .some sexp
-    | false => .none
+  let pp?: Option String ← match options.printExprPretty with
+    | true => pure $ .some $ toString $ ← Meta.ppExpr e
+    | false => pure $ .none
+  let sexp?: Option String ← match options.printExprAST with
+    | true => pure $ .some $ ← serialize_expression_ast e
+    | false => pure $ .none
   return {
     pp?,
     sexp?
