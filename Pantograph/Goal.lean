@@ -263,11 +263,8 @@ protected def GoalState.conv (state: GoalState) (goalId: Nat):
   let tacticM :  Elab.Tactic.TacticM (Elab.Tactic.SavedState × MVarId) := do
     state.restoreTacticM goal
 
-    -- TODO: Fail if this is already in conv
-
     -- See Lean.Elab.Tactic.Conv.convTarget
     let convMVar ← Elab.Tactic.withMainContext do
-      -- TODO: Memorize this `rhs` as a conv resultant goal
       let (rhs, newGoal) ← Elab.Tactic.Conv.mkConvGoalFor (← Elab.Tactic.getMainTarget)
       Elab.Tactic.setGoals [newGoal.mvarId!]
       pure rhs.mvarId!
