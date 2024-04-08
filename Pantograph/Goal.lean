@@ -253,21 +253,15 @@ protected def GoalState.tryConv (state: GoalState) (goalId: Nat):
     | .none => return .indexError goalId
   let tacticM :  Elab.Tactic.TacticM Elab.Tactic.SavedState:= do
     state.restoreTacticM goal
-    --let mm ← Meta.matchEq? (← goal.getType)
-    --if let .some (_, _, rhs) := mm then
-    --  if rhs.getAppFn.isMVar then
-    --    IO.println "isMVar ok"
-    --  else
-    --    IO.println "isMVar failed"
-    --else
-    --  IO.println "matchEq? failed"
-    IO.println s!"Old goals: {(← Elab.Tactic.getGoals).map (λ x => x.name.toString)}"
-    --Elab.Tactic.Conv.remarkAsConvGoal
-    let goalNew ← Elab.Tactic.Conv.markAsConvGoal goal
-    -- TODO: Error if `goal == goalNew`
-    Elab.Tactic.setGoals [goalNew]
-    --Elab.Tactic.Conv.remarkAsConvGoal
-    IO.println s!"New goals: {(← Elab.Tactic.getGoals).map (λ x => x.name.toString)}"
+
+    -- TODO: Fail if this is already in conv
+
+    -- See Lean.Elab.Tactic.Conv.convTarget
+    Elab.Tactic.withMainContext do
+      -- TODO: Memorize this `rhs` as a conv resultant goal
+      let (rhs, newGoal) ← Elab.Tactic.Conv.mkConvGoalFor (← Elab.Tactic.getMainTarget)
+      Elab.Tactic.setGoals [newGoal.mvarId!]
+    --Elab.Tactic.liftMetaTactic1 fun mvarId => mvarId.replaceTargetEq rhs proof
     MonadBacktrack.saveState
   let nextSavedState ← tacticM { elaborator := .anonymous } |>.run' state.savedState.tactic
   let prevMCtx := state.savedState.term.meta.meta.mctx
@@ -293,7 +287,7 @@ protected def GoalState.tryConvTactic (state: GoalState) (goalId: Nat) (convTact
     | .error error => return .parseError error
   let tacticM :  Elab.Tactic.TacticM Elab.Tactic.SavedState:= do
     state.restoreTacticM goal
-    Elab.Tactic.Conv.evalConvTactic convTactic
+    Elab.Tactic.evalTactic convTactic
     MonadBacktrack.saveState
   let nextSavedState ← tacticM { elaborator := .anonymous } |>.run' state.savedState.tactic
   let nextMCtx := nextSavedState.term.meta.meta.mctx

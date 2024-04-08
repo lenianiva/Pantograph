@@ -401,7 +401,7 @@ def test_conv: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "conv => ..." ((← state2.serializeGoals (options := ← read)).map (·.devolatilize) =
-    #[{ buildGoal [("a", "Nat"), ("b", "Nat"), ("c", "Nat")] "a + b + c" with isConversion := true }])
+    #[{ buildGoal [("a", "Nat"), ("b", "Nat"), ("c", "Nat")] "a + b + c = b + a + c" with isConversion := true }])
 
   let convTactic := "lhs"
   let state3L ← match ← state2.tryConvTactic (goalId := 0) (convTactic := convTactic) with
