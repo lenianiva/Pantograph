@@ -136,8 +136,8 @@ def parseElabExpr (expr: String) (expectedType?: Option String := .none): Lean.E
 
 @[export pantograph_expr_echo_m]
 def exprEcho (expr: String) (expectedType?: Option String := .none) (options: @&Protocol.Options):
-    Lean.CoreM (Protocol.CR Protocol.ExprEchoResult) := do
-  let termElabM: Lean.Elab.TermElabM _ := do
+    Lean.CoreM (Protocol.CR Protocol.ExprEchoResult) :=
+  runTermElabM do
     let expr ← match ← parseElabExpr expr expectedType? with
       | .error e => return .error e
       | .ok expr => pure expr
@@ -149,16 +149,14 @@ def exprEcho (expr: String) (expectedType?: Option String := .none) (options: @&
       }
     catch exception =>
       return .error $ errorI "typing" (← exception.toMessageData.toString)
-  runTermElabM termElabM
 
 @[export pantograph_goal_start_expr_m]
 def goalStartExpr (expr: String): Lean.CoreM (Protocol.CR GoalState) :=
-  let termElabM: Lean.Elab.TermElabM _ := do
+  runTermElabM do
     let expr ← match ← parseElabType expr with
       | .error e => return .error e
       | .ok expr => pure $ expr
     return .ok $ ← GoalState.create expr
-  runTermElabM termElabM
 
 @[export pantograph_goal_tactic_m]
 def goalTactic (state: GoalState) (goalId: Nat) (tactic: String): Lean.CoreM TacticResult :=
@@ -193,8 +191,8 @@ def goalSerialize (state: GoalState) (options: @&Protocol.Options): Lean.CoreM (
   runMetaM <| state.serializeGoals (parent := .none) options
 
 @[export pantograph_goal_print_m]
-def goalPrint (state: GoalState) (options: @&Protocol.Options): Lean.CoreM Protocol.GoalPrintResult := do
-  let metaM := do
+def goalPrint (state: GoalState) (options: @&Protocol.Options): Lean.CoreM Protocol.GoalPrintResult :=
+  runMetaM do
     state.restoreMetaM
     return {
       root? := ← state.rootExpr?.mapM (λ expr => do
@@ -202,7 +200,6 @@ def goalPrint (state: GoalState) (options: @&Protocol.Options): Lean.CoreM Proto
       parent? := ← state.parentExpr?.mapM (λ expr => do
         serialize_expression options (← unfoldAuxLemmas expr)),
     }
-  runMetaM metaM
 
 
 end Pantograph
