@@ -155,7 +155,7 @@ partial def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): Meta
 
       let autos := String.intercalate " " (List.replicate ctor.numParams "_")
       let inner ← self inner
-      pure s!"(:app (:c {projectorName}) {autos} {inner})"
+      pure s!"((:c {projectorName}) {autos} {inner})"
   -- Elides all unhygenic names
   binder_info_to_ast : Lean.BinderInfo → String
     | .default => ""

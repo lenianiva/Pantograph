@@ -74,7 +74,7 @@ def test_sexp_of_expr (env: Environment): IO LSpec.TestSeq := do
             .default)
         .implicit)
       .implicit,
-      "(:lambda p (:sort 0) (:lambda q (:sort 0) (:lambda k ((:c And) 1 0) (:app (:c And.right) _ _ 0)) :implicit) :implicit)"
+      "(:lambda p (:sort 0) (:lambda q (:sort 0) (:lambda k ((:c And) 1 0) ((:c And.right) _ _ 0)) :implicit) :implicit)"
     ),
   ]
   let termElabM: Elab.TermElabM LSpec.TestSeq := entries.foldlM (λ suites (expr, target) => do
