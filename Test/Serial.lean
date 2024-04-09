@@ -23,12 +23,11 @@ def test_expr_to_binder (env: Environment): IO LSpec.TestSeq := do
     ("Nat.add_comm".toName, { binders := #[("n", "Nat"), ("m", "Nat")], target := "n + m = m + n" }),
     ("Nat.le_of_succ_le".toName, { binders := #[("n", "Nat"), ("m", "Nat"), ("h", "n.succ ≤ m")], target := "n ≤ m" })
   ]
-  let coreM: CoreM LSpec.TestSeq := entries.foldlM (λ suites (symbol, target) => do
+  runCoreMSeq env $ entries.foldlM (λ suites (symbol, target) => do
     let env ← MonadEnv.getEnv
     let expr := env.find? symbol |>.get! |>.type
     let test := LSpec.check symbol.toString ((← type_expr_to_bound expr) = target)
     return LSpec.TestSeq.append suites test) LSpec.TestSeq.done |>.run'
-  runCoreMSeq env coreM
 
 def test_sexp_of_symbol (env: Environment): IO LSpec.TestSeq := do
   let entries: List (String × String) := [
@@ -41,14 +40,13 @@ def test_sexp_of_symbol (env: Environment): IO LSpec.TestSeq := do
     ("Or", "(:forall a (:sort 0) (:forall b (:sort 0) (:sort 0)))"),
     ("List", "(:forall α (:sort (+ u 1)) (:sort (+ u 1)))")
   ]
-  let metaM: MetaM LSpec.TestSeq := entries.foldlM (λ suites (symbol, target) => do
+  runMetaMSeq env $ entries.foldlM (λ suites (symbol, target) => do
     let env ← MonadEnv.getEnv
     let expr := env.find? symbol.toName |>.get! |>.type
     let test := LSpec.check symbol ((← serialize_expression_ast expr) = target)
     return LSpec.TestSeq.append suites test) LSpec.TestSeq.done
-  runMetaMSeq env metaM
 
-def test_sexp_of_expr (env: Environment): IO LSpec.TestSeq := do
+def test_sexp_of_elab (env: Environment): IO LSpec.TestSeq := do
   let entries: List (String × String) := [
     ("λ x: Nat × Bool => x.1", "(:lambda x ((:c Prod) (:c Nat) (:c Bool)) ((:c Prod.fst) (:c Nat) (:c Bool) 0))"),
     ("λ x: Array Nat => x.data", "(:lambda x ((:c Array) (:c Nat)) ((:c Array.data) (:c Nat) 0))"),
@@ -65,24 +63,42 @@ def test_sexp_of_expr (env: Environment): IO LSpec.TestSeq := do
       | .error e => return elabFailure e
     let test := LSpec.check source ((← serialize_expression_ast expr) = target)
     return LSpec.TestSeq.append suites test) LSpec.TestSeq.done
-  let metaM := termElabM.run' (ctx := defaultTermElabMContext)
-  runMetaMSeq env metaM
+  runMetaMSeq env $ termElabM.run' (ctx := defaultTermElabMContext)
+
+def test_sexp_of_expr (env: Environment): IO LSpec.TestSeq := do
+  let entries: List (Expr × String) := [
+    (.lam `p (.sort .zero)
+        (.lam `q (.sort .zero)
+          (.lam `k (mkApp2 (.const `And []) (.bvar 1) (.bvar 0))
+            (.proj `And 1 (.bvar 0))
+            .default)
+        .implicit)
+      .implicit,
+      "(:lambda p (:sort 0) (:lambda q (:sort 0) (:lambda k ((:c And) 1 0) (:app (:c And.right) _ _ 0)) :implicit) :implicit)"
+    ),
+  ]
+  let termElabM: Elab.TermElabM LSpec.TestSeq := entries.foldlM (λ suites (expr, target) => do
+    let env ← MonadEnv.getEnv
+    let testCaseName := target.take 10
+    let test := LSpec.check   testCaseName ((← serialize_expression_ast expr) = target)
+    return LSpec.TestSeq.append suites test) LSpec.TestSeq.done
+  runMetaMSeq env $ termElabM.run' (ctx := defaultTermElabMContext)
 
 -- Instance parsing
-def test_instance (env: Environment): IO LSpec.TestSeq := do
-  let metaM: MetaM LSpec.TestSeq := do
+def test_instance (env: Environment): IO LSpec.TestSeq :=
+  runMetaMSeq env do
     let env ← MonadEnv.getEnv
     let source := "λ x y: Nat => HAdd.hAdd Nat Nat Nat (instHAdd Nat instAddNat) x y"
     let s := parseTerm env source |>.toOption |>.get!
     let _expr := (← runTermElabMInMeta <| elabTerm s) |>.toOption |>.get!
     return LSpec.TestSeq.done
-  runMetaMSeq env metaM
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   [
     ("name_to_ast", do pure test_name_to_ast),
     ("Expression binder", test_expr_to_binder env),
     ("Sexp from symbol", test_sexp_of_symbol env),
+    ("Sexp from elaborated expr", test_sexp_of_elab env),
     ("Sexp from expr", test_sexp_of_expr env),
     ("Instance", test_instance env),
   ]

@@ -86,6 +86,8 @@ partial def serialize_sort_level_ast (level: Level) (sanitize: Bool): String :=
 
 /--
  Completely serializes an expression tree. Json not used due to compactness
+
+A `_` symbol in the AST indicates automatic deductions not present in the original expression.
 -/
 partial def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): MetaM String := do
   self expr
@@ -147,10 +149,13 @@ partial def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): Meta
       self inner
     | .proj typeName idx inner => do
       let env ← getEnv
+      let ctor := getStructureCtor env typeName
       let fieldName := getStructureFields env typeName |>.get! idx
       let projectorName := getProjFnForField? env typeName fieldName |>.get!
-      let e := Expr.app (.const  projectorName []) inner
-      self e
+
+      let autos := String.intercalate " " (List.replicate ctor.numParams "_")
+      let inner ← self inner
+      pure s!"(:app (:c {projectorName}) {autos} {inner})"
   -- Elides all unhygenic names
   binder_info_to_ast : Lean.BinderInfo → String
     | .default => ""
