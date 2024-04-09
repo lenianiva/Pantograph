@@ -32,7 +32,7 @@ structure GoalState where
   parentMVar: Option MVarId
 
   -- Existence of this field shows that we are currently in `conv` mode.
-  convMVar: Option (MVarId × MVarId × List MVarId) := .none
+  convMVar: Option (MVarId × MVarId) := .none
 
 protected def GoalState.create (expr: Expr): Elab.TermElabM GoalState := do
   -- May be necessary to immediately synthesise all metavariables if we need to leave the elaboration context.
@@ -278,7 +278,7 @@ protected def GoalState.conv (state: GoalState) (goalId: Nat):
       savedState := nextSavedState
       newMVars := newMVarSet prevMCtx nextMCtx,
       parentMVar := .some goal,
-      convMVar := .some (convRhs, goal, state.goals),
+      convMVar := .some (convRhs, goal),
     }
   catch exception =>
     return .failure #[← exception.toMessageData.toString]
@@ -286,7 +286,7 @@ protected def GoalState.conv (state: GoalState) (goalId: Nat):
 /-- Exit from `conv` mode. Resumes all goals before the mode starts and applys the conv -/
 protected def GoalState.convExit (state: GoalState):
       Elab.TermElabM TacticResult := do
-  let (convRhs, convGoal, savedGoals) ← match state.convMVar with
+  let (convRhs, convGoal) ← match state.convMVar with
     | .some mvar => pure mvar
     | .none => return .invalidAction "Not in conv state"
   let tacticM :  Elab.Tactic.TacticM Elab.Tactic.SavedState:= do
@@ -303,7 +303,7 @@ protected def GoalState.convExit (state: GoalState):
       throwError "convert tactic failed, there are unsolved goals\n{Elab.goalsToMessageData (← Elab.Tactic.getGoals)}"
 
     IO.println "Caching"
-    Elab.Tactic.setGoals savedGoals
+    Elab.Tactic.setGoals [convGoal]
 
     let targetNew ← instantiateMVars (.mvar convRhs)
     let proof ← instantiateMVars (.mvar convGoal)
