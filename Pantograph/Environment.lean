@@ -69,8 +69,8 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): CoreM (Pr
       else pure (.none),
     module? := module?
   }
-  let result := match info with
-    | .inductInfo induct => { core with inductInfo? := .some {
+  let result ← match info with
+    | .inductInfo induct => pure { core with inductInfo? := .some {
           numParams := induct.numParams,
           numIndices := induct.numIndices,
           all := induct.all.toArray.map (·.toString),
@@ -79,21 +79,27 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): CoreM (Pr
           isReflexive := induct.isReflexive,
           isNested := induct.isNested,
       } }
-    | .ctorInfo ctor => { core with constructorInfo? := .some {
+    | .ctorInfo ctor => pure { core with constructorInfo? := .some {
           induct := ctor.induct.toString,
           cidx := ctor.cidx,
           numParams := ctor.numParams,
           numFields := ctor.numFields,
       } }
-    | .recInfo r => { core with recursorInfo? := .some {
+    | .recInfo r => pure { core with recursorInfo? := .some {
           all := r.all.toArray.map (·.toString),
           numParams := r.numParams,
           numIndices := r.numIndices,
           numMotives := r.numMotives,
           numMinors := r.numMinors,
+          rules := ← r.rules.toArray.mapM (λ rule => do
+              pure {
+                ctor := rule.ctor.toString,
+                nFields := rule.nfields,
+                rhs := ← (serialize_expression options rule.rhs).run',
+              })
           k := r.k,
       } }
-    | _ => core
+    | _ => pure core
   return .ok result
 def addDecl (args: Protocol.EnvAdd): CoreM (Protocol.CR Protocol.EnvAddResult) := do
   let env ← Lean.MonadEnv.getEnv

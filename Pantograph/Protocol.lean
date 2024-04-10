@@ -138,12 +138,20 @@ structure ConstructorInfo where
   numParams: Nat
   numFields: Nat
   deriving Lean.ToJson
+
+/-- See `Lean/Declaration.lean` -/
+structure RecursorRule where
+  ctor: String
+  nFields: Nat
+  rhs: Expression
+  deriving Lean.ToJson
 structure RecursorInfo where
   all: Array String
   numParams: Nat
   numIndices: Nat
   numMotives: Nat
   numMinors: Nat
+  rules: Array RecursorRule
   k: Bool
   deriving Lean.ToJson
 structure EnvInspectResult where
