@@ -34,6 +34,7 @@ structure GoalState where
   -- Existence of this field shows that we are currently in `conv` mode.
   convMVar?: Option (MVarId × MVarId) := .none
   -- Previous RHS for calc, so we don't have to repeat it every time
+  -- WARNING: If using `state with` outside of `calc`, this must be set to `.none`
   calcPrevRhs?: Option Expr := .none
 
 protected def GoalState.create (expr: Expr): Elab.TermElabM GoalState := do
@@ -139,6 +140,7 @@ protected def GoalState.tryTactic (state: GoalState) (goalId: Nat) (tactic: Stri
       savedState := nextSavedState
       newMVars := newMVarSet prevMCtx nextMCtx,
       parentMVar? := .some goal,
+      calcPrevRhs? := .none,
     }
 
 /-- Assumes elabM has already been restored. Assumes expr has already typechecked -/
@@ -404,6 +406,7 @@ protected def GoalState.focus (state: GoalState) (goalId: Nat): Option GoalState
       state.savedState with
       tactic := { goals := [goal] },
     },
+    calcPrevRhs? := .none,
   }
 
 /--
@@ -423,6 +426,7 @@ protected def GoalState.resume (state: GoalState) (goals: List MVarId): Except S
         term := state.savedState.term,
         tactic := { goals := unassigned },
       },
+      calcPrevRhs? := .none,
     }
 /--
 Brings into scope all goals from `branch`
