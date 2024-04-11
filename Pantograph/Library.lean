@@ -178,6 +178,10 @@ def goalConv (state: GoalState) (goalId: Nat): Lean.CoreM TacticResult :=
 def goalConvExit (state: GoalState): Lean.CoreM TacticResult :=
   runTermElabM <| state.convExit
 
+@[export pantograph_goal_calc_m]
+def goalCalc (state: GoalState) (goalId: Nat) (pred: String): Lean.CoreM TacticResult :=
+  runTermElabM <| state.tryCalc goalId pred
+
 @[export pantograph_goal_focus]
 def goalFocus (state: GoalState) (goalId: Nat): Option GoalState :=
   state.focus goalId
