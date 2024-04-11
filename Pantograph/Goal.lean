@@ -325,6 +325,11 @@ protected def GoalState.convExit (state: GoalState):
   catch exception =>
     return .failure #[← exception.toMessageData.toString]
 
+protected def GoalState.calcPrevRhsOf? (state: GoalState) (goalId: Nat) :=
+  if goalId == 1 then
+    state.calcPrevRhs?
+  else
+    .none
 protected def GoalState.tryCalc (state: GoalState) (goalId: Nat) (pred: String):
       Elab.TermElabM TacticResult := do
   state.restoreElabM
@@ -340,20 +345,21 @@ protected def GoalState.tryCalc (state: GoalState) (goalId: Nat) (pred: String):
     (fileName := filename) with
     | .ok syn => pure syn
     | .error error => return .parseError error
+  let calcPrevRhs? := state.calcPrevRhsOf? goalId
   try
     goal.withContext do
     let target ← instantiateMVars (← goal.getDecl).type
     let tag := (← goal.getDecl).userName
 
     let mut step ← Elab.Term.elabType <| ← do
-      if let some prevRhs := state.calcPrevRhs? then
+      if let some prevRhs := calcPrevRhs? then
         Elab.Term.annotateFirstHoleWithType pred (← Meta.inferType prevRhs)
       else
         pure pred
 
     let some (_, lhs, rhs) ← Elab.Term.getCalcRelation? step |
       throwErrorAt pred "invalid 'calc' step, relation expected{indentExpr step}"
-    if let some prevRhs := state.calcPrevRhs? then
+    if let some prevRhs := calcPrevRhs? then
       unless (← Meta.isDefEqGuarded lhs prevRhs) do
         throwErrorAt pred "invalid 'calc' step, left-hand-side is{indentD m!"{lhs} : {← Meta.inferType lhs}"}\nprevious right-hand-side is{indentD m!"{prevRhs} : {← Meta.inferType prevRhs}"}" -- "
 
