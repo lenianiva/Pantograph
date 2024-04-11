@@ -164,22 +164,21 @@ protected def GoalState.assign (state: GoalState) (goal: MVarId) (expr: Expr):
       let messages := (← getThe Core.State).messages.getErrorMessages |>.toList.toArray
       let errors ← (messages.map Message.data).mapM fun md => md.toString
       return .failure errors
-    else
-      let prevMCtx := state.savedState.term.meta.meta.mctx
-      let nextMCtx ← getMCtx
-      -- Generate a list of mvarIds that exist in the parent state; Also test the
-      -- assertion that the types have not changed on any mvars.
-      let newMVars := newMVarSet prevMCtx nextMCtx
-      let nextGoals ← newMVars.toList.filterM (λ mvar => do pure !(← mvar.isAssigned))
-      return .success {
-        root := state.root,
-        savedState := {
-          term := ← MonadBacktrack.saveState,
-          tactic := { goals := nextGoals }
-        },
-        newMVars,
-        parentMVar? := .some goal,
-      }
+    let prevMCtx := state.savedState.term.meta.meta.mctx
+    let nextMCtx ← getMCtx
+    -- Generate a list of mvarIds that exist in the parent state; Also test the
+    -- assertion that the types have not changed on any mvars.
+    let newMVars := newMVarSet prevMCtx nextMCtx
+    let nextGoals ← newMVars.toList.filterM (λ mvar => do pure !(← mvar.isAssigned))
+    return .success {
+      root := state.root,
+      savedState := {
+        term := ← MonadBacktrack.saveState,
+        tactic := { goals := nextGoals }
+      },
+      newMVars,
+      parentMVar? := .some goal,
+    }
   catch exception =>
     return .failure #[← exception.toMessageData.toString]
 
@@ -346,10 +345,10 @@ protected def GoalState.tryCalc (state: GoalState) (goalId: Nat) (pred: String):
     | .ok syn => pure syn
     | .error error => return .parseError error
   let calcPrevRhs? := state.calcPrevRhsOf? goalId
+  let target ← instantiateMVars (← goal.getDecl).type
+  let tag := (← goal.getDecl).userName
   try
     goal.withContext do
-    let target ← instantiateMVars (← goal.getDecl).type
-    let tag := (← goal.getDecl).userName
 
     let mut step ← Elab.Term.elabType <| ← do
       if let some prevRhs := calcPrevRhs? then
@@ -377,7 +376,7 @@ protected def GoalState.tryCalc (state: GoalState) (goalId: Nat) (pred: String):
 
     -- The calc tactic either solves the main goal or leaves another relation.
     -- Replace the main goal, and save the new goal if necessary
-    if ¬(← Meta.isDefEq proofType target) then
+    unless ← Meta.isDefEq proofType target do
       let rec throwFailed :=
         throwError "'calc' tactic failed, has type{indentExpr proofType}\nbut it is expected to have type{indentExpr target}"
       let some (_, _, rhs) ← Elab.Term.getCalcRelation? proofType | throwFailed
