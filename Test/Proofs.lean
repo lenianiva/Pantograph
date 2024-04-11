@@ -14,7 +14,7 @@ inductive Start where
   | copy (name: String) -- Start from some name in the environment
   | expr (expr: String) -- Start from some expression
 
-abbrev TestM := StateRefT LSpec.TestSeq (ReaderT Protocol.Options M)
+abbrev TestM := StateRefT LSpec.TestSeq (ReaderT Protocol.Options Elab.TermElabM)
 
 def addTest (test: LSpec.TestSeq): TestM Unit := do
   set $ (← get) ++ test
@@ -75,7 +75,7 @@ def proofRunner (env: Lean.Environment) (tests: TestM Unit): IO LSpec.TestSeq :=
 example: ∀ (a b: Nat), a + b = b + a := by
   intro n m
   rw [Nat.add_comm]
-def proof_nat_add_comm (manual: Bool): TestM Unit := do
+def test_nat_add_comm (manual: Bool): TestM Unit := do
   let state? ← startProof <| match manual with
     | false => .copy "Nat.add_comm"
     | true => .expr "∀ (a b: Nat), a + b = b + a"
@@ -86,7 +86,7 @@ def proof_nat_add_comm (manual: Bool): TestM Unit := do
       addTest $ assertUnreachable "Goal could not parse"
       return ()
 
-  let state1 ← match ← state0.execute (goalId := 0) (tactic := "intro n m") with
+  let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := "intro n m") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -94,13 +94,13 @@ def proof_nat_add_comm (manual: Bool): TestM Unit := do
   addTest $ LSpec.check "intro n m" ((← state1.serializeGoals (options := ← read)).map (·.devolatilize) =
     #[buildGoal [("n", "Nat"), ("m", "Nat")] "n + m = m + n"])
 
-  match ← state1.execute (goalId := 0) (tactic := "assumption") with
+  match ← state1.tryTactic (goalId := 0) (tactic := "assumption") with
   | .failure #[message] =>
     addTest $ LSpec.check "assumption" (message = "tactic 'assumption' failed\nn m : Nat\n⊢ n + m = m + n")
   | other => do
     addTest $ assertUnreachable $ other.toString
 
-  let state2 ← match ← state1.execute (goalId := 0) (tactic := "rw [Nat.add_comm]") with
+  let state2 ← match ← state1.tryTactic (goalId := 0) (tactic := "rw [Nat.add_comm]") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -108,7 +108,7 @@ def proof_nat_add_comm (manual: Bool): TestM Unit := do
   addTest $ LSpec.test "rw [Nat.add_comm]" state2.goals.isEmpty
 
   return ()
-def proof_delta_variable: TestM Unit := do
+def test_delta_variable: TestM Unit := do
   let options: Protocol.Options := { noRepeat := true }
   let state? ← startProof <| .expr "∀ (a b: Nat), a + b = b + a"
   addTest $ LSpec.check "Start goal" state?.isSome
@@ -118,14 +118,14 @@ def proof_delta_variable: TestM Unit := do
       addTest $ assertUnreachable "Goal could not parse"
       return ()
 
-  let state1 ← match ← state0.execute (goalId := 0) (tactic := "intro n") with
+  let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := "intro n") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "intro n" ((← state1.serializeGoals (parent := state0) options).map (·.devolatilize) =
     #[buildGoalSelective [("n", .some "Nat")] "∀ (b : Nat), n + b = b + n"])
-  let state2 ← match ← state1.execute (goalId := 0) (tactic := "intro m") with
+  let state2 ← match ← state1.tryTactic (goalId := 0) (tactic := "intro m") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -149,7 +149,7 @@ example (w x y z : Nat) (p : Nat → Prop)
         (h : p (x * y + z * w * x)) : p (x * w * z + y * x) := by
   simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm, Nat.mul_comm, Nat.mul_assoc, Nat.mul_left_comm] at *
   assumption
-def proof_arith: TestM Unit := do
+def test_arith: TestM Unit := do
   let state? ← startProof (.expr "∀ (w x y z : Nat) (p : Nat → Prop) (h : p (x * y + z * w * x)), p (x * w * z + y * x)")
   let state0 ← match state? with
     | .some state => pure state
@@ -157,26 +157,28 @@ def proof_arith: TestM Unit := do
       addTest $ assertUnreachable "Goal could not parse"
       return ()
 
-  let state1 ← match ← state0.execute (goalId := 0) (tactic := "intros") with
+  let tactic := "intros"
+  let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := tactic) with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.check "intros" (state1.goals.length = 1)
+  addTest $ LSpec.check tactic (state1.goals.length = 1)
   addTest $ LSpec.test "(1 root)" state1.rootExpr?.isNone
-  let state2 ← match ← state1.execute (goalId := 0) (tactic := "simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm, Nat.mul_comm, Nat.mul_assoc, Nat.mul_left_comm] at *") with
+  let state2 ← match ← state1.tryTactic (goalId := 0) (tactic := "simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm, Nat.mul_comm, Nat.mul_assoc, Nat.mul_left_comm] at *") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "simp ..." (state2.goals.length = 1)
   addTest $ LSpec.check "(2 root)" state2.rootExpr?.isNone
-  let state3 ← match ← state2.execute (goalId := 0) (tactic := "assumption") with
+  let tactic := "assumption"
+  let state3 ← match ← state2.tryTactic (goalId := 0) (tactic := tactic) with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.test "assumption" state3.goals.isEmpty
+  addTest $ LSpec.test tactic state3.goals.isEmpty
   addTest $ LSpec.check "(3 root)" state3.rootExpr?.isSome
   return ()
 
@@ -195,7 +197,7 @@ example: ∀ (p q: Prop), p ∨ q → q ∨ p := by
     assumption
   . apply Or.inl
     assumption
-def proof_or_comm: TestM Unit := do
+def test_or_comm: TestM Unit := do
   let state? ← startProof (.expr "∀ (p q: Prop), p ∨ q → q ∨ p")
   let state0 ← match state? with
     | .some state => pure state
@@ -205,21 +207,24 @@ def proof_or_comm: TestM Unit := do
   addTest $ LSpec.check "(0 parent)" state0.parentExpr?.isNone
   addTest $ LSpec.check "(0 root)" state0.rootExpr?.isNone
 
-  let state1 ← match ← state0.execute (goalId := 0) (tactic := "intro p q h") with
+  let tactic := "intro p q h"
+  let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := tactic) with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.check "intro n m" ((← state1.serializeGoals (options := ← read)).map (·.devolatilize) =
+  addTest $ LSpec.check tactic ((← state1.serializeGoals (options := ← read)).map (·.devolatilize) =
     #[buildGoal [("p", "Prop"), ("q", "Prop"), ("h", "p ∨ q")] "q ∨ p"])
   addTest $ LSpec.check "(1 parent)" state1.parentExpr?.isSome
   addTest $ LSpec.check "(1 root)" state1.rootExpr?.isNone
-  let state2 ← match ← state1.execute (goalId := 0) (tactic := "cases h") with
+
+  let tactic := "cases h"
+  let state2 ← match ← state1.tryTactic (goalId := 0) (tactic := tactic) with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.check "cases h" ((← state2.serializeGoals (options := ← read)).map (·.devolatilize) =
+  addTest $ LSpec.check tactic ((← state2.serializeGoals (options := ← read)).map (·.devolatilize) =
     #[branchGoal "inl" "p", branchGoal "inr" "q"])
   addTest $ LSpec.check "(2 parent)" state2.parentExpr?.isSome
   addTest $ LSpec.check "(2 root)" state2.rootExpr?.isNone
@@ -229,7 +234,7 @@ def proof_or_comm: TestM Unit := do
   addTest $ LSpec.test "(2 parent)" (state2parent ==
     "((:mv _uniq.43) (:fv _uniq.16) ((:c Eq.refl) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16)))")
 
-  let state3_1 ← match ← state2.execute (goalId := 0) (tactic := "apply Or.inr") with
+  let state3_1 ← match ← state2.tryTactic (goalId := 0) (tactic := "apply Or.inr") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -237,7 +242,7 @@ def proof_or_comm: TestM Unit := do
   let state3_1parent ← serialize_expression_ast state3_1.parentExpr?.get! (sanitize := false)
   addTest $ LSpec.test "(3_1 parent)" (state3_1parent == "((:c Or.inr) (:fv _uniq.13) (:fv _uniq.10) (:mv _uniq.78))")
   addTest $ LSpec.check "· apply Or.inr" (state3_1.goals.length = 1)
-  let state4_1 ← match ← state3_1.execute (goalId := 0) (tactic := "assumption") with
+  let state4_1 ← match ← state3_1.tryTactic (goalId := 0) (tactic := "assumption") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -246,13 +251,13 @@ def proof_or_comm: TestM Unit := do
   let state4_1parent ← serialize_expression_ast state4_1.parentExpr?.get! (sanitize := false)
   addTest $ LSpec.test "(4_1 parent)" (state4_1parent == "(:fv _uniq.47)")
   addTest $ LSpec.check "(4_1 root)" state4_1.rootExpr?.isNone
-  let state3_2 ← match ← state2.execute (goalId := 1) (tactic := "apply Or.inl") with
+  let state3_2 ← match ← state2.tryTactic (goalId := 1) (tactic := "apply Or.inl") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "· apply Or.inl" (state3_2.goals.length = 1)
-  let state4_2 ← match ← state3_2.execute (goalId := 0) (tactic := "assumption") with
+  let state4_2 ← match ← state3_2.tryTactic (goalId := 0) (tactic := "assumption") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -266,13 +271,13 @@ def proof_or_comm: TestM Unit := do
       return ()
     | .ok state => pure state
   addTest $ LSpec.test "(resume)" (state2b.goals == [state2.goals.get! 0])
-  let state3_1 ← match ← state2b.execute (goalId := 0) (tactic := "apply Or.inr") with
+  let state3_1 ← match ← state2b.tryTactic (goalId := 0) (tactic := "apply Or.inr") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "· apply Or.inr" (state3_1.goals.length = 1)
-  let state4_1 ← match ← state3_1.execute (goalId := 0) (tactic := "assumption") with
+  let state4_1 ← match ← state3_1.tryTactic (goalId := 0) (tactic := "assumption") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -293,14 +298,268 @@ def proof_or_comm: TestM Unit := do
       ]
     }
 
+def test_have: TestM Unit := do
+  let state? ← startProof (.expr "∀ (p q: Prop), p → ((p ∨ q) ∨ (p ∨ q))")
+  let state0 ← match state? with
+    | .some state => pure state
+    | .none => do
+      addTest $ assertUnreachable "Goal could not parse"
+      return ()
+  let tactic := "intro p q h"
+  let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check tactic ((← state1.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[buildGoal [("p", "Prop"), ("q", "Prop"), ("h", "p")] "(p ∨ q) ∨ p ∨ q"])
+
+  let expr := "Or.inl (Or.inl h)"
+  let state2 ← match ← state1.tryAssign (goalId := 0) (expr := expr) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check s!":= {expr}" ((← state2.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[])
+
+  let haveBind := "y"
+  let haveType := "p ∨ q"
+  let state2 ← match ← state1.tryHave (goalId := 0) (binderName := haveBind) (type := haveType) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check s!"have {haveBind}: {haveType}" ((← state2.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[
+      buildGoal [("p", "Prop"), ("q", "Prop"), ("h", "p")] "p ∨ q",
+      buildGoal [("p", "Prop"), ("q", "Prop"), ("h", "p"), ("y", "p ∨ q")] "(p ∨ q) ∨ p ∨ q"
+    ])
+
+  let expr := "Or.inl h"
+  let state3 ← match ← state2.tryAssign (goalId := 0) (expr := expr) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check s!":= {expr}" ((← state3.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[])
+
+  let state2b ← match state3.continue state2 with
+    | .ok state => pure state
+    | .error e => do
+      addTest $ assertUnreachable e
+      return ()
+  let expr := "Or.inl y"
+  let state4 ← match ← state2b.tryAssign (goalId := 0) (expr := expr) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check s!":= {expr}" ((← state4.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[])
+
+  addTest $ LSpec.check "(4 root)" state4.rootExpr?.isSome
+
+example : ∀ (a b c1 c2: Nat), (b + a) + c1 = (b + a) + c2 → (a + b) + c1 = (b + a) + c2 := by
+  intro a b c1 c2 h
+  conv =>
+    lhs
+    congr
+    . rw [Nat.add_comm]
+    . rfl
+  exact h
+
+def test_conv: TestM Unit := do
+  let state? ← startProof (.expr "∀ (a b c1 c2: Nat), (b + a) + c1 = (b + a) + c2 → (a + b) + c1 = (b + a) + c2")
+  let state0 ← match state? with
+    | .some state => pure state
+    | .none => do
+      addTest $ assertUnreachable "Goal could not parse"
+      return ()
+
+  let tactic := "intro a b c1 c2 h"
+  let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check tactic ((← state1.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[interiorGoal [] "a + b + c1 = b + a + c2"])
+
+  let state2 ← match ← state1.conv (goalId := 0) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check "conv => ..." ((← state2.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[{ interiorGoal [] "a + b + c1 = b + a + c2" with isConversion := true }])
+
+  let convTactic := "rhs"
+  let state3R ← match ← state2.tryTactic (goalId := 0) convTactic with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check s!"  {convTactic} (discard)" ((← state3R.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[{ interiorGoal [] "b + a + c2" with isConversion := true }])
+
+  let convTactic := "lhs"
+  let state3L ← match ← state2.tryTactic (goalId := 0) convTactic with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check s!"  {convTactic}" ((← state3L.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[{ interiorGoal [] "a + b + c1" with isConversion := true }])
+
+  let convTactic := "congr"
+  let state4 ← match ← state3L.tryTactic (goalId := 0) convTactic with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check s!"  {convTactic}" ((← state4.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[
+      { interiorGoal [] "a + b" with isConversion := true, userName? := .some "a" },
+      { interiorGoal [] "c1" with isConversion := true, userName? := .some "a" }
+    ])
+
+  let convTactic := "rw [Nat.add_comm]"
+  let state5_1 ← match ← state4.tryTactic (goalId := 0) convTactic with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check s!"  · {convTactic}" ((← state5_1.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[{ interiorGoal [] "b + a" with isConversion := true, userName? := .some "a" }])
+
+  let convTactic := "rfl"
+  let state6_1 ← match ← state5_1.tryTactic (goalId := 0) convTactic with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check s!"    {convTactic}" ((← state6_1.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[])
+
+  let state4_1 ← match state6_1.continue state4 with
+    | .ok state => pure state
+    | .error e => do
+      addTest $ expectationFailure "continue" e
+      return ()
+
+  let convTactic := "rfl"
+  let state6 ← match ← state4_1.tryTactic (goalId := 0) convTactic with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check s!"  · {convTactic}" ((← state6.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[])
+
+  let state1_1 ← match ← state6.convExit with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+
+  let tactic := "exact h"
+  let stateF ← match ← state1_1.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check tactic ((← stateF.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[])
+
+  where
+    h := "b + a + c1 = b + a + c2"
+    interiorGoal (free: List (String × String)) (target: String) :=
+      let free := [("a", "Nat"), ("b", "Nat"), ("c1", "Nat"), ("c2", "Nat"), ("h", h)] ++ free
+      buildGoal free target
+
+example : ∀ (a b c d: Nat), a + b = b + c → b + c = c + d → a + b = c + d := by
+  intro a b c d h1 h2
+  calc a + b = b + c := by apply h1
+    _ = c + d := by apply h2
+
+def test_calc: TestM Unit := do
+  let state? ← startProof (.expr "∀ (a b c d: Nat), a + b = b + c → b + c = c + d → a + b = c + d")
+  let state0 ← match state? with
+    | .some state => pure state
+    | .none => do
+      addTest $ assertUnreachable "Goal could not parse"
+      return ()
+  let tactic := "intro a b c d h1 h2"
+  let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check tactic ((← state1.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[interiorGoal [] "a + b = c + d"])
+  let pred := "a + b = b + c"
+  let state2 ← match ← state1.tryCalc (goalId := 0) (pred := pred) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check s!"calc {pred} := _" ((← state2.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[
+      interiorGoal [] "a + b = b + c" (.some "calc"),
+      interiorGoal [] "b + c = c + d"
+    ])
+
+  let tactic := "apply h1"
+  let state2m ← match ← state2.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  let state3 ← match state2m.continue state2 with
+    | .ok state => pure state
+    | .error e => do
+      addTest $ expectationFailure "continue" e
+      return ()
+  let pred := "_ = c + d"
+  let state4 ← match ← state3.tryCalc (goalId := 0) (pred := pred) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check s!"calc {pred} := _" ((← state4.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[
+      interiorGoal [] "b + c = c + d" (.some "calc")
+    ])
+  let tactic := "apply h2"
+  let state4m ← match ← state4.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.test "(4m root)" state4m.rootExpr?.isSome
+
+
+  where
+    interiorGoal (free: List (String × String)) (target: String) (userName?: Option String := .none) :=
+      let free := [("a", "Nat"), ("b", "Nat"), ("c", "Nat"), ("d", "Nat"),
+        ("h1", "a + b = b + c"), ("h2", "b + c = c + d")] ++ free
+      buildGoal free target userName?
+
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
-    ("Nat.add_comm", proof_nat_add_comm false),
-    ("Nat.add_comm manual", proof_nat_add_comm true),
-    ("Nat.add_comm delta", proof_delta_variable),
-    ("arithmetic", proof_arith),
-    ("Or.comm", proof_or_comm)
+    ("Nat.add_comm", test_nat_add_comm false),
+    ("Nat.add_comm manual", test_nat_add_comm true),
+    ("Nat.add_comm delta", test_delta_variable),
+    ("arithmetic", test_arith),
+    ("Or.comm", test_or_comm),
+    ("have", test_have),
+    ("conv", test_conv),
+    ("calc", test_calc),
   ]
   tests.map (fun (name, test) => (name, proofRunner env test))
+
+
 
 end Pantograph.Test.Proofs

@@ -8,7 +8,7 @@ namespace Pantograph.Test.Metavar
 open Pantograph
 open Lean
 
-abbrev TestM := StateRefT LSpec.TestSeq (ReaderT Protocol.Options M)
+abbrev TestM := StateRefT LSpec.TestSeq (ReaderT Protocol.Options Elab.TermElabM)
 
 def addTest (test: LSpec.TestSeq): TestM Unit := do
   set $ (← get) ++ test
@@ -84,7 +84,7 @@ def test_m_couple: TestM Unit := do
       addTest $ assertUnreachable "Goal could not parse"
       return ()
 
-  let state1 ← match ← state0.execute (goalId := 0) (tactic := "apply Nat.le_trans") with
+  let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := "apply Nat.le_trans") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -93,7 +93,7 @@ def test_m_couple: TestM Unit := do
     #[.some "2 ≤ ?m", .some "?m ≤ 5", .some "Nat"])
   addTest $ LSpec.test "(1 root)" state1.rootExpr?.isNone
   -- Set m to 3
-  let state2 ← match ← state1.execute (goalId := 2) (tactic := "exact 3") with
+  let state2 ← match ← state1.tryTactic (goalId := 2) (tactic := "exact 3") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -116,14 +116,14 @@ def test_m_couple_simp: TestM Unit := do
       addTest $ assertUnreachable "Goal could not parse"
       return ()
 
-  let state1 ← match ← state0.execute (goalId := 0) (tactic := "apply Nat.le_trans") with
+  let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := "apply Nat.le_trans") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "apply Nat.le_trans" ((← state1.serializeGoals (options := ← read)).map (·.target.pp?) =
     #[.some "2 ≤ ?m", .some "?m ≤ 5", .some "Nat"])
-  let state2 ← match ← state1.execute (goalId := 2) (tactic := "exact 2") with
+  let state2 ← match ← state1.tryTactic (goalId := 2) (tactic := "exact 2") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -137,7 +137,7 @@ def test_m_couple_simp: TestM Unit := do
   addTest $ LSpec.check "exact 2" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
     #[.some "2 ≤ 2", .some "2 ≤ 5"])
   addTest $ LSpec.test "(2 root)" state1b.rootExpr?.isNone
-  let state3 ← match ← state1b.execute (goalId := 0) (tactic := "simp") with
+  let state3 ← match ← state1b.tryTactic (goalId := 0) (tactic := "simp") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -147,7 +147,7 @@ def test_m_couple_simp: TestM Unit := do
       addTest $ assertUnreachable $ msg
       return ()
     | .ok state => pure state
-  let state5 ← match ← state4.execute (goalId := 0) (tactic := "simp") with
+  let state5 ← match ← state4.tryTactic (goalId := 0) (tactic := "simp") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -174,7 +174,7 @@ def test_proposition_generation: TestM Unit := do
       addTest $ assertUnreachable "Goal could not parse"
       return ()
 
-  let state1 ← match ← state0.execute (goalId := 0) (tactic := "apply PSigma.mk") with
+  let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := "apply PSigma.mk") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -216,7 +216,7 @@ def test_partial_continuation: TestM Unit := do
       addTest $ assertUnreachable "Goal could not parse"
       return ()
 
-  let state1 ← match ← state0.execute (goalId := 0) (tactic := "apply Nat.le_trans") with
+  let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := "apply Nat.le_trans") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -224,7 +224,7 @@ def test_partial_continuation: TestM Unit := do
   addTest $ LSpec.check "apply Nat.le_trans" ((← state1.serializeGoals (options := ← read)).map (·.target.pp?) =
     #[.some "2 ≤ ?m", .some "?m ≤ 5", .some "Nat"])
 
-  let state2 ← match ← state1.execute (goalId := 2) (tactic := "apply Nat.succ") with
+  let state2 ← match ← state1.tryTactic (goalId := 2) (tactic := "apply Nat.succ") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString

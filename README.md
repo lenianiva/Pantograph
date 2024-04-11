@@ -81,7 +81,12 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
   have to be set via command line arguments.), for options, see `Pantograph/Protocol.lean`
 - `options.print`: Display the current set of options
 - `goal.start {["name": <name>], ["expr": <expr>], ["copyFrom": <symbol>]}`: Start a new goal from a given expression or symbol
-- `goal.tactic {"stateId": <id>, "goalId": <id>, ["tactic": <tactic>], ["expr": <expr>]}`: Execute a tactic string on a given goal
+- `goal.tactic {"stateId": <id>, "goalId": <id>, ["tactic": <tactic>], ["expr":
+  <expr>]}`: Execute a tactic string on a given goal. `tactic` executes an
+  ordinary tactic, `expr` assigns an expression to the current goal, `have`
+  executes the have tactic, ``calc` (of the form `lhs op rhs`) executes one step
+  of `calc`, and `"conv": true`/`"conv": false` enters/exits conversion tactic
+  mode.
 - `goal.continue {"stateId": <id>, ["branch": <id>], ["goals": <names>]}`: Continue from a proof state
 - `goal.remove {"stateIds": [<id>]}"`: Remove a bunch of stored goals.
 - `goal.print {"stateId": <id>}"`: Print a goal state

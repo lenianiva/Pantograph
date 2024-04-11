@@ -136,8 +136,8 @@ def parseElabExpr (expr: String) (expectedType?: Option String := .none): Lean.E
 
 @[export pantograph_expr_echo_m]
 def exprEcho (expr: String) (expectedType?: Option String := .none) (options: @&Protocol.Options):
-    Lean.CoreM (Protocol.CR Protocol.ExprEchoResult) := do
-  let termElabM: Lean.Elab.TermElabM _ := do
+    Lean.CoreM (Protocol.CR Protocol.ExprEchoResult) :=
+  runTermElabM do
     let expr ← match ← parseElabExpr expr expectedType? with
       | .error e => return .error e
       | .ok expr => pure expr
@@ -149,40 +149,58 @@ def exprEcho (expr: String) (expectedType?: Option String := .none) (options: @&
       }
     catch exception =>
       return .error $ errorI "typing" (← exception.toMessageData.toString)
-  runTermElabM termElabM
 
 @[export pantograph_goal_start_expr_m]
 def goalStartExpr (expr: String): Lean.CoreM (Protocol.CR GoalState) :=
-  let termElabM: Lean.Elab.TermElabM _ := do
+  runTermElabM do
     let expr ← match ← parseElabType expr with
       | .error e => return .error e
       | .ok expr => pure $ expr
     return .ok $ ← GoalState.create expr
-  runTermElabM termElabM
 
 @[export pantograph_goal_tactic_m]
 def goalTactic (state: GoalState) (goalId: Nat) (tactic: String): Lean.CoreM TacticResult :=
-  runTermElabM <| GoalState.execute state goalId tactic
+  runTermElabM <| state.tryTactic goalId tactic
 
-@[export pantograph_goal_try_assign_m]
-def goalTryAssign (state: GoalState) (goalId: Nat) (expr: String): Lean.CoreM TacticResult :=
-  runTermElabM <| GoalState.tryAssign state goalId expr
+@[export pantograph_goal_assign_m]
+def goalAssign (state: GoalState) (goalId: Nat) (expr: String): Lean.CoreM TacticResult :=
+  runTermElabM <| state.tryAssign goalId expr
 
-@[export pantograph_goal_continue]
-def goalContinue (target: GoalState) (branch: GoalState): Except String GoalState :=
-  target.continue branch
+@[export pantograph_goal_have_m]
+def goalHave (state: GoalState) (goalId: Nat) (binderName: String) (type: String): Lean.CoreM TacticResult :=
+  runTermElabM <| state.tryHave goalId binderName type
+
+@[export pantograph_goal_conv_m]
+def goalConv (state: GoalState) (goalId: Nat): Lean.CoreM TacticResult :=
+  runTermElabM <| state.conv goalId
+
+@[export pantograph_goal_conv_exit_m]
+def goalConvExit (state: GoalState): Lean.CoreM TacticResult :=
+  runTermElabM <| state.convExit
+
+@[export pantograph_goal_calc_m]
+def goalCalc (state: GoalState) (goalId: Nat) (pred: String): Lean.CoreM TacticResult :=
+  runTermElabM <| state.tryCalc goalId pred
+
+@[export pantograph_goal_focus]
+def goalFocus (state: GoalState) (goalId: Nat): Option GoalState :=
+  state.focus goalId
 
 @[export pantograph_goal_resume]
 def goalResume (target: GoalState) (goals: Array String): Except String GoalState :=
   target.resume (goals.map (λ n => { name := n.toName }) |>.toList)
+
+@[export pantograph_goal_continue]
+def goalContinue (target: GoalState) (branch: GoalState): Except String GoalState :=
+  target.continue branch
 
 @[export pantograph_goal_serialize_m]
 def goalSerialize (state: GoalState) (options: @&Protocol.Options): Lean.CoreM (Array Protocol.Goal) :=
   runMetaM <| state.serializeGoals (parent := .none) options
 
 @[export pantograph_goal_print_m]
-def goalPrint (state: GoalState) (options: @&Protocol.Options): Lean.CoreM Protocol.GoalPrintResult := do
-  let metaM := do
+def goalPrint (state: GoalState) (options: @&Protocol.Options): Lean.CoreM Protocol.GoalPrintResult :=
+  runMetaM do
     state.restoreMetaM
     return {
       root? := ← state.rootExpr?.mapM (λ expr => do
@@ -190,7 +208,6 @@ def goalPrint (state: GoalState) (options: @&Protocol.Options): Lean.CoreM Proto
       parent? := ← state.parentExpr?.mapM (λ expr => do
         serialize_expression options (← unfoldAuxLemmas expr)),
     }
-  runMetaM metaM
 
 
 end Pantograph
