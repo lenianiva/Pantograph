@@ -129,7 +129,8 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           pure ( Except.ok (← goalConv goalState args.goalId))
         | .none, .none, .none, .none, .some false => do
           pure ( Except.ok (← goalConvExit goalState))
-        | _, _, _, _, _ => pure (Except.error <| errorI "arguments" "Exactly one of {tactic, expr, have} must be supplied")
+        | _, _, _, _, _ => pure (Except.error <|
+          errorI "arguments" "Exactly one of {tactic, expr, have, calc, conv} must be supplied")
       match nextGoalState? with
       | .error error => return .error error
       | .ok (.success nextGoalState) =>
