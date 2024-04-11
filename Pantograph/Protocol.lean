@@ -202,8 +202,11 @@ structure GoalTactic where
   tactic?: Option String := .none
   expr?: Option String := .none
   have?: Option String := .none
+  calc?: Option String := .none
+  -- true to enter `conv`, `false` to exit. In case of exit the `goalId` is ignored.
+  conv?: Option Bool := .none
 
-  -- In case of the `have` tactic, the new free variable name
+  -- In case of the `have` tactic, the new free variable name is provided here
   binderName?: Option String := .none
 
   deriving Lean.FromJson

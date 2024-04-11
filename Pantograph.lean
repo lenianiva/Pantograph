@@ -114,15 +114,22 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     match state.goalStates.find? args.stateId with
     | .none => return .error $ errorIndex s!"Invalid state index {args.stateId}"
     | .some goalState => do
-      let nextGoalState?: Except _ GoalState ← match args.tactic?, args.expr?, args.have? with
-        | .some tactic, .none, .none => do
+      let nextGoalState?: Except _ GoalState ←
+        match args.tactic?, args.expr?, args.have?, args.calc?, args.conv?  with
+        | .some tactic, .none, .none, .none, .none => do
           pure ( Except.ok (← goalTactic goalState args.goalId tactic))
-        | .none, .some expr, .none => do
+        | .none, .some expr, .none, .none, .none => do
           pure ( Except.ok (← goalAssign goalState args.goalId expr))
-        | .none, .none, .some type => do
+        | .none, .none, .some type, .none, .none => do
           let binderName := args.binderName?.getD ""
           pure ( Except.ok (← goalHave goalState args.goalId binderName type))
-        | _, _, _ => pure (Except.error <| errorI "arguments" "Exactly one of {tactic, expr, have} must be supplied")
+        | .none, .none, .none, .some pred, .none => do
+          pure ( Except.ok (← goalCalc goalState args.goalId pred))
+        | .none, .none, .none, .none, .some true => do
+          pure ( Except.ok (← goalConv goalState args.goalId))
+        | .none, .none, .none, .none, .some false => do
+          pure ( Except.ok (← goalConvExit goalState))
+        | _, _, _, _, _ => pure (Except.error <| errorI "arguments" "Exactly one of {tactic, expr, have} must be supplied")
       match nextGoalState? with
       | .error error => return .error error
       | .ok (.success nextGoalState) =>
