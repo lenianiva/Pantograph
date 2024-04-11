@@ -48,8 +48,8 @@ protected def GoalState.create (expr: Expr): Elab.TermElabM GoalState := do
   let root := goal.mvarId!
   let savedState ← savedStateMonad { elaborator := .anonymous } |>.run' { goals := [root]}
   return {
-    savedState,
     root,
+    savedState,
     newMVars := SSet.insert .empty root,
     parentMVar? := .none,
   }
@@ -126,7 +126,7 @@ protected def GoalState.tryTactic (state: GoalState) (goalId: Nat) (tactic: Stri
     (fileName := filename) with
     | .ok stx => pure $ stx
     | .error error => return .parseError error
-  match (← executeTactic (state := state.savedState) (goal := goal) (tactic := tactic)) with
+  match ← executeTactic (state := state.savedState) (goal := goal) (tactic := tactic) with
   | .error errors =>
     return .failure errors
   | .ok nextSavedState =>
@@ -149,13 +149,12 @@ protected def GoalState.assign (state: GoalState) (goal: MVarId) (expr: Expr):
   let goalType ← goal.getType
   try
     -- For some reason this is needed. One of the unit tests will fail if this isn't here
-    let error?: Option String ← goal.withContext (do
+    let error?: Option String ← goal.withContext do
       let exprType ← Meta.inferType expr
       if ← Meta.isDefEq goalType exprType then
         pure .none
       else do
         return .some s!"{← Meta.ppExpr expr} : {← Meta.ppExpr exprType} != {← Meta.ppExpr goalType}"
-    )
     if let .some error := error? then
       return .parseError error
     goal.checkNotAssigned `GoalState.assign
@@ -221,7 +220,7 @@ protected def GoalState.tryHave (state: GoalState) (goalId: Nat) (binderName: St
   let binderName := binderName.toName
   try
     -- Implemented similarly to the intro tactic
-    let nextGoals: List MVarId ← goal.withContext $ (do
+    let nextGoals: List MVarId ← goal.withContext do
       let type ← Elab.Term.elabType (stx := type)
       let lctx ← MonadLCtx.getLCtx
 
@@ -234,15 +233,14 @@ protected def GoalState.tryHave (state: GoalState) (goalId: Nat) (binderName: St
       let fvar   := mkFVar fvarId
       let mvarUpstream ←
         withTheReader Meta.Context (fun ctx => { ctx with lctx := lctxUpstream }) do
-          Meta.withNewLocalInstances #[fvar] 0 (do
+          Meta.withNewLocalInstances #[fvar] 0 do
             let mvarUpstream ← Meta.mkFreshExprMVarAt (← getLCtx) (← Meta.getLocalInstances)
               (← goal.getType) (kind := MetavarKind.synthetic) (userName := .anonymous)
             let expr: Expr := .app (.lam binderName type mvarBranch .default) mvarUpstream
             goal.assign expr
-            pure mvarUpstream)
+            pure mvarUpstream
 
       pure [mvarBranch.mvarId!, mvarUpstream.mvarId!]
-    )
     return .success {
       root := state.root,
       savedState := {
@@ -359,7 +357,7 @@ protected def GoalState.tryCalc (state: GoalState) (goalId: Nat) (pred: String):
     let some (_, lhs, rhs) ← Elab.Term.getCalcRelation? step |
       throwErrorAt pred "invalid 'calc' step, relation expected{indentExpr step}"
     if let some prevRhs := calcPrevRhs? then
-      unless (← Meta.isDefEqGuarded lhs prevRhs) do
+      unless ← Meta.isDefEqGuarded lhs prevRhs do
         throwErrorAt pred "invalid 'calc' step, left-hand-side is{indentD m!"{lhs} : {← Meta.inferType lhs}"}\nprevious right-hand-side is{indentD m!"{prevRhs} : {← Meta.inferType prevRhs}"}" -- "
 
     -- Creates a mvar to represent the proof that the calc tactic solves the
@@ -384,7 +382,7 @@ protected def GoalState.tryCalc (state: GoalState) (goalId: Nat) (pred: String):
       let lastStep := mkApp2 r rhs rhs'
       let lastStepGoal ← Meta.mkFreshExprSyntheticOpaqueMVar lastStep tag
       (proof, proofType) ← Elab.Term.mkCalcTrans proof proofType lastStepGoal lastStep
-      unless (← Meta.isDefEq proofType target) do throwFailed
+      unless ← Meta.isDefEq proofType target do throwFailed
       remainder := .some lastStepGoal.mvarId!
     goal.assign proof
 
