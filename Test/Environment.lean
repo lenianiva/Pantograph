@@ -11,6 +11,7 @@ open Pantograph
 
 deriving instance DecidableEq, Repr for Protocol.InductInfo
 deriving instance DecidableEq, Repr for Protocol.ConstructorInfo
+deriving instance DecidableEq, Repr for Protocol.RecursorRule
 deriving instance DecidableEq, Repr for Protocol.RecursorInfo
 deriving instance DecidableEq, Repr for Protocol.EnvInspectResult
 
@@ -69,6 +70,7 @@ def test_inspect: IO LSpec.TestSeq := do
       numIndices := 1,
       numMotives := 1,
       numMinors := 1,
+      rules := #[{ ctor := "Eq.refl", nFields := 0, rhs := { pp? := .some "fun {α} a motive refl => refl" } }]
       k := true,
     }),
     ("ForM.rec", ConstantCat.recursor {
@@ -77,6 +79,7 @@ def test_inspect: IO LSpec.TestSeq := do
       numIndices := 0,
       numMotives := 1,
       numMinors := 1,
+      rules := #[{ ctor := "ForM.mk", nFields := 1, rhs := { pp? := .some "fun m γ α motive mk forM => mk forM" } }]
       k := false,
     })
   ]
