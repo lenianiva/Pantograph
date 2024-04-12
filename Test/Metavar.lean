@@ -28,7 +28,7 @@ def test_instantiate_mvar: TestM Unit := do
       addTest $ assertUnreachable e
       return ()
   let t ← Lean.Meta.inferType expr
-  addTest $ LSpec.check "typing" ((toString (← serialize_expression_ast t)) =
+  addTest $ LSpec.check "typing" ((toString (← serializeExpressionSexp t)) =
     "((:c LE.le) (:c Nat) (:c instLENat) ((:c OfNat.ofNat) (:mv _uniq.2) (:lit 2) (:mv _uniq.3)) ((:c OfNat.ofNat) (:mv _uniq.14) (:lit 5) (:mv _uniq.15)))")
   return ()
 
@@ -245,8 +245,8 @@ def test_partial_continuation: TestM Unit := do
 
   -- Roundtrip
   --let coupled_goals := coupled_goals.map (λ g =>
-  --  { name := str_to_name $ name_to_ast g.name (sanitize := false)})
-  let coupled_goals := coupled_goals.map (λ g => name_to_ast g.name (sanitize := false))
+  --  { name := str_to_name $ serializeName g.name (sanitize := false)})
+  let coupled_goals := coupled_goals.map (λ g => serializeName g.name (sanitize := false))
   let coupled_goals := coupled_goals.map (λ g => { name := g.toName })
   let state1b ← match state2.resume (goals := coupled_goals) with
     | .error msg => do
