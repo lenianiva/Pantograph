@@ -43,7 +43,7 @@ def elabTerm (syn: Syntax) (expectedType? : Option Expr := .none): Elab.TermElab
 
 --- Output Functions ---
 
-def type_expr_to_bound (expr: Expr): MetaM Protocol.BoundExpression := do
+def typeExprToBound (expr: Expr): MetaM Protocol.BoundExpression := do
   Meta.forallTelescope expr fun arr body => do
     let binders ← arr.mapM fun fvar => do
       return (toString (← fvar.fvarId!.getUserName), toString (← Meta.ppExpr (← fvar.fvarId!.getType)))
@@ -52,9 +52,9 @@ def type_expr_to_bound (expr: Expr): MetaM Protocol.BoundExpression := do
 def serializeName (name: Name) (sanitize: Bool := true): String :=
   let internal := name.isInaccessibleUserName || name.hasMacroScopes
   if sanitize && internal then "_"
-  else toString name |> enclose_if_escaped
+  else toString name |> addQuotes
   where
-  enclose_if_escaped (n: String) :=
+  addQuotes (n: String) :=
     let quote := "\""
     if n.contains Lean.idBeginEscape then s!"{quote}{n}{quote}" else n
 
@@ -100,10 +100,10 @@ partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM
       -- Lean these are handled using a `#` prefix.
       pure s!"{deBruijnIndex}"
     | .fvar fvarId =>
-      let name := of_name fvarId.name
+      let name := ofName fvarId.name
       pure s!"(:fv {name})"
     | .mvar mvarId =>
-      let name := of_name mvarId.name
+      let name := ofName mvarId.name
       pure s!"(:mv {name})"
     | .sort level =>
       let level := serializeSortLevel level sanitize
@@ -118,16 +118,16 @@ partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM
       let args := " ".intercalate args
       pure s!"({fn'} {args})"
     | .lam binderName binderType body binderInfo => do
-      let binderName' := of_name binderName
+      let binderName' := ofName binderName
       let binderType' ← self binderType
       let body' ← self body
-      let binderInfo' := binder_info_to_ast binderInfo
+      let binderInfo' := binderInfoSexp binderInfo
       pure s!"(:lambda {binderName'} {binderType'} {body'}{binderInfo'})"
     | .forallE binderName binderType body binderInfo => do
-      let binderName' := of_name binderName
+      let binderName' := ofName binderName
       let binderType' ← self binderType
       let body' ← self body
-      let binderInfo' := binder_info_to_ast binderInfo
+      let binderInfo' := binderInfoSexp binderInfo
       pure s!"(:forall {binderName'} {binderType'} {body'}{binderInfo'})"
     | .letE name type value body _ => do
       -- Dependent boolean flag diacarded
@@ -157,12 +157,12 @@ partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM
       let inner ← self inner
       pure s!"((:c {projectorName}) {autos} {inner})"
   -- Elides all unhygenic names
-  binder_info_to_ast : Lean.BinderInfo → String
+  binderInfoSexp : Lean.BinderInfo → String
     | .default => ""
     | .implicit => " :implicit"
     | .strictImplicit => " :strictImplicit"
     | .instImplicit => " :instImplicit"
-  of_name (name: Name) := serializeName name sanitize
+  ofName (name: Name) := serializeName name sanitize
 
 def serializeExpression (options: @&Protocol.Options) (e: Expr): MetaM Protocol.Expression := do
   let pp?: Option String ← match options.printExprPretty with
@@ -191,12 +191,12 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
       | .cdecl _ fvarId userName _ _ _ =>
         let userName := userName.simpMacroScopes
         return {
-          name := of_name fvarId.name,
-          userName:= of_name userName.simpMacroScopes,
+          name := ofName fvarId.name,
+          userName:= ofName userName.simpMacroScopes,
         }
       | .ldecl _ fvarId userName _ _ _ _ => do
         return {
-          name := of_name fvarId.name,
+          name := ofName fvarId.name,
           userName := toString userName.simpMacroScopes,
         }
     let ppVar (localDecl : LocalDecl) : MetaM Protocol.Variable := do
@@ -205,8 +205,8 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
         let userName := userName.simpMacroScopes
         let type ← instantiateMVars type
         return {
-          name := of_name fvarId.name,
-          userName:= of_name userName,
+          name := ofName fvarId.name,
+          userName:= ofName userName,
           isInaccessible? := .some userName.isInaccessibleUserName
           type? := .some (← serializeExpression options type)
         }
@@ -219,8 +219,8 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
         else
           pure $ .none
         return {
-          name := of_name fvarId.name,
-          userName:= of_name userName,
+          name := ofName fvarId.name,
+          userName:= ofName userName,
           isInaccessible? := .some userName.isInaccessibleUserName
           type? := .some (← serializeExpression options type)
           value? := value?
@@ -238,14 +238,14 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
           | false => ppVar localDecl
         return var::acc
     return {
-      name := of_name goal.name,
-      userName? := if mvarDecl.userName == .anonymous then .none else .some (of_name mvarDecl.userName),
+      name := ofName goal.name,
+      userName? := if mvarDecl.userName == .anonymous then .none else .some (ofName mvarDecl.userName),
       isConversion := isLHSGoal? mvarDecl.type |>.isSome,
       target := (← serializeExpression options (← instantiateMVars mvarDecl.type)),
       vars := vars.reverse.toArray
     }
   where
-  of_name (n: Name) := serializeName n (sanitize := false)
+  ofName (n: Name) := serializeName n (sanitize := false)
 
 protected def GoalState.serializeGoals
       (state: GoalState)
@@ -263,7 +263,7 @@ protected def GoalState.serializeGoals
     | .none => throwError s!"Metavariable does not exist in context {goal.name}"
 
 /-- Print the metavariables in a readable format -/
-protected def GoalState.print (goalState: GoalState) (options: Protocol.GoalDiag := {}): MetaM Unit := do
+protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag := {}): MetaM Unit := do
   goalState.restoreMetaM
   let savedState := goalState.savedState
   let goals := savedState.tactic.goals

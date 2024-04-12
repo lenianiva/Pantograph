@@ -26,7 +26,7 @@ def test_expr_to_binder (env: Environment): IO LSpec.TestSeq := do
   runCoreMSeq env $ entries.foldlM (λ suites (symbol, target) => do
     let env ← MonadEnv.getEnv
     let expr := env.find? symbol |>.get! |>.type
-    let test := LSpec.check symbol.toString ((← type_expr_to_bound expr) = target)
+    let test := LSpec.check symbol.toString ((← typeExprToBound expr) = target)
     return LSpec.TestSeq.append suites test) LSpec.TestSeq.done |>.run'
 
 def test_sexp_of_symbol (env: Environment): IO LSpec.TestSeq := do
