@@ -177,6 +177,7 @@ protected def GoalState.assign (state: GoalState) (goal: MVarId) (expr: Expr):
       },
       newMVars,
       parentMVar? := .some goal,
+      calcPrevRhs? := .none
     }
   catch exception =>
     return .failure #[← exception.toMessageData.toString]
@@ -249,6 +250,49 @@ protected def GoalState.tryHave (state: GoalState) (goalId: Nat) (binderName: St
       },
       newMVars := nextGoals.toSSet,
       parentMVar? := .some goal,
+      calcPrevRhs? := .none
+    }
+  catch exception =>
+    return .failure #[← exception.toMessageData.toString]
+protected def GoalState.tryLet (state: GoalState) (goalId: Nat) (binderName: String) (type: String):
+      Elab.TermElabM TacticResult := do
+  state.restoreElabM
+  let goal ← match state.savedState.tactic.goals.get? goalId with
+    | .some goal => pure goal
+    | .none => return .indexError goalId
+  let type ← match Parser.runParserCategory
+    (env := state.env)
+    (catName := `term)
+    (input := type)
+    (fileName := filename) with
+    | .ok syn => pure syn
+    | .error error => return .parseError error
+  let binderName := binderName.toName
+  try
+    -- Implemented similarly to the intro tactic
+    let nextGoals: List MVarId ← goal.withContext do
+      let type ← Elab.Term.elabType (stx := type)
+      let lctx ← MonadLCtx.getLCtx
+
+      -- The branch goal inherits the same context, but with a different type
+      let mvarBranch ← Meta.mkFreshExprMVarAt lctx (← Meta.getLocalInstances) type
+
+      let upstreamType := .letE binderName type mvarBranch (← goal.getType) false
+      let mvarUpstream ← Meta.mkFreshExprMVarAt (← getLCtx) (← Meta.getLocalInstances)
+        upstreamType (kind := MetavarKind.synthetic) (userName := (← goal.getTag))
+
+      goal.assign mvarUpstream
+
+      pure [mvarBranch.mvarId!, mvarUpstream.mvarId!]
+    return .success {
+      root := state.root,
+      savedState := {
+        term := ← MonadBacktrack.saveState,
+        tactic := { goals := nextGoals }
+      },
+      newMVars := nextGoals.toSSet,
+      parentMVar? := .some goal,
+      calcPrevRhs? := .none
     }
   catch exception =>
     return .failure #[← exception.toMessageData.toString]
@@ -280,6 +324,7 @@ protected def GoalState.conv (state: GoalState) (goalId: Nat):
       newMVars := newMVarSet prevMCtx nextMCtx,
       parentMVar? := .some goal,
       convMVar? := .some (convRhs, goal),
+      calcPrevRhs? := .none
     }
   catch exception =>
     return .failure #[← exception.toMessageData.toString]
@@ -318,6 +363,7 @@ protected def GoalState.convExit (state: GoalState):
       newMVars := newMVarSet prevMCtx nextMCtx,
       parentMVar? := .some convGoal,
       convMVar? := .none
+      calcPrevRhs? := .none
     }
   catch exception =>
     return .failure #[← exception.toMessageData.toString]
