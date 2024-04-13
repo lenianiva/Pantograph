@@ -564,20 +564,25 @@ def test_let (specialized: Bool): TestM Unit := do
   addTest $ LSpec.check tactic ((← state1.serializeGoals (options := ← read)).map (·.devolatilize) =
     #[interiorGoal [] "p ∨ ¬p"])
 
-  let expr := "let b: Nat := _; _"
+
+  let letType := "Nat"
+  let expr := s!"let b: {letType} := _; _"
   let result2 ← match specialized with
-    | true => state1.tryLet (goalId := 0) (binderName := "b") (type := "Nat")
+    | true => state1.tryLet (goalId := 0) (binderName := "b") (type := letType)
     | false => state1.tryAssign (goalId := 0) (expr := expr)
   let state2 ← match result2 with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.check expr ((← state2.serializeGoals (options := ← read)).map (·.devolatilize) =
+  let serializedState2 ← state2.serializeGoals (options := ← read)
+  addTest $ LSpec.check expr (serializedState2.map (·.devolatilize) =
     #[
-      interiorGoal [] "Nat",
+      interiorGoal [] letType,
       interiorGoal [] "let b := ?m.20;\np ∨ ¬p"
     ])
+  -- Check that the goal mvar ids match up
+  addTest $ LSpec.check expr ((serializedState2.map (·.name) |>.get! 0) = "_uniq.20")
 
   let tactic := "exact a"
   let state3 ← match ← state2.tryTactic (goalId := 0) (tactic := tactic) with
