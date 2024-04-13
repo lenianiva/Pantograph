@@ -10,13 +10,13 @@ open Pantograph
 
 deriving instance Repr, DecidableEq for Protocol.BoundExpression
 
-def test_name_to_ast: LSpec.TestSeq :=
+def test_serializeName: LSpec.TestSeq :=
   let quote := "\""
   let escape := "\\"
-  LSpec.test "a.b.1" (name_to_ast (Name.num (.str (.str .anonymous "a") "b") 1) = "a.b.1") ++
-  LSpec.test "seg.«a.b»" (name_to_ast (Name.str (.str .anonymous "seg") "a.b") = s!"{quote}seg.«a.b»{quote}") ++
+  LSpec.test "a.b.1" (serializeName (Name.num (.str (.str .anonymous "a") "b") 1) = "a.b.1") ++
+  LSpec.test "seg.«a.b»" (serializeName (Name.str (.str .anonymous "seg") "a.b") = s!"{quote}seg.«a.b»{quote}") ++
   -- Pathological test case
-  LSpec.test s!"«̈{escape}{quote}»" (name_to_ast (Name.str .anonymous s!"{escape}{quote}") = s!"{quote}«{escape}{quote}»{quote}")
+  LSpec.test s!"«̈{escape}{quote}»" (serializeName (Name.str .anonymous s!"{escape}{quote}") = s!"{quote}«{escape}{quote}»{quote}")
 
 def test_expr_to_binder (env: Environment): IO LSpec.TestSeq := do
   let entries: List (Name × Protocol.BoundExpression) := [
@@ -26,7 +26,7 @@ def test_expr_to_binder (env: Environment): IO LSpec.TestSeq := do
   runCoreMSeq env $ entries.foldlM (λ suites (symbol, target) => do
     let env ← MonadEnv.getEnv
     let expr := env.find? symbol |>.get! |>.type
-    let test := LSpec.check symbol.toString ((← type_expr_to_bound expr) = target)
+    let test := LSpec.check symbol.toString ((← typeExprToBound expr) = target)
     return LSpec.TestSeq.append suites test) LSpec.TestSeq.done |>.run'
 
 def test_sexp_of_symbol (env: Environment): IO LSpec.TestSeq := do
@@ -43,7 +43,7 @@ def test_sexp_of_symbol (env: Environment): IO LSpec.TestSeq := do
   runMetaMSeq env $ entries.foldlM (λ suites (symbol, target) => do
     let env ← MonadEnv.getEnv
     let expr := env.find? symbol.toName |>.get! |>.type
-    let test := LSpec.check symbol ((← serialize_expression_ast expr) = target)
+    let test := LSpec.check symbol ((← serializeExpressionSexp expr) = target)
     return LSpec.TestSeq.append suites test) LSpec.TestSeq.done
 
 def test_sexp_of_elab (env: Environment): IO LSpec.TestSeq := do
@@ -61,7 +61,7 @@ def test_sexp_of_elab (env: Environment): IO LSpec.TestSeq := do
     let expr ← match (← elabTerm s) with
       | .ok expr => pure expr
       | .error e => return elabFailure e
-    let test := LSpec.check source ((← serialize_expression_ast expr) = target)
+    let test := LSpec.check source ((← serializeExpressionSexp expr) = target)
     return LSpec.TestSeq.append suites test) LSpec.TestSeq.done
   runMetaMSeq env $ termElabM.run' (ctx := defaultTermElabMContext)
 
@@ -80,7 +80,7 @@ def test_sexp_of_expr (env: Environment): IO LSpec.TestSeq := do
   let termElabM: Elab.TermElabM LSpec.TestSeq := entries.foldlM (λ suites (expr, target) => do
     let env ← MonadEnv.getEnv
     let testCaseName := target.take 10
-    let test := LSpec.check   testCaseName ((← serialize_expression_ast expr) = target)
+    let test := LSpec.check   testCaseName ((← serializeExpressionSexp expr) = target)
     return LSpec.TestSeq.append suites test) LSpec.TestSeq.done
   runMetaMSeq env $ termElabM.run' (ctx := defaultTermElabMContext)
 
@@ -95,7 +95,7 @@ def test_instance (env: Environment): IO LSpec.TestSeq :=
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   [
-    ("name_to_ast", do pure test_name_to_ast),
+    ("serializeName", do pure test_serializeName),
     ("Expression binder", test_expr_to_binder env),
     ("Sexp from symbol", test_sexp_of_symbol env),
     ("Sexp from elaborated expr", test_sexp_of_elab env),

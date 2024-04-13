@@ -18,6 +18,7 @@ structure Options where
   printExprPretty: Bool    := true
   -- When enabled, print the raw AST of expressions
   printExprAST: Bool       := false
+  printDependentMVars: Bool := false
   -- When enabled, the types and values of persistent variables in a goal
   -- are not shown unless they are new to the proof step. Reduces overhead.
   -- NOTE: that this assumes the type and assignment of variables can never change.
@@ -41,6 +42,7 @@ structure Expression where
   pp?: Option String             := .none
   -- AST structure
   sexp?: Option String           := .none
+  dependentMVars?: Option (Array String) := .none
   deriving Lean.ToJson
 
 structure Variable where
@@ -182,6 +184,7 @@ structure OptionsSet where
   printJsonPretty?: Option Bool
   printExprPretty?: Option Bool
   printExprAST?: Option Bool
+  printDependentMVars?: Option Bool
   noRepeat?: Option Bool
   printAuxDecls?: Option Bool
   printImplementationDetailHyps?: Option Bool

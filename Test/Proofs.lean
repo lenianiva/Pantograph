@@ -229,7 +229,7 @@ def test_or_comm: TestM Unit := do
   addTest $ LSpec.check "(2 parent)" state2.parentExpr?.isSome
   addTest $ LSpec.check "(2 root)" state2.rootExpr?.isNone
 
-  let state2parent ← serialize_expression_ast state2.parentExpr?.get! (sanitize := false)
+  let state2parent ← serializeExpressionSexp state2.parentExpr?.get! (sanitize := false)
   -- This is due to delayed assignment
   addTest $ LSpec.test "(2 parent)" (state2parent ==
     "((:mv _uniq.43) (:fv _uniq.16) ((:c Eq.refl) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16)))")
@@ -239,7 +239,7 @@ def test_or_comm: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  let state3_1parent ← serialize_expression_ast state3_1.parentExpr?.get! (sanitize := false)
+  let state3_1parent ← serializeExpressionSexp state3_1.parentExpr?.get! (sanitize := false)
   addTest $ LSpec.test "(3_1 parent)" (state3_1parent == "((:c Or.inr) (:fv _uniq.13) (:fv _uniq.10) (:mv _uniq.78))")
   addTest $ LSpec.check "· apply Or.inr" (state3_1.goals.length = 1)
   let state4_1 ← match ← state3_1.tryTactic (goalId := 0) (tactic := "assumption") with
@@ -248,7 +248,7 @@ def test_or_comm: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "  assumption" state4_1.goals.isEmpty
-  let state4_1parent ← serialize_expression_ast state4_1.parentExpr?.get! (sanitize := false)
+  let state4_1parent ← serializeExpressionSexp state4_1.parentExpr?.get! (sanitize := false)
   addTest $ LSpec.test "(4_1 parent)" (state4_1parent == "(:fv _uniq.47)")
   addTest $ LSpec.check "(4_1 root)" state4_1.rootExpr?.isNone
   let state3_2 ← match ← state2.tryTactic (goalId := 1) (tactic := "apply Or.inl") with

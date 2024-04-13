@@ -144,8 +144,8 @@ def exprEcho (expr: String) (expectedType?: Option String := .none) (options: @&
     try
       let type ← unfoldAuxLemmas (← Lean.Meta.inferType expr)
       return .ok {
-          type := (← serialize_expression options type),
-          expr := (← serialize_expression options expr)
+          type := (← serializeExpression options type),
+          expr := (← serializeExpression options expr)
       }
     catch exception =>
       return .error $ errorI "typing" (← exception.toMessageData.toString)
@@ -207,9 +207,9 @@ def goalPrint (state: GoalState) (options: @&Protocol.Options): Lean.CoreM Proto
     state.restoreMetaM
     return {
       root? := ← state.rootExpr?.mapM (λ expr => do
-        serialize_expression options (← unfoldAuxLemmas expr)),
+        serializeExpression options (← unfoldAuxLemmas expr)),
       parent? := ← state.parentExpr?.mapM (λ expr => do
-        serialize_expression options (← unfoldAuxLemmas expr)),
+        serializeExpression options (← unfoldAuxLemmas expr)),
     }
 
 
