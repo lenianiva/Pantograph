@@ -169,6 +169,9 @@ def goalAssign (state: GoalState) (goalId: Nat) (expr: String): Lean.CoreM Tacti
 @[export pantograph_goal_have_m]
 def goalHave (state: GoalState) (goalId: Nat) (binderName: String) (type: String): Lean.CoreM TacticResult :=
   runTermElabM <| state.tryHave goalId binderName type
+@[export pantograph_goal_let_m]
+def goalLet (state: GoalState) (goalId: Nat) (binderName: String) (type: String): Lean.CoreM TacticResult :=
+  runTermElabM <| state.tryLet goalId binderName type
 
 @[export pantograph_goal_conv_m]
 def goalConv (state: GoalState) (goalId: Nat): Lean.CoreM TacticResult :=

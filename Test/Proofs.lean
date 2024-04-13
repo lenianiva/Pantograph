@@ -548,7 +548,7 @@ def test_calc: TestM Unit := do
         ("h1", "a + b = b + c"), ("h2", "b + c = c + d")] ++ free
       buildGoal free target userName?
 
-def test_let: TestM Unit := do
+def test_let (specialized: Bool): TestM Unit := do
   let state? ← startProof (.expr "∀ (a: Nat) (p: Prop), p → p ∨ ¬p")
   let state0 ← match state? with
     | .some state => pure state
@@ -565,7 +565,10 @@ def test_let: TestM Unit := do
     #[interiorGoal [] "p ∨ ¬p"])
 
   let expr := "let b: Nat := _; _"
-  let state2 ← match ← state1.tryAssign (goalId := 0) (expr := expr) with
+  let result2 ← match specialized with
+    | true => state1.tryLet (goalId := 0) (binderName := "b") (type := "Nat")
+    | false => state1.tryAssign (goalId := 0) (expr := expr)
+  let state2 ← match result2 with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -627,7 +630,8 @@ def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
     ("have", test_have),
     ("conv", test_conv),
     ("calc", test_calc),
-    ("let", test_let),
+    ("let via assign", test_let false),
+    ("let via tryLet", test_let true),
   ]
   tests.map (fun (name, test) => (name, proofRunner env test))
 
