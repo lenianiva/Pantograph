@@ -510,6 +510,8 @@ def test_calc: TestM Unit := do
       interiorGoal [] "a + b = b + c" (.some "calc"),
       interiorGoal [] "b + c = c + d"
     ])
+  addTest $ LSpec.test "(2.0 prev rhs)" (state2.calcPrevRhsOf? 0 |>.isNone)
+  addTest $ LSpec.test "(2.1 prev rhs)" (state2.calcPrevRhsOf? 1 |>.isSome)
 
   let tactic := "apply h1"
   let state2m ← match ← state2.tryTactic (goalId := 0) (tactic := tactic) with
@@ -532,6 +534,7 @@ def test_calc: TestM Unit := do
     #[
       interiorGoal [] "b + c = c + d" (.some "calc")
     ])
+  addTest $ LSpec.test "(4.0 prev rhs)" (state4.calcPrevRhsOf? 0 |>.isNone)
   let tactic := "apply h2"
   let state4m ← match ← state4.tryTactic (goalId := 0) (tactic := tactic) with
     | .success state => pure state
