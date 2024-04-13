@@ -15,7 +15,7 @@ def Lean.Name.isAuxLemma (n : Lean.Name) : Bool := n matches .num (.str _ "_auxL
 namespace Pantograph
 
 /-- Unfold all lemmas created by `Lean.Meta.mkAuxLemma`. These end in `_auxLemma.nn` where `nn` is a number. -/
-def unfoldAuxLemmas (e : Lean.Expr) : Lean.CoreM Lean.Expr := do
+def unfoldAuxLemmas (e : Expr) : CoreM Expr := do
   Lean.Meta.deltaExpand e Lean.Name.isAuxLemma
 
 --- Input Functions ---
@@ -43,41 +43,41 @@ def elabTerm (syn: Syntax) (expectedType? : Option Expr := .none): Elab.TermElab
 
 --- Output Functions ---
 
-def type_expr_to_bound (expr: Expr): MetaM Protocol.BoundExpression := do
+def typeExprToBound (expr: Expr): MetaM Protocol.BoundExpression := do
   Meta.forallTelescope expr fun arr body => do
     let binders ← arr.mapM fun fvar => do
       return (toString (← fvar.fvarId!.getUserName), toString (← Meta.ppExpr (← fvar.fvarId!.getType)))
     return { binders, target := toString (← Meta.ppExpr body) }
 
-def name_to_ast (name: Name) (sanitize: Bool := true): String :=
+def serializeName (name: Name) (sanitize: Bool := true): String :=
   let internal := name.isInaccessibleUserName || name.hasMacroScopes
   if sanitize && internal then "_"
-  else toString name |> enclose_if_escaped
+  else toString name |> addQuotes
   where
-  enclose_if_escaped (n: String) :=
+  addQuotes (n: String) :=
     let quote := "\""
     if n.contains Lean.idBeginEscape then s!"{quote}{n}{quote}" else n
 
 /-- serialize a sort level. Expression is optimized to be compact e.g. `(+ u 2)` -/
-partial def serialize_sort_level_ast (level: Level) (sanitize: Bool): String :=
+partial def serializeSortLevel (level: Level) (sanitize: Bool): String :=
   let k := level.getOffset
   let u := level.getLevelOffset
   let u_str := match u with
     | .zero => "0"
     | .succ _ => panic! "getLevelOffset should not return .succ"
     | .max v w =>
-      let v := serialize_sort_level_ast v sanitize
-      let w := serialize_sort_level_ast w sanitize
+      let v := serializeSortLevel v sanitize
+      let w := serializeSortLevel w sanitize
       s!"(:max {v} {w})"
     | .imax v w =>
-      let v := serialize_sort_level_ast v sanitize
-      let w := serialize_sort_level_ast w sanitize
+      let v := serializeSortLevel v sanitize
+      let w := serializeSortLevel w sanitize
       s!"(:imax {v} {w})"
     | .param name =>
-      let name := name_to_ast name sanitize
+      let name := serializeName name sanitize
       s!"{name}"
     | .mvar id =>
-      let name := name_to_ast id.name sanitize
+      let name := serializeName id.name sanitize
       s!"(:mv {name})"
   match k, u with
   | 0, _ => u_str
@@ -89,7 +89,7 @@ partial def serialize_sort_level_ast (level: Level) (sanitize: Bool): String :=
 
 A `_` symbol in the AST indicates automatic deductions not present in the original expression.
 -/
-partial def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): MetaM String := do
+partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM String := do
   self expr
   where
   self (e: Expr): MetaM String :=
@@ -100,13 +100,13 @@ partial def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): Meta
       -- Lean these are handled using a `#` prefix.
       pure s!"{deBruijnIndex}"
     | .fvar fvarId =>
-      let name := of_name fvarId.name
+      let name := ofName fvarId.name
       pure s!"(:fv {name})"
     | .mvar mvarId =>
-      let name := of_name mvarId.name
+      let name := ofName mvarId.name
       pure s!"(:mv {name})"
     | .sort level =>
-      let level := serialize_sort_level_ast level sanitize
+      let level := serializeSortLevel level sanitize
       pure s!"(:sort {level})"
     | .const declName _ =>
       -- The universe level of the const expression is elided since it should be
@@ -118,20 +118,20 @@ partial def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): Meta
       let args := " ".intercalate args
       pure s!"({fn'} {args})"
     | .lam binderName binderType body binderInfo => do
-      let binderName' := of_name binderName
+      let binderName' := ofName binderName
       let binderType' ← self binderType
       let body' ← self body
-      let binderInfo' := binder_info_to_ast binderInfo
+      let binderInfo' := binderInfoSexp binderInfo
       pure s!"(:lambda {binderName'} {binderType'} {body'}{binderInfo'})"
     | .forallE binderName binderType body binderInfo => do
-      let binderName' := of_name binderName
+      let binderName' := ofName binderName
       let binderType' ← self binderType
       let body' ← self body
-      let binderInfo' := binder_info_to_ast binderInfo
+      let binderInfo' := binderInfoSexp binderInfo
       pure s!"(:forall {binderName'} {binderType'} {body'}{binderInfo'})"
     | .letE name type value body _ => do
       -- Dependent boolean flag diacarded
-      let name' := name_to_ast name
+      let name' := serializeName name
       let type' ← self type
       let value' ← self value
       let body' ← self body
@@ -157,27 +157,31 @@ partial def serialize_expression_ast (expr: Expr) (sanitize: Bool := true): Meta
       let inner ← self inner
       pure s!"((:c {projectorName}) {autos} {inner})"
   -- Elides all unhygenic names
-  binder_info_to_ast : Lean.BinderInfo → String
+  binderInfoSexp : Lean.BinderInfo → String
     | .default => ""
     | .implicit => " :implicit"
     | .strictImplicit => " :strictImplicit"
     | .instImplicit => " :instImplicit"
-  of_name (name: Name) := name_to_ast name sanitize
+  ofName (name: Name) := serializeName name sanitize
 
-def serialize_expression (options: @&Protocol.Options) (e: Expr): MetaM Protocol.Expression := do
+def serializeExpression (options: @&Protocol.Options) (e: Expr): MetaM Protocol.Expression := do
   let pp?: Option String ← match options.printExprPretty with
     | true => pure $ .some $ toString $ ← Meta.ppExpr e
     | false => pure $ .none
   let sexp?: Option String ← match options.printExprAST with
-    | true => pure $ .some $ ← serialize_expression_ast e
+    | true => pure $ .some $ ← serializeExpressionSexp e
+    | false => pure $ .none
+  let dependentMVars? ← match options.printDependentMVars with
+    | true => pure $ .some $ (← Meta.getMVars e).map (λ mvarId => mvarId.name.toString)
     | false => pure $ .none
   return {
     pp?,
     sexp?
+    dependentMVars?,
   }
 
 /-- Adapted from ppGoal -/
-def serialize_goal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl)
+def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl)
       : MetaM Protocol.Goal := do
   -- Options for printing; See Meta.ppGoal for details
   let showLetValues  := true
@@ -191,12 +195,12 @@ def serialize_goal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metav
       | .cdecl _ fvarId userName _ _ _ =>
         let userName := userName.simpMacroScopes
         return {
-          name := of_name fvarId.name,
-          userName:= of_name userName.simpMacroScopes,
+          name := ofName fvarId.name,
+          userName:= ofName userName.simpMacroScopes,
         }
       | .ldecl _ fvarId userName _ _ _ _ => do
         return {
-          name := of_name fvarId.name,
+          name := ofName fvarId.name,
           userName := toString userName.simpMacroScopes,
         }
     let ppVar (localDecl : LocalDecl) : MetaM Protocol.Variable := do
@@ -205,24 +209,24 @@ def serialize_goal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metav
         let userName := userName.simpMacroScopes
         let type ← instantiateMVars type
         return {
-          name := of_name fvarId.name,
-          userName:= of_name userName,
+          name := ofName fvarId.name,
+          userName:= ofName userName,
           isInaccessible? := .some userName.isInaccessibleUserName
-          type? := .some (← serialize_expression options type)
+          type? := .some (← serializeExpression options type)
         }
       | .ldecl _ fvarId userName type val _ _ => do
         let userName := userName.simpMacroScopes
         let type ← instantiateMVars type
         let value? ← if showLetValues then
           let val ← instantiateMVars val
-          pure $ .some (← serialize_expression options val)
+          pure $ .some (← serializeExpression options val)
         else
           pure $ .none
         return {
-          name := of_name fvarId.name,
-          userName:= of_name userName,
+          name := ofName fvarId.name,
+          userName:= ofName userName,
           isInaccessible? := .some userName.isInaccessibleUserName
-          type? := .some (← serialize_expression options type)
+          type? := .some (← serializeExpression options type)
           value? := value?
         }
     let vars ← lctx.foldlM (init := []) fun acc (localDecl : LocalDecl) => do
@@ -238,14 +242,14 @@ def serialize_goal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metav
           | false => ppVar localDecl
         return var::acc
     return {
-      name := of_name goal.name,
-      userName? := if mvarDecl.userName == .anonymous then .none else .some (of_name mvarDecl.userName),
+      name := ofName goal.name,
+      userName? := if mvarDecl.userName == .anonymous then .none else .some (ofName mvarDecl.userName),
       isConversion := isLHSGoal? mvarDecl.type |>.isSome,
-      target := (← serialize_expression options (← instantiateMVars mvarDecl.type)),
+      target := (← serializeExpression options (← instantiateMVars mvarDecl.type)),
       vars := vars.reverse.toArray
     }
   where
-  of_name (n: Name) := name_to_ast n (sanitize := false)
+  ofName (n: Name) := serializeName n (sanitize := false)
 
 protected def GoalState.serializeGoals
       (state: GoalState)
@@ -258,12 +262,12 @@ protected def GoalState.serializeGoals
   goals.mapM fun goal => do
     match state.mctx.findDecl? goal with
     | .some mvarDecl =>
-      let serializedGoal ← serialize_goal options goal mvarDecl (parentDecl? := parentDecl?)
+      let serializedGoal ← serializeGoal options goal mvarDecl (parentDecl? := parentDecl?)
       pure serializedGoal
     | .none => throwError s!"Metavariable does not exist in context {goal.name}"
 
 /-- Print the metavariables in a readable format -/
-protected def GoalState.print (goalState: GoalState) (options: Protocol.GoalDiag := {}): MetaM Unit := do
+protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag := {}): MetaM Unit := do
   goalState.restoreMetaM
   let savedState := goalState.savedState
   let goals := savedState.tactic.goals
@@ -298,7 +302,7 @@ protected def GoalState.print (goalState: GoalState) (options: Protocol.GoalDiag
       let type ← if options.instantiate
         then instantiateMVars decl.type
         else pure $ decl.type
-      let type_sexp ← serialize_expression_ast type (sanitize := false)
+      let type_sexp ← serializeExpressionSexp type (sanitize := false)
       IO.println s!"{pref}{mvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type} {type_sexp}"
       if options.printValue then
         if let Option.some value := (← getMCtx).eAssignment.find? mvarId then

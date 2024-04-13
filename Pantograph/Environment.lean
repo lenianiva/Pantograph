@@ -54,18 +54,18 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): CoreM (Pr
     | .none, _ => .none
   -- Information common to all symbols
   let core := {
-    type := ← (serialize_expression options info.type).run',
+    type := ← (serializeExpression options info.type).run',
     isUnsafe := info.isUnsafe,
-    value? := ← value?.mapM (λ v => serialize_expression options v |>.run'),
+    value? := ← value?.mapM (λ v => serializeExpression options v |>.run'),
     publicName? := Lean.privateToUserName? name |>.map (·.toString),
     -- BUG: Warning: getUsedConstants here will not include projections. This is a known bug.
     typeDependency? := if args.dependency?.getD false
-      then .some <| info.type.getUsedConstants.map (λ n => name_to_ast n)
+      then .some <| info.type.getUsedConstants.map (λ n => serializeName n)
       else .none,
     valueDependency? := ← if args.dependency?.getD false
       then info.value?.mapM (λ e => do
         let e ← unfoldAuxLemmas e
-        pure $ e.getUsedConstants.filter (!isNameInternal ·) |>.map (λ n => name_to_ast n) )
+        pure $ e.getUsedConstants.filter (!isNameInternal ·) |>.map (λ n => serializeName n) )
       else pure (.none),
     module? := module?
   }
@@ -95,7 +95,7 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): CoreM (Pr
               pure {
                 ctor := rule.ctor.toString,
                 nFields := rule.nfields,
-                rhs := ← (serialize_expression options rule.rhs).run',
+                rhs := ← (serializeExpression options rule.rhs).run',
               })
           k := r.k,
       } }
