@@ -121,8 +121,12 @@ def test_m_couple_simp: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.check "apply Nat.le_trans" ((← state1.serializeGoals (options := ← read)).map (·.target.pp?) =
+  let serializedState1 ← state1.serializeGoals (options := { ← read with printDependentMVars := true })
+  addTest $ LSpec.check "apply Nat.le_trans" (serializedState1.map (·.target.pp?) =
     #[.some "2 ≤ ?m", .some "?m ≤ 5", .some "Nat"])
+  addTest $ LSpec.check "(metavariables)" (serializedState1.map (·.target.dependentMVars?.get!) =
+    #[#["_uniq.38"], #["_uniq.38"], #[]])
+
   let state2 ← match ← state1.tryTactic (goalId := 2) (tactic := "exact 2") with
     | .success state => pure state
     | other => do

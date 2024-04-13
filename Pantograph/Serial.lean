@@ -15,7 +15,7 @@ def Lean.Name.isAuxLemma (n : Lean.Name) : Bool := n matches .num (.str _ "_auxL
 namespace Pantograph
 
 /-- Unfold all lemmas created by `Lean.Meta.mkAuxLemma`. These end in `_auxLemma.nn` where `nn` is a number. -/
-def unfoldAuxLemmas (e : Lean.Expr) : Lean.CoreM Lean.Expr := do
+def unfoldAuxLemmas (e : Expr) : CoreM Expr := do
   Lean.Meta.deltaExpand e Lean.Name.isAuxLemma
 
 --- Input Functions ---
@@ -171,9 +171,13 @@ def serializeExpression (options: @&Protocol.Options) (e: Expr): MetaM Protocol.
   let sexp?: Option String ← match options.printExprAST with
     | true => pure $ .some $ ← serializeExpressionSexp e
     | false => pure $ .none
+  let dependentMVars? ← match options.printDependentMVars with
+    | true => pure $ .some $ (← Meta.getMVars e).map (λ mvarId => mvarId.name.toString)
+    | false => pure $ .none
   return {
     pp?,
     sexp?
+    dependentMVars?,
   }
 
 /-- Adapted from ppGoal -/
