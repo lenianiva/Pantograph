@@ -252,6 +252,7 @@ protected def GoalState.tryAssign (state: GoalState) (goalId: Nat) (expr: String
   let goal ← match state.savedState.tactic.goals.get? goalId with
     | .some goal => pure goal
     | .none => return .indexError goalId
+  goal.checkNotAssigned `GoalState.tryAssign
   let expr ← match Parser.runParserCategory
     (env := state.env)
     (catName := `term)
@@ -275,6 +276,7 @@ protected def GoalState.tryHave (state: GoalState) (goalId: Nat) (binderName: St
   let goal ← match state.savedState.tactic.goals.get? goalId with
     | .some goal => pure goal
     | .none => return .indexError goalId
+  goal.checkNotAssigned `GoalState.tryHave
   let type ← match Parser.runParserCategory
     (env := state.env)
     (catName := `term)
@@ -324,6 +326,7 @@ protected def GoalState.tryLet (state: GoalState) (goalId: Nat) (binderName: Str
   let goal ← match state.savedState.tactic.goals.get? goalId with
     | .some goal => pure goal
     | .none => return .indexError goalId
+  goal.checkNotAssigned `GoalState.tryLet
   let type ← match Parser.runParserCategory
     (env := state.env)
     (catName := `term)
@@ -369,6 +372,7 @@ protected def GoalState.conv (state: GoalState) (goalId: Nat):
   let goal ← match state.savedState.tactic.goals.get? goalId with
     | .some goal => pure goal
     | .none => return .indexError goalId
+  goal.checkNotAssigned `GoalState.conv
   let tacticM :  Elab.Tactic.TacticM (Elab.Tactic.SavedState × MVarId) := do
     state.restoreTacticM goal
 
@@ -452,6 +456,7 @@ protected def GoalState.tryCalc (state: GoalState) (goalId: Nat) (pred: String):
     (fileName := filename) with
     | .ok syn => pure syn
     | .error error => return .parseError error
+  goal.checkNotAssigned `GoalState.tryCalc
   let calcPrevRhs? := state.calcPrevRhsOf? goalId
   let target ← instantiateMVars (← goal.getDecl).type
   let tag := (← goal.getDecl).userName
@@ -506,6 +511,67 @@ protected def GoalState.tryCalc (state: GoalState) (goalId: Nat) (pred: String):
       newMVars := goals.toSSet,
       parentMVar? := .some goal,
       calcPrevRhs?
+    }
+  catch exception =>
+    return .failure #[← exception.toMessageData.toString]
+
+def getForallArgsBody: Expr → List Expr × Expr
+  | .forallE _ d b _ =>
+    let (innerArgs, innerBody) := getForallArgsBody b
+    (d :: innerArgs, innerBody)
+  | e => ([], e)
+def collectMotiveArguments (forallBody: Expr): SSet Nat :=
+  -- Get all de Bruijn indices
+  Id.run $ do
+    Expr.foldlM (λ acc subexpr => do
+      match subexpr with
+      | .app (.bvar i) _ => return acc.insert i
+      | _ => return acc
+      ) SSet.empty forallBody
+
+protected def GoalState.tryMotivatedApply (state: GoalState) (goalId: Nat) (recursor: String):
+      Elab.TermElabM TacticResult := do
+  state.restoreElabM
+  let goal ← match state.savedState.tactic.goals.get? goalId with
+    | .some goal => pure goal
+    | .none => return .indexError goalId
+  goal.checkNotAssigned `GoalState.tryMotivatedApply
+
+  let recursor ← match Parser.runParserCategory
+    (env := state.env)
+    (catName := `term)
+    (input := recursor)
+    (fileName := filename) with
+    | .ok syn => pure syn
+    | .error error => return .parseError error
+  try
+    -- Implemented similarly to the intro tactic
+    let nextGoals: List MVarId ← goal.withContext do
+      let recursor ← Elab.Term.elabType (stx := recursor)
+      let recursorType ← Meta.inferType recursor
+
+      let (forallArgs, forallBody) := getForallArgsBody recursorType
+      let motiveIndices := collectMotiveArguments forallBody
+
+      let numArgs ← Meta.getExpectedNumArgs recursorType
+
+      let rec go (i: Nat): MetaM (List MVarId × Expr) := do
+        let argType := forallArgs.get! i
+        sorry
+      let (newMVars, assign) ← go numArgs
+
+      goal.assign assign
+
+      pure newMVars
+    return .success {
+      root := state.root,
+      savedState := {
+        term := ← MonadBacktrack.saveState,
+        tactic := { goals := nextGoals }
+      },
+      newMVars := nextGoals.toSSet,
+      parentMVar? := .some goal,
+      calcPrevRhs? := .none
     }
   catch exception =>
     return .failure #[← exception.toMessageData.toString]
