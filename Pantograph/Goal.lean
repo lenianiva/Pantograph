@@ -80,6 +80,70 @@ private def newMVarSet (mctxOld: @&MetavarContext) (mctxNew: @&MetavarContext): 
       acc.insert mvarId
     ) SSet.empty
 
+
+protected def GoalState.focus (state: GoalState) (goalId: Nat): Option GoalState := do
+  let goal ← state.savedState.tactic.goals.get? goalId
+  return {
+    state with
+    savedState := {
+      state.savedState with
+      tactic := { goals := [goal] },
+    },
+    calcPrevRhs? := .none,
+  }
+
+/--
+Brings into scope a list of goals
+-/
+protected def GoalState.resume (state: GoalState) (goals: List MVarId): Except String GoalState :=
+  if ¬ (goals.all (λ goal => state.mvars.contains goal)) then
+    .error s!"Goals not in scope"
+  else
+    -- Set goals to the goals that have not been assigned yet, similar to the `focus` tactic.
+    let unassigned := goals.filter (λ goal =>
+      let mctx := state.mctx
+      ¬(mctx.eAssignment.contains goal || mctx.dAssignment.contains goal))
+    .ok {
+      state with
+      savedState := {
+        term := state.savedState.term,
+        tactic := { goals := unassigned },
+      },
+      calcPrevRhs? := .none,
+    }
+/--
+Brings into scope all goals from `branch`
+-/
+protected def GoalState.continue (target: GoalState) (branch: GoalState): Except String GoalState :=
+  if !target.goals.isEmpty then
+    .error s!"Target state has unresolved goals"
+  else if target.root != branch.root then
+    .error s!"Roots of two continued goal states do not match: {target.root.name} != {branch.root.name}"
+  else
+    target.resume (goals := branch.goals)
+
+protected def GoalState.rootExpr? (goalState: GoalState): Option Expr := do
+  let expr ← goalState.mctx.eAssignment.find? goalState.root
+  let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
+  if expr.hasMVar then
+    -- Must not assert that the goal state is empty here. We could be in a branch goal.
+    --assert! ¬goalState.goals.isEmpty
+    .none
+  else
+    assert! goalState.goals.isEmpty
+    return expr
+protected def GoalState.parentExpr? (goalState: GoalState): Option Expr := do
+  let parent ← goalState.parentMVar?
+  let expr := goalState.mctx.eAssignment.find! parent
+  let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
+  return expr
+protected def GoalState.assignedExprOf? (goalState: GoalState) (mvar: MVarId): Option Expr := do
+  let expr ← goalState.mctx.eAssignment.find? mvar
+  let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
+  return expr
+
+--- Tactic execution functions ---
+
 /-- Inner function for executing tactic on goal state -/
 def executeTactic (state: Elab.Tactic.SavedState) (goal: MVarId) (tactic: Syntax) :
     Elab.TermElabM (Except (Array String) Elab.Tactic.SavedState):= do
@@ -445,68 +509,5 @@ protected def GoalState.tryCalc (state: GoalState) (goalId: Nat) (pred: String):
     }
   catch exception =>
     return .failure #[← exception.toMessageData.toString]
-
-
-protected def GoalState.focus (state: GoalState) (goalId: Nat): Option GoalState := do
-  let goal ← state.savedState.tactic.goals.get? goalId
-  return {
-    state with
-    savedState := {
-      state.savedState with
-      tactic := { goals := [goal] },
-    },
-    calcPrevRhs? := .none,
-  }
-
-/--
-Brings into scope a list of goals
--/
-protected def GoalState.resume (state: GoalState) (goals: List MVarId): Except String GoalState :=
-  if ¬ (goals.all (λ goal => state.mvars.contains goal)) then
-    .error s!"Goals not in scope"
-  else
-    -- Set goals to the goals that have not been assigned yet, similar to the `focus` tactic.
-    let unassigned := goals.filter (λ goal =>
-      let mctx := state.mctx
-      ¬(mctx.eAssignment.contains goal || mctx.dAssignment.contains goal))
-    .ok {
-      state with
-      savedState := {
-        term := state.savedState.term,
-        tactic := { goals := unassigned },
-      },
-      calcPrevRhs? := .none,
-    }
-/--
-Brings into scope all goals from `branch`
--/
-protected def GoalState.continue (target: GoalState) (branch: GoalState): Except String GoalState :=
-  if !target.goals.isEmpty then
-    .error s!"Target state has unresolved goals"
-  else if target.root != branch.root then
-    .error s!"Roots of two continued goal states do not match: {target.root.name} != {branch.root.name}"
-  else
-    target.resume (goals := branch.goals)
-
-protected def GoalState.rootExpr? (goalState: GoalState): Option Expr := do
-  let expr ← goalState.mctx.eAssignment.find? goalState.root
-  let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
-  if expr.hasMVar then
-    -- Must not assert that the goal state is empty here. We could be in a branch goal.
-    --assert! ¬goalState.goals.isEmpty
-    .none
-  else
-    assert! goalState.goals.isEmpty
-    return expr
-protected def GoalState.parentExpr? (goalState: GoalState): Option Expr := do
-  let parent ← goalState.parentMVar?
-  let expr := goalState.mctx.eAssignment.find! parent
-  let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
-  return expr
-protected def GoalState.assignedExprOf? (goalState: GoalState) (mvar: MVarId): Option Expr := do
-  let expr ← goalState.mctx.eAssignment.find? mvar
-  let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
-  return expr
-
 
 end Pantograph
