@@ -158,37 +158,6 @@ def goalStartExpr (expr: String): Lean.CoreM (Protocol.CR GoalState) :=
       | .ok expr => pure $ expr
     return .ok $ ← GoalState.create expr
 
-@[export pantograph_goal_tactic_m]
-def goalTactic (state: GoalState) (goalId: Nat) (tactic: String): Lean.CoreM TacticResult :=
-  runTermElabM <| state.tryTactic goalId tactic
-
-@[export pantograph_goal_assign_m]
-def goalAssign (state: GoalState) (goalId: Nat) (expr: String): Lean.CoreM TacticResult :=
-  runTermElabM <| state.tryAssign goalId expr
-
-@[export pantograph_goal_have_m]
-def goalHave (state: GoalState) (goalId: Nat) (binderName: String) (type: String): Lean.CoreM TacticResult :=
-  runTermElabM <| state.tryHave goalId binderName type
-@[export pantograph_goal_let_m]
-def goalLet (state: GoalState) (goalId: Nat) (binderName: String) (type: String): Lean.CoreM TacticResult :=
-  runTermElabM <| state.tryLet goalId binderName type
-
-@[export pantograph_goal_conv_m]
-def goalConv (state: GoalState) (goalId: Nat): Lean.CoreM TacticResult :=
-  runTermElabM <| state.conv goalId
-
-@[export pantograph_goal_conv_exit_m]
-def goalConvExit (state: GoalState): Lean.CoreM TacticResult :=
-  runTermElabM <| state.convExit
-
-@[export pantograph_goal_calc_m]
-def goalCalc (state: GoalState) (goalId: Nat) (pred: String): Lean.CoreM TacticResult :=
-  runTermElabM <| state.tryCalc goalId pred
-
-@[export pantograph_goal_focus]
-def goalFocus (state: GoalState) (goalId: Nat): Option GoalState :=
-  state.focus goalId
-
 @[export pantograph_goal_resume]
 def goalResume (target: GoalState) (goals: Array String): Except String GoalState :=
   target.resume (goals.map (λ n => { name := n.toName }) |>.toList)
@@ -212,5 +181,32 @@ def goalPrint (state: GoalState) (options: @&Protocol.Options): Lean.CoreM Proto
         serializeExpression options (← unfoldAuxLemmas expr)),
     }
 
+@[export pantograph_goal_tactic_m]
+def goalTactic (state: GoalState) (goalId: Nat) (tactic: String): Lean.CoreM TacticResult :=
+  runTermElabM <| state.tryTactic goalId tactic
+@[export pantograph_goal_assign_m]
+def goalAssign (state: GoalState) (goalId: Nat) (expr: String): Lean.CoreM TacticResult :=
+  runTermElabM <| state.tryAssign goalId expr
+@[export pantograph_goal_have_m]
+def goalHave (state: GoalState) (goalId: Nat) (binderName: String) (type: String): Lean.CoreM TacticResult :=
+  runTermElabM <| state.tryHave goalId binderName type
+@[export pantograph_goal_let_m]
+def goalLet (state: GoalState) (goalId: Nat) (binderName: String) (type: String): Lean.CoreM TacticResult :=
+  runTermElabM <| state.tryLet goalId binderName type
+@[export pantograph_goal_conv_m]
+def goalConv (state: GoalState) (goalId: Nat): Lean.CoreM TacticResult :=
+  runTermElabM <| state.conv goalId
+@[export pantograph_goal_conv_exit_m]
+def goalConvExit (state: GoalState): Lean.CoreM TacticResult :=
+  runTermElabM <| state.convExit
+@[export pantograph_goal_calc_m]
+def goalCalc (state: GoalState) (goalId: Nat) (pred: String): Lean.CoreM TacticResult :=
+  runTermElabM <| state.tryCalc goalId pred
+@[export pantograph_goal_focus]
+def goalFocus (state: GoalState) (goalId: Nat): Option GoalState :=
+  state.focus goalId
+@[export pantograph_goal_motivated_apply_m]
+def goalMotivatedApply (state: GoalState) (goalId: Nat) (recursor: String): Lean.CoreM TacticResult :=
+  runTermElabM <| state.tryMotivatedApply goalId recursor
 
 end Pantograph
