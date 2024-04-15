@@ -49,6 +49,16 @@ def startProof (start: Start): TestM (Option GoalState) := do
         let goal ← GoalState.create (expr := expr)
         return Option.some goal
 
+def buildNamedGoal (name: String) (nameType: List (String × String)) (target: String): Protocol.Goal :=
+  {
+    name,
+    target := { pp? := .some target},
+    vars := (nameType.map fun x => ({
+      userName := x.fst,
+      type? := .some { pp? := .some x.snd },
+      isInaccessible? := .some false
+    })).toArray
+  }
 def buildGoal (nameType: List (String × String)) (target: String) (userName?: Option String := .none): Protocol.Goal :=
   {
     userName?,
@@ -582,7 +592,7 @@ def test_let (specialized: Bool): TestM Unit := do
       interiorGoal [] "let b := ?m.20;\np ∨ ¬p"
     ])
   -- Check that the goal mvar ids match up
-  addTest $ LSpec.check expr ((serializedState2.map (·.name) |>.get! 0) = "_uniq.20")
+  addTest $ LSpec.check "(mvarId)" ((serializedState2.map (·.name) |>.get! 0) = "_uniq.20")
 
   let tactic := "exact a"
   let state3 ← match ← state2.tryTactic (goalId := 0) (tactic := tactic) with
@@ -625,6 +635,80 @@ def test_let (specialized: Bool): TestM Unit := do
       let free := [("a", "Nat"), ("p", "Prop"), ("h", "p")] ++ free
       buildGoal free target userName?
 
+def test_nat_zero_add: TestM Unit := do
+  let state? ← startProof (.expr "∀ (n: Nat), n + 0 = n")
+  let state0 ← match state? with
+    | .some state => pure state
+    | .none => do
+      addTest $ assertUnreachable "Goal could not parse"
+      return ()
+  let tactic := "intro n"
+  let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check tactic ((← state1.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[buildGoal [("n", "Nat")] "n + 0 = n"])
+  let recursor := "@Nat.brecOn"
+  let state2 ← match ← state1.tryMotivatedApply (goalId := 0) (recursor := recursor) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check s!"mapply {recursor}" ((← state2.serializeGoals (options := ← read)).map (·.devolatilizeVars) =
+    #[
+      buildNamedGoal "_uniq.70" [("n", "Nat")] "Nat → Sort ?u.66",
+      buildNamedGoal "_uniq.71" [("n", "Nat")] "Nat",
+      buildNamedGoal "_uniq.72" [("n", "Nat")] "(t : Nat) → Nat.below t → ?m.70 t"
+    ])
+
+  let tactic := "exact n"
+  let state3b ← match ← state2.tryTactic (goalId := 1) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check tactic ((← state3b.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[])
+  let state2b ← match state3b.continue state2 with
+    | .ok state => pure state
+    | .error e => do
+      addTest $ assertUnreachable e
+      return ()
+  let tactic := "exact (λ x => x + 0 = x)"
+  let state3c ← match ← state2b.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check tactic ((← state3c.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[])
+  let state2c ← match state3c.continue state2b with
+    | .ok state => pure state
+    | .error e => do
+      addTest $ assertUnreachable e
+      return ()
+  let tactic := "intro t h"
+  let state3 ← match ← state2c.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check tactic ((← state3.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[buildGoal [("n", "Nat"), ("t", "Nat"), ("h", "Nat.below t")] "t + 0 = t"])
+
+  let tactic := "simp"
+  let stateF ← match ← state3.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check tactic ((← stateF.serializeGoals (options := ← read)) =
+    #[])
+
+  addTest $ LSpec.check "(F root)" stateF.rootExpr?.isSome
+
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
     ("Nat.add_comm", test_nat_add_comm false),
@@ -637,6 +721,7 @@ def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
     ("calc", test_calc),
     ("let via assign", test_let false),
     ("let via tryLet", test_let true),
+    ("Nat.zero_add", test_nat_zero_add),
   ]
   tests.map (fun (name, test) => (name, proofRunner env test))
 

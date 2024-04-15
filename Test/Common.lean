@@ -10,11 +10,9 @@ namespace Pantograph
 
 -- Auxiliary functions
 namespace Protocol
-/-- Set internal names to "" -/
-def Goal.devolatilize (goal: Goal): Goal :=
+def Goal.devolatilizeVars (goal: Goal): Goal :=
   {
     goal with
-    name := "",
     vars := goal.vars.map removeInternalAux,
   }
   where removeInternalAux (v: Variable): Variable :=
@@ -22,6 +20,13 @@ def Goal.devolatilize (goal: Goal): Goal :=
       v with
       name := ""
     }
+/-- Set internal names to "" -/
+def Goal.devolatilize (goal: Goal): Goal :=
+  {
+    goal.devolatilizeVars with
+    name := "",
+  }
+
 deriving instance DecidableEq, Repr for Expression
 deriving instance DecidableEq, Repr for Variable
 deriving instance DecidableEq, Repr for Goal

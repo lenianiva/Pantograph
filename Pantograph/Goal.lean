@@ -547,7 +547,7 @@ protected def GoalState.tryMotivatedApply (state: GoalState) (goalId: Nat) (recu
   try
     -- Implemented similarly to the intro tactic
     let nextGoals: List MVarId ← goal.withContext do
-      let recursor ← Elab.Term.elabType (stx := recursor)
+      let recursor ← Elab.Term.elabTerm (stx := recursor) .none
       let recursorType ← Meta.inferType recursor
 
       let (forallArgs, forallBody) := getForallArgsBody recursorType
@@ -555,14 +555,24 @@ protected def GoalState.tryMotivatedApply (state: GoalState) (goalId: Nat) (recu
 
       let numArgs ← Meta.getExpectedNumArgs recursorType
 
-      let rec go (i: Nat): MetaM (List MVarId × Expr) := do
-        let argType := forallArgs.get! i
-        sorry
-      let (newMVars, assign) ← go numArgs
+      let rec go (i: Nat) (prev: Array Expr): MetaM (Array Expr) := do
+        if i ≥ numArgs then
+          return prev
+        else
+          let argType := forallArgs.get! i
+          -- If `argType` has motive references, its goal needs to be placed in it
+          let argType := argType.instantiateRev prev
+          -- Create the goal
+          let argGoal ← Meta.mkFreshExprMVar argType .natural .anonymous
+          let prev :=  prev ++ [argGoal]
+          go (i + 1) prev
+        termination_by numArgs - i
+      let newMVars ← go 0 #[]
 
-      goal.assign assign
+      -- Create the main goal for the return type of the recursor
+      goal.assign (mkAppN recursor newMVars)
 
-      pure newMVars
+      pure $ newMVars.toList.map (·.mvarId!)
     return .success {
       root := state.root,
       savedState := {
