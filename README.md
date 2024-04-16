@@ -82,7 +82,8 @@ where the application of `assumption` should lead to a failure.
 See `Pantograph/Protocol.lean` for a description of the parameters and return values in JSON.
 * `reset`: Delete all cached expressions and proof trees
 * `stat`: Display resource usage
-* `expr.echo {"expr": <expr>, "type": <optional expected type>}`: Determine the type of an expression and format it
+* `expr.echo {"expr": <expr>, "type": <optional expected type>}`: Determine the
+  type of an expression and format it
 * `env.catalog`: Display a list of all safe Lean symbols in the current environment
 * `env.inspect {"name": <name>, "value": <bool>}`: Show the type and package of a
   given symbol; If value flag is set, the value is printed or hidden. By default
@@ -94,16 +95,19 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
   Start a new proof from a given expression or symbol
 * `goal.tactic {"stateId": <id>, "goalId": <id>, ...}`: Execute a tactic string on a
   given goal. The tactic is supplied as additional key-value pairs in one of the following formats:
-  - `{ "tactic": <tactic> }`: Executes an ordinary tactic
-  - `{ "expr": <expr> }`: Assigns the given proof term to the current expression
-  - `{ "have": <expr>, "binderName": <name> }`: Executes `have` and create a branch goal
-  - `{ "calc": <expr> }`: Executes one step of a `calc` tactic. Each step must
+  - `{ "tactic": <tactic> }`: Execute an ordinary tactic
+  - `{ "expr": <expr> }`: Assign the given proof term to the current goal
+  - `{ "have": <expr>, "binderName": <name> }`: Execute `have` and creates a branch goal
+  - `{ "calc": <expr> }`: Execute one step of a `calc` tactic. Each step must
     be of the form `lhs op rhs`. An `lhs` of `_` indicates that it should be set
     to the previous `rhs`.
   - `{ "conv": <bool> }`: Enter or exit conversion tactic mode. In the case of
     exit, the goal id is ignored.
-* `goal.continue {"stateId": <id>, ["branch": <id>], ["goals": <names>]}`: Continue from a proof state
-* `goal.remove {"stateIds": [<id>]}"`: Remove a bunch of stored goals.
+* `goal.continue {"stateId": <id>, ["branch": <id>], ["goals": <names>]}`:
+  Execute continuation/resumption
+  - `{ "branch": <id> }`: Continue on branch state. The current state must have no goals.
+  - `{ "goals": <names> }`: Resume the given goals
+* `goal.remove {"stateIds": [<id>]}"`: Drop the goal states specified in the list
 * `goal.print {"stateId": <id>}"`: Print a goal state
 
 ### Errors
