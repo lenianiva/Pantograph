@@ -232,7 +232,7 @@ protected def GoalState.assign (state: GoalState) (goal: MVarId) (expr: Expr):
     -- Generate a list of mvarIds that exist in the parent state; Also test the
     -- assertion that the types have not changed on any mvars.
     let newMVars := newMVarSet prevMCtx nextMCtx
-    let nextGoals ← newMVars.toList.filterM (λ mvar => do pure !(← mvar.isAssigned))
+    let nextGoals ← newMVars.toList.filterM (not <$> ·.isAssigned)
     return .success {
       root := state.root,
       savedState := {
@@ -521,13 +521,9 @@ def getForallArgsBody: Expr → List Expr × Expr
     (d :: innerArgs, innerBody)
   | e => ([], e)
 def collectMotiveArguments (forallBody: Expr): SSet Nat :=
-  -- Get all de Bruijn indices
-  Id.run $ do
-    Expr.foldlM (λ acc subexpr => do
-      match subexpr with
-      | .app (.bvar i) _ => return acc.insert i
-      | _ => return acc
-      ) SSet.empty forallBody
+  match forallBody with
+  | .app (.bvar i) _ => SSet.empty.insert i
+  | _ => SSet.empty
 
 protected def GoalState.tryMotivatedApply (state: GoalState) (goalId: Nat) (recursor: String):
       Elab.TermElabM TacticResult := do
@@ -552,6 +548,7 @@ protected def GoalState.tryMotivatedApply (state: GoalState) (goalId: Nat) (recu
 
       let (forallArgs, forallBody) := getForallArgsBody recursorType
       let motiveIndices := collectMotiveArguments forallBody
+      --IO.println s!"{motiveIndices.toList} from {← Meta.ppExpr forallBody}"
 
       let numArgs ← Meta.getExpectedNumArgs recursorType
 
@@ -563,16 +560,26 @@ protected def GoalState.tryMotivatedApply (state: GoalState) (goalId: Nat) (recu
           -- If `argType` has motive references, its goal needs to be placed in it
           let argType := argType.instantiateRev prev
           -- Create the goal
-          let argGoal ← Meta.mkFreshExprMVar argType .natural .anonymous
+          let userName := if motiveIndices.contains (numArgs - i - 1) then `motive else .anonymous
+          let argGoal ← Meta.mkFreshExprMVar argType .syntheticOpaque (userName := userName)
+          IO.println s!"Creating [{i}] {← Meta.ppExpr argGoal}"
           let prev :=  prev ++ [argGoal]
           go (i + 1) prev
         termination_by numArgs - i
       let newMVars ← go 0 #[]
 
+      -- FIXME: Add an `Eq` target and swap out the motive type
+
+      --let sourceType := forallBody.instantiateRev newMVars
+      --unless ← withTheReader Meta.Context (λ ctx => { ctx with config := { ctx.config with } }) $
+      --       Meta.isDefEq sourceType (← goal.getType) do
+      --  throwError "invalid mapply: The resultant type {← Meta.ppExpr sourceType} cannot be unified with {← Meta.ppExpr $ ← goal.getType}"
+
       -- Create the main goal for the return type of the recursor
       goal.assign (mkAppN recursor newMVars)
 
-      pure $ newMVars.toList.map (·.mvarId!)
+      let nextGoals ← newMVars.toList.map (·.mvarId!) |>.filterM (not <$> ·.isAssigned)
+      pure nextGoals
     return .success {
       root := state.root,
       savedState := {

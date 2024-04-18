@@ -49,9 +49,11 @@ def startProof (start: Start): TestM (Option GoalState) := do
         let goal ← GoalState.create (expr := expr)
         return Option.some goal
 
-def buildNamedGoal (name: String) (nameType: List (String × String)) (target: String): Protocol.Goal :=
+def buildNamedGoal (name: String) (nameType: List (String × String)) (target: String)
+    (userName?: Option String := .none): Protocol.Goal :=
   {
     name,
+    userName?,
     target := { pp? := .some target},
     vars := (nameType.map fun x => ({
       userName := x.fst,
@@ -59,7 +61,8 @@ def buildNamedGoal (name: String) (nameType: List (String × String)) (target: S
       isInaccessible? := .some false
     })).toArray
   }
-def buildGoal (nameType: List (String × String)) (target: String) (userName?: Option String := .none): Protocol.Goal :=
+def buildGoal (nameType: List (String × String)) (target: String) (userName?: Option String := .none):
+    Protocol.Goal :=
   {
     userName?,
     target := { pp? := .some target},
@@ -658,9 +661,9 @@ def test_nat_zero_add: TestM Unit := do
       return ()
   addTest $ LSpec.check s!"mapply {recursor}" ((← state2.serializeGoals (options := ← read)).map (·.devolatilizeVars) =
     #[
-      buildNamedGoal "_uniq.70" [("n", "Nat")] "Nat → Sort ?u.66",
+      buildNamedGoal "_uniq.70" [("n", "Nat")] "Nat → Sort ?u.66" (.some "motive"),
       buildNamedGoal "_uniq.71" [("n", "Nat")] "Nat",
-      buildNamedGoal "_uniq.72" [("n", "Nat")] "(t : Nat) → Nat.below t → ?m.70 t"
+      buildNamedGoal "_uniq.72" [("n", "Nat")] "(t : Nat) → Nat.below t → ?motive t"
     ])
 
   let tactic := "exact n"

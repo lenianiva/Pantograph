@@ -38,7 +38,7 @@ namespace Pantograph
 
 def defaultTermElabMContext: Lean.Elab.Term.Context := {
     autoBoundImplicit := true,
-    declName? := some "_pantograph".toName,
+    declName? := .some `_pantograph,
     errToSorry := false
   }
 def runMetaM { α } (metaM: Lean.MetaM α): Lean.CoreM α :=
