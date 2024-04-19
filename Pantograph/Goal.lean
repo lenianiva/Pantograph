@@ -4,6 +4,7 @@ Functions for handling metavariables
 All the functions starting with `try` resume their inner monadic state.
 -/
 import Pantograph.Protocol
+import Pantograph.Tactic
 import Lean
 
 def Lean.MessageLog.getErrorMessages (log : MessageLog) : MessageLog :=
@@ -144,24 +145,6 @@ protected def GoalState.assignedExprOf? (goalState: GoalState) (mvar: MVarId): O
 
 --- Tactic execution functions ---
 
-/-- Inner function for executing tactic on goal state -/
-def executeTactic (state: Elab.Tactic.SavedState) (goal: MVarId) (tactic: Syntax) :
-    Elab.TermElabM (Except (Array String) Elab.Tactic.SavedState):= do
-  let tacticM (stx: Syntax):  Elab.Tactic.TacticM (Except (Array String) Elab.Tactic.SavedState) := do
-    state.restore
-    Elab.Tactic.setGoals [goal]
-    try
-      Elab.Tactic.evalTactic stx
-      if (← getThe Core.State).messages.hasErrors then
-        let messages := (← getThe Core.State).messages.getErrorMessages |>.toList.toArray
-        let errors ← (messages.map Message.data).mapM fun md => md.toString
-        return .error errors
-      else
-        return .ok (← MonadBacktrack.saveState)
-    catch exception =>
-      return .error #[← exception.toMessageData.toString]
-  tacticM tactic { elaborator := .anonymous } |>.run' state.tactic
-
 /-- Response for executing a tactic -/
 inductive TacticResult where
   -- Goes to next state
@@ -175,14 +158,35 @@ inductive TacticResult where
   -- The given action cannot be executed in the state
   | invalidAction (message: String)
 
-/-- Execute tactic on given state -/
-protected def GoalState.tryTactic (state: GoalState) (goalId: Nat) (tactic: String):
-    Elab.TermElabM TacticResult := do
+protected def GoalState.execute (state: GoalState) (goalId: Nat) (tacticM: Elab.Tactic.TacticM Unit):
+          Elab.TermElabM TacticResult := do
   state.restoreElabM
   let goal ← match state.savedState.tactic.goals.get? goalId with
     | .some goal => pure $ goal
     | .none => return .indexError goalId
-  goal.checkNotAssigned `GoalState.tryTactic
+  goal.checkNotAssigned `GoalState.execute
+  try
+    let (_, newGoals) ← tacticM { elaborator := .anonymous } |>.run { goals := [goal] }
+    if (← getThe Core.State).messages.hasErrors then
+      let messages := (← getThe Core.State).messages.getErrorMessages |>.toList.toArray
+      let errors ← (messages.map Message.data).mapM fun md => md.toString
+      return .failure errors
+    let nextElabState ← MonadBacktrack.saveState
+    let nextMCtx := nextElabState.meta.meta.mctx
+    let prevMCtx := state.mctx
+    return .success {
+      state with
+      savedState := { term := nextElabState, tactic := newGoals },
+      newMVars := newMVarSet prevMCtx nextMCtx,
+      parentMVar? := .some goal,
+      calcPrevRhs? := .none,
+    }
+  catch exception =>
+    return .failure #[← exception.toMessageData.toString]
+
+/-- Execute tactic on given state -/
+protected def GoalState.tryTactic (state: GoalState) (goalId: Nat) (tactic: String):
+    Elab.TermElabM TacticResult := do
   let tactic ← match Parser.runParserCategory
     (env := ← MonadEnv.getEnv)
     (catName := if state.isConv then `conv else `tactic)
@@ -190,22 +194,7 @@ protected def GoalState.tryTactic (state: GoalState) (goalId: Nat) (tactic: Stri
     (fileName := filename) with
     | .ok stx => pure $ stx
     | .error error => return .parseError error
-  match ← executeTactic (state := state.savedState) (goal := goal) (tactic := tactic) with
-  | .error errors =>
-    return .failure errors
-  | .ok nextSavedState =>
-    -- Assert that the definition of metavariables are the same
-    let nextMCtx := nextSavedState.term.meta.meta.mctx
-    let prevMCtx := state.mctx
-    -- Generate a list of mvarIds that exist in the parent state; Also test the
-    -- assertion that the types have not changed on any mvars.
-    return .success {
-      state with
-      savedState := nextSavedState
-      newMVars := newMVarSet prevMCtx nextMCtx,
-      parentMVar? := .some goal,
-      calcPrevRhs? := .none,
-    }
+  state.execute goalId $ Elab.Tactic.evalTactic tactic
 
 /-- Assumes elabM has already been restored. Assumes expr has already typechecked -/
 protected def GoalState.assign (state: GoalState) (goal: MVarId) (expr: Expr):
@@ -515,15 +504,6 @@ protected def GoalState.tryCalc (state: GoalState) (goalId: Nat) (pred: String):
   catch exception =>
     return .failure #[← exception.toMessageData.toString]
 
-def getForallArgsBody: Expr → List Expr × Expr
-  | .forallE _ d b _ =>
-    let (innerArgs, innerBody) := getForallArgsBody b
-    (d :: innerArgs, innerBody)
-  | e => ([], e)
-def collectMotiveArguments (forallBody: Expr): SSet Nat :=
-  match forallBody with
-  | .app (.bvar i) _ => SSet.empty.insert i
-  | _ => SSet.empty
 
 protected def GoalState.tryMotivatedApply (state: GoalState) (goalId: Nat) (recursor: String):
       Elab.TermElabM TacticResult := do
@@ -540,57 +520,6 @@ protected def GoalState.tryMotivatedApply (state: GoalState) (goalId: Nat) (recu
     (fileName := filename) with
     | .ok syn => pure syn
     | .error error => return .parseError error
-  try
-    -- Implemented similarly to the intro tactic
-    let nextGoals: List MVarId ← goal.withContext do
-      let recursor ← Elab.Term.elabTerm (stx := recursor) .none
-      let recursorType ← Meta.inferType recursor
-
-      let (forallArgs, forallBody) := getForallArgsBody recursorType
-      let motiveIndices := collectMotiveArguments forallBody
-      --IO.println s!"{motiveIndices.toList} from {← Meta.ppExpr forallBody}"
-
-      let numArgs ← Meta.getExpectedNumArgs recursorType
-
-      let rec go (i: Nat) (prev: Array Expr): MetaM (Array Expr) := do
-        if i ≥ numArgs then
-          return prev
-        else
-          let argType := forallArgs.get! i
-          -- If `argType` has motive references, its goal needs to be placed in it
-          let argType := argType.instantiateRev prev
-          -- Create the goal
-          let userName := if motiveIndices.contains (numArgs - i - 1) then `motive else .anonymous
-          let argGoal ← Meta.mkFreshExprMVar argType .syntheticOpaque (userName := userName)
-          IO.println s!"Creating [{i}] {← Meta.ppExpr argGoal}"
-          let prev :=  prev ++ [argGoal]
-          go (i + 1) prev
-        termination_by numArgs - i
-      let newMVars ← go 0 #[]
-
-      -- FIXME: Add an `Eq` target and swap out the motive type
-
-      --let sourceType := forallBody.instantiateRev newMVars
-      --unless ← withTheReader Meta.Context (λ ctx => { ctx with config := { ctx.config with } }) $
-      --       Meta.isDefEq sourceType (← goal.getType) do
-      --  throwError "invalid mapply: The resultant type {← Meta.ppExpr sourceType} cannot be unified with {← Meta.ppExpr $ ← goal.getType}"
-
-      -- Create the main goal for the return type of the recursor
-      goal.assign (mkAppN recursor newMVars)
-
-      let nextGoals ← newMVars.toList.map (·.mvarId!) |>.filterM (not <$> ·.isAssigned)
-      pure nextGoals
-    return .success {
-      root := state.root,
-      savedState := {
-        term := ← MonadBacktrack.saveState,
-        tactic := { goals := nextGoals }
-      },
-      newMVars := nextGoals.toSSet,
-      parentMVar? := .some goal,
-      calcPrevRhs? := .none
-    }
-  catch exception =>
-    return .failure #[← exception.toMessageData.toString]
+  state.execute goalId (tacticM := Tactic.motivatedApply recursor)
 
 end Pantograph
