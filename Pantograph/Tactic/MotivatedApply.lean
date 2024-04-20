@@ -14,6 +14,7 @@ def collectMotiveArguments (forallBody: Expr): SSet Nat :=
   | .app (.bvar i) _ => SSet.empty.insert i
   | _ => SSet.empty
 
+/-- Applies a symbol of the type `∀ (motive: α → Sort u) (a: α)..., (motive α)` -/
 def motivatedApply: Elab.Tactic.Tactic := λ stx => do
   let goal ← Elab.Tactic.getMainGoal
   let nextGoals: List MVarId ← goal.withContext do

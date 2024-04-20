@@ -5,6 +5,7 @@ import Test.Library
 import Test.Metavar
 import Test.Proofs
 import Test.Serial
+import Test.Tactic
 
 -- Test running infrastructure
 
@@ -48,6 +49,7 @@ def main (args: List String) := do
     ("Metavar", Metavar.suite env_default),
     ("Proofs", Proofs.suite env_default),
     ("Serial", Serial.suite env_default),
+    ("Tactic/Motivated Apply", Tactic.MotivatedApply.suite env_default),
   ]
   let tests: List (String × IO LSpec.TestSeq) := suites.foldl (λ acc (name, suite) => acc ++ (addPrefix name suite)) []
   LSpec.lspecIO (← runTestGroup name_filter tests)
