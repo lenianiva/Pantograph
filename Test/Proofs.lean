@@ -664,7 +664,7 @@ def test_nat_zero_add: TestM Unit := do
       buildNamedGoal "_uniq.67" [("n", "Nat")] "Nat → Prop" (.some "motive"),
       buildNamedGoal "_uniq.68" [("n", "Nat")] "Nat",
       buildNamedGoal "_uniq.69" [("n", "Nat")] "∀ (t : Nat), Nat.below t → ?motive t",
-      buildNamedGoal "_uniq.70" [("n", "Nat")] "?motive ?m.68 = (n + 0 = n)" (.some "phantom")
+      buildNamedGoal "_uniq.70" [("n", "Nat")] "?motive ?m.68 = (n + 0 = n)" (.some "conduit")
     ])
 
   let tactic := "exact n"
@@ -703,7 +703,18 @@ def test_nat_zero_add: TestM Unit := do
     #[buildGoal [("n", "Nat"), ("t", "Nat"), ("h", "Nat.below t")] "t + 0 = t"])
 
   let tactic := "simp"
-  let stateF ← match ← state3.tryTactic (goalId := 0) (tactic := tactic) with
+  let state3d ← match ← state3.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  let state2d ← match state3d.continue state2c with
+    | .ok state => pure state
+    | .error e => do
+      addTest $ assertUnreachable e
+      return ()
+  let tactic := "rfl"
+  let stateF ← match ← state2d.tryTactic (goalId := 0) (tactic := tactic) with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString

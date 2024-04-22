@@ -37,7 +37,7 @@ protected def surrogateMotiveType (info: RecursorWithMotive) (resultant: Expr): 
   let resultantType ← Meta.inferType resultant
   return replaceForallBody motiveType resultantType
 
-protected def phantomType (info: RecursorWithMotive) (mvars: Array Expr) (resultant: Expr): MetaM Expr := do
+protected def conduitType (info: RecursorWithMotive) (mvars: Array Expr) (resultant: Expr): MetaM Expr := do
   let motiveCall := Expr.instantiateRev info.body mvars
   Meta.mkEq motiveCall resultant
 
@@ -92,11 +92,11 @@ def motivatedApply: Elab.Tactic.Tactic := λ stx => do
       termination_by info.nArgs - i
     let mut newMVars ← go 0 #[]
 
-    goal.assign (mkAppN recursor newMVars)
-
-    let phantomType ← info.phantomType newMVars resultant
-    let goalPhantom ← Meta.mkFreshExprMVar phantomType .syntheticOpaque (userName := `phantom)
-    newMVars := newMVars ++ [goalPhantom]
+    -- Create the conduit type which proves the result of the motive is equal to the goal
+    let conduitType ← info.conduitType newMVars resultant
+    let goalConduit ← Meta.mkFreshExprMVar conduitType .syntheticOpaque (userName := `conduit)
+    goal.assign $ ← Meta.mkEqMP goalConduit (mkAppN recursor newMVars)
+    newMVars := newMVars ++ [goalConduit]
 
     let nextGoals ← newMVars.toList.map (·.mvarId!) |>.filterM (not <$> ·.isAssigned)
     pure nextGoals
