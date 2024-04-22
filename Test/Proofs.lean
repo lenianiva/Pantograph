@@ -662,9 +662,9 @@ def test_nat_zero_add: TestM Unit := do
   addTest $ LSpec.check s!"mapply {recursor}" ((← state2.serializeGoals (options := ← read)).map (·.devolatilizeVars) =
     #[
       buildNamedGoal "_uniq.67" [("n", "Nat")] "Nat → Prop" (.some "motive"),
-      buildNamedGoal "_uniq.68" [("n", "Nat")] "Nat" (.some "major"),
+      buildNamedGoal "_uniq.68" [("n", "Nat")] "Nat",
       buildNamedGoal "_uniq.69" [("n", "Nat")] "∀ (t : Nat), Nat.below t → ?motive t",
-      buildNamedGoal "_uniq.70" [("n", "Nat")] "?motive ?major = (n + 0 = n)" (.some "phantom")
+      buildNamedGoal "_uniq.70" [("n", "Nat")] "?motive ?m.68 = (n + 0 = n)" (.some "phantom")
     ])
 
   let tactic := "exact n"

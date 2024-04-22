@@ -31,7 +31,6 @@ def test_type_extract (env: Environment): IO LSpec.TestSeq :=
       | .some info => pure info
       | .none => throwError "Failed to extract recursor info"
     tests := tests ++ LSpec.check "iMotive" (info.iMotive = 2)
-    tests := tests ++ LSpec.check "iMajor" (info.iMajor = 1)
     let motiveType := info.getMotiveType
     tests := tests ++ LSpec.check "motiveType" ("Nat → Sort ?u.1" =
       (← exprToStr motiveType))
@@ -60,7 +59,7 @@ def test_execute (env: Environment): IO LSpec.TestSeq :=
             "Nat → Prop",
             "Nat",
             "∀ (t : Nat), Nat.below t → ?motive t",
-            "?motive ?major = (n + 0 = n)",
+            "?motive ?m.69 = (n + 0 = n)",
           ])
       tests := tests ++ test
       return tests

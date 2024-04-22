@@ -22,7 +22,6 @@ structure RecursorWithMotive where
 
   -- .bvar index for the motive and major from the body
   iMotive: Nat
-  iMajor: Nat
 
 namespace RecursorWithMotive
 
@@ -39,22 +38,22 @@ protected def surrogateMotiveType (info: RecursorWithMotive) (resultant: Expr): 
   return replaceForallBody motiveType resultantType
 
 protected def phantomType (info: RecursorWithMotive) (mvars: Array Expr) (resultant: Expr): MetaM Expr := do
-  let goalMotive := mvars.get! (info.nArgs - info.iMotive - 1)
-  let goalMajor := mvars.get! (info.nArgs - info.iMajor - 1)
-  Meta.mkEq (.app goalMotive goalMajor) resultant
+  let motiveCall := Expr.instantiateRev info.body mvars
+  Meta.mkEq motiveCall resultant
 
 end RecursorWithMotive
 
 def getRecursorInformation (recursorType: Expr): Option RecursorWithMotive := do
   let (args, body) := getForallArgsBody recursorType
-  let (iMotive, iMajor) ← match body with
-    | .app (.bvar iMotive) (.bvar iMajor) => pure (iMotive, iMajor)
+  if ¬ body.isApp then
+    .none
+  let iMotive ← match body.getAppFn with
+    | .bvar iMotive => pure iMotive
     | _ => .none
   return {
     args,
     body,
     iMotive,
-    iMajor,
   }
 
 def collectMotiveArguments (forallBody: Expr): SSet Nat :=
@@ -86,8 +85,6 @@ def motivatedApply: Elab.Tactic.Tactic := λ stx => do
         let argGoal ← if bvarIndex = info.iMotive then
             let surrogateMotiveType ← info.surrogateMotiveType resultant
             Meta.mkFreshExprMVar surrogateMotiveType .syntheticOpaque (userName := `motive)
-          else if bvarIndex = info.iMajor then
-            Meta.mkFreshExprMVar argType .syntheticOpaque (userName := `major)
           else
             Meta.mkFreshExprMVar argType .syntheticOpaque (userName := .anonymous)
         let prev :=  prev ++ [argGoal]
