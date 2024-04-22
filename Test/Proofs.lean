@@ -661,9 +661,10 @@ def test_nat_zero_add: TestM Unit := do
       return ()
   addTest $ LSpec.check s!"mapply {recursor}" ((← state2.serializeGoals (options := ← read)).map (·.devolatilizeVars) =
     #[
-      buildNamedGoal "_uniq.70" [("n", "Nat")] "Nat → Sort ?u.66" (.some "motive"),
-      buildNamedGoal "_uniq.71" [("n", "Nat")] "Nat",
-      buildNamedGoal "_uniq.72" [("n", "Nat")] "(t : Nat) → Nat.below t → ?motive t"
+      buildNamedGoal "_uniq.67" [("n", "Nat")] "Nat → Prop" (.some "motive"),
+      buildNamedGoal "_uniq.68" [("n", "Nat")] "Nat" (.some "major"),
+      buildNamedGoal "_uniq.69" [("n", "Nat")] "∀ (t : Nat), Nat.below t → ?motive t",
+      buildNamedGoal "_uniq.70" [("n", "Nat")] "?motive ?major = (n + 0 = n)" (.some "phantom")
     ])
 
   let tactic := "exact n"
@@ -710,6 +711,8 @@ def test_nat_zero_add: TestM Unit := do
   addTest $ LSpec.check tactic ((← stateF.serializeGoals (options := ← read)) =
     #[])
 
+  let expr := stateF.mctx.eAssignment.find! stateF.root
+  let (expr, _) := instantiateMVarsCore (mctx := stateF.mctx) (e := expr)
   addTest $ LSpec.check "(F root)" stateF.rootExpr?.isSome
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=

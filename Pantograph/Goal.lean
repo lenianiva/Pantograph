@@ -126,7 +126,7 @@ protected def GoalState.continue (target: GoalState) (branch: GoalState): Except
 protected def GoalState.rootExpr? (goalState: GoalState): Option Expr := do
   let expr ← goalState.mctx.eAssignment.find? goalState.root
   let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
-  if expr.hasMVar then
+  if expr.hasExprMVar then
     -- Must not assert that the goal state is empty here. We could be in a branch goal.
     --assert! ¬goalState.goals.isEmpty
     .none

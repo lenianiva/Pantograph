@@ -63,6 +63,12 @@ def runMetaMSeq (env: Environment) (metaM: MetaM LSpec.TestSeq): IO LSpec.TestSe
 def runTermElabMInMeta { α } (termElabM: Lean.Elab.TermElabM α): Lean.MetaM α :=
   termElabM.run' (ctx := Pantograph.defaultTermElabMContext)
 
+def exprToStr (e: Expr): Lean.MetaM String := toString <$> Meta.ppExpr e
+
+def runTacticOnMVar (tacticM: Elab.Tactic.TacticM Unit) (goal: MVarId): Elab.TermElabM (List MVarId) := do
+    let (_, newGoals) ← tacticM { elaborator := .anonymous } |>.run { goals := [goal] }
+    return newGoals.goals
+
 end Test
 
 end Pantograph

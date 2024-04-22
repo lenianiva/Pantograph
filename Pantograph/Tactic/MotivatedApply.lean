@@ -9,6 +9,54 @@ def getForallArgsBody: Expr → List Expr × Expr
     let (innerArgs, innerBody) := getForallArgsBody b
     (d :: innerArgs, innerBody)
   | e => ([], e)
+
+def replaceForallBody: Expr → Expr → Expr
+  | .forallE param domain body binderInfo, target =>
+    let body := replaceForallBody body target
+    .forallE param domain body binderInfo
+  | _, target => target
+
+structure RecursorWithMotive where
+  args: List Expr
+  body: Expr
+
+  -- .bvar index for the motive and major from the body
+  iMotive: Nat
+  iMajor: Nat
+
+namespace RecursorWithMotive
+
+protected def nArgs (info: RecursorWithMotive): Nat := info.args.length
+
+protected def getMotiveType (info: RecursorWithMotive): Expr :=
+  let level := info.nArgs - info.iMotive - 1
+  let a := info.args.get! level
+  a
+
+protected def surrogateMotiveType (info: RecursorWithMotive) (resultant: Expr): MetaM Expr := do
+  let motiveType := info.getMotiveType
+  let resultantType ← Meta.inferType resultant
+  return replaceForallBody motiveType resultantType
+
+protected def phantomType (info: RecursorWithMotive) (mvars: Array Expr) (resultant: Expr): MetaM Expr := do
+  let goalMotive := mvars.get! (info.nArgs - info.iMotive - 1)
+  let goalMajor := mvars.get! (info.nArgs - info.iMajor - 1)
+  Meta.mkEq (.app goalMotive goalMajor) resultant
+
+end RecursorWithMotive
+
+def getRecursorInformation (recursorType: Expr): Option RecursorWithMotive := do
+  let (args, body) := getForallArgsBody recursorType
+  let (iMotive, iMajor) ← match body with
+    | .app (.bvar iMotive) (.bvar iMajor) => pure (iMotive, iMajor)
+    | _ => .none
+  return {
+    args,
+    body,
+    iMotive,
+    iMajor,
+  }
+
 def collectMotiveArguments (forallBody: Expr): SSet Nat :=
   match forallBody with
   | .app (.bvar i) _ => SSet.empty.insert i
@@ -21,37 +69,37 @@ def motivatedApply: Elab.Tactic.Tactic := λ stx => do
     let recursor ← Elab.Term.elabTerm (stx := stx) .none
     let recursorType ← Meta.inferType recursor
 
-    let (forallArgs, forallBody) := getForallArgsBody recursorType
-    let motiveIndices := collectMotiveArguments forallBody
-    --IO.println s!"{motiveIndices.toList} from {← Meta.ppExpr forallBody}"
+    let resultant ← goal.getType
 
-    let numArgs ← Meta.getExpectedNumArgs recursorType
+    let info ← match getRecursorInformation recursorType with
+      | .some info => pure info
+      | .none => throwError "Recursor return type does not correspond with the invocation of a motive: {← Meta.ppExpr recursorType}"
 
     let rec go (i: Nat) (prev: Array Expr): MetaM (Array Expr) := do
-      if i ≥ numArgs then
+      if i ≥ info.nArgs then
         return prev
       else
-        let argType := forallArgs.get! i
+        let argType := info.args.get! i
         -- If `argType` has motive references, its goal needs to be placed in it
         let argType := argType.instantiateRev prev
-        -- Create the goal
-        let userName := if motiveIndices.contains (numArgs - i - 1) then `motive else .anonymous
-        let argGoal ← Meta.mkFreshExprMVar argType .syntheticOpaque (userName := userName)
-        IO.println s!"Creating [{i}] {← Meta.ppExpr argGoal}"
+        let bvarIndex := info.nArgs - i - 1
+        let argGoal ← if bvarIndex = info.iMotive then
+            let surrogateMotiveType ← info.surrogateMotiveType resultant
+            Meta.mkFreshExprMVar surrogateMotiveType .syntheticOpaque (userName := `motive)
+          else if bvarIndex = info.iMajor then
+            Meta.mkFreshExprMVar argType .syntheticOpaque (userName := `major)
+          else
+            Meta.mkFreshExprMVar argType .syntheticOpaque (userName := .anonymous)
         let prev :=  prev ++ [argGoal]
         go (i + 1) prev
-      termination_by numArgs - i
-    let newMVars ← go 0 #[]
+      termination_by info.nArgs - i
+    let mut newMVars ← go 0 #[]
 
-    -- FIXME: Add an `Eq` target and swap out the motive type
-
-    --let sourceType := forallBody.instantiateRev newMVars
-    --unless ← withTheReader Meta.Context (λ ctx => { ctx with config := { ctx.config with } }) $
-    --       Meta.isDefEq sourceType (← goal.getType) do
-    --  throwError "invalid mapply: The resultant type {← Meta.ppExpr sourceType} cannot be unified with {← Meta.ppExpr $ ← goal.getType}"
-
-    -- Create the main goal for the return type of the recursor
     goal.assign (mkAppN recursor newMVars)
+
+    let phantomType ← info.phantomType newMVars resultant
+    let goalPhantom ← Meta.mkFreshExprMVar phantomType .syntheticOpaque (userName := `phantom)
+    newMVars := newMVars ++ [goalPhantom]
 
     let nextGoals ← newMVars.toList.map (·.mvarId!) |>.filterM (not <$> ·.isAssigned)
     pure nextGoals

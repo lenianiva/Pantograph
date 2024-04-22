@@ -1,9 +1,9 @@
 LIB := ./.lake/build/lib/Pantograph.olean
 EXE := ./.lake/build/bin/pantograph
-SOURCE := $(wildcard Pantograph/*.lean) $(wildcard *.lean) lean-toolchain
+SOURCE := $(wildcard *.lean Pantograph/*.lean Pantograph/**/*.lean) lean-toolchain
 
 TEST_EXE := ./.lake/build/bin/test
-TEST_SOURCE := $(wildcard Test/*.lean)
+TEST_SOURCE := $(wildcard Test/*.lean Test/**/*.lean)
 
 $(LIB) $(EXE): $(SOURCE)
 	lake build pantograph
