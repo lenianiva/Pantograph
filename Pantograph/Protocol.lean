@@ -193,7 +193,6 @@ structure OptionsSetResult where
   deriving Lean.ToJson
 structure OptionsPrint where
   deriving Lean.FromJson
-abbrev OptionsPrintResult := Options
 
 structure GoalStart where
   -- Only one of the fields below may be populated.

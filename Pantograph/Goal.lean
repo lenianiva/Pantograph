@@ -169,7 +169,7 @@ protected def GoalState.execute (state: GoalState) (goalId: Nat) (tacticM: Elab.
     let (_, newGoals) ← tacticM { elaborator := .anonymous } |>.run { goals := [goal] }
     if (← getThe Core.State).messages.hasErrors then
       let messages := (← getThe Core.State).messages.getErrorMessages |>.toList.toArray
-      let errors ← (messages.map Message.data).mapM fun md => md.toString
+      let errors ← (messages.map (·.data)).mapM fun md => md.toString
       return .failure errors
     let nextElabState ← MonadBacktrack.saveState
     let nextMCtx := nextElabState.meta.meta.mctx
@@ -214,7 +214,7 @@ protected def GoalState.assign (state: GoalState) (goal: MVarId) (expr: Expr):
     goal.assign expr
     if (← getThe Core.State).messages.hasErrors then
       let messages := (← getThe Core.State).messages.getErrorMessages |>.toList.toArray
-      let errors ← (messages.map Message.data).mapM fun md => md.toString
+      let errors ← (messages.map (·.data)).mapM fun md => md.toString
       return .failure errors
     let prevMCtx := state.savedState.term.meta.meta.mctx
     let nextMCtx ← getMCtx

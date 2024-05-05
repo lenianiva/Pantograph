@@ -65,7 +65,7 @@ def test_option_modify : IO LSpec.TestSeq :=
     subroutine_step "options.print"
       []
      (Lean.toJson ({ options with printExprAST := true }:
-      Protocol.OptionsPrintResult))
+      Protocol.Options))
   ]
 def test_malformed_command : IO LSpec.TestSeq :=
   let invalid := "invalid"

@@ -87,7 +87,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
       }
     }
     return .ok {  }
-  options_print (_: Protocol.OptionsPrint): MainM (CR Protocol.OptionsPrintResult) := do
+  options_print (_: Protocol.OptionsPrint): MainM (CR Protocol.Options) := do
     return .ok (← get).options
   goal_start (args: Protocol.GoalStart): MainM (CR Protocol.GoalStartResult) := do
     let state ← get
