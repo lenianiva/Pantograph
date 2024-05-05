@@ -208,5 +208,8 @@ def goalFocus (state: GoalState) (goalId: Nat): Option GoalState :=
 @[export pantograph_goal_motivated_apply_m]
 def goalMotivatedApply (state: GoalState) (goalId: Nat) (recursor: String): Lean.CoreM TacticResult :=
   runTermElabM <| state.tryMotivatedApply goalId recursor
+@[export pantograph_goal_no_confuse_m]
+def goalNoConfuse (state: GoalState) (goalId: Nat) (recursor: String): Lean.CoreM TacticResult :=
+  runTermElabM <| state.tryNoConfuse goalId recursor
 
 end Pantograph

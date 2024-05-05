@@ -521,7 +521,7 @@ protected def GoalState.tryMotivatedApply (state: GoalState) (goalId: Nat) (recu
     | .ok syn => pure syn
     | .error error => return .parseError error
   state.execute goalId (tacticM := Tactic.motivatedApply recursor)
-protected def GoalState.tryNoConfusion (state: GoalState) (goalId: Nat) (eq: String):
+protected def GoalState.tryNoConfuse (state: GoalState) (goalId: Nat) (eq: String):
       Elab.TermElabM TacticResult := do
   state.restoreElabM
   let goal ← match state.savedState.tactic.goals.get? goalId with
