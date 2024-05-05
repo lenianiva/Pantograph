@@ -32,8 +32,8 @@ protected def getMotiveType (info: RecursorWithMotive): Expr :=
   let a := info.args.get! level
   a
 
-protected def surrogateMotiveType (info: RecursorWithMotive) (resultant: Expr): MetaM Expr := do
-  let motiveType := info.getMotiveType
+protected def surrogateMotiveType (info: RecursorWithMotive) (mvars: Array Expr) (resultant: Expr): MetaM Expr := do
+  let motiveType := Expr.instantiateRev info.getMotiveType mvars
   let resultantType ← Meta.inferType resultant
   return replaceForallBody motiveType resultantType
 
@@ -83,7 +83,7 @@ def motivatedApply: Elab.Tactic.Tactic := λ stx => do
         let argType := argType.instantiateRev prev
         let bvarIndex := info.nArgs - i - 1
         let argGoal ← if bvarIndex = info.iMotive then
-            let surrogateMotiveType ← info.surrogateMotiveType resultant
+            let surrogateMotiveType ← info.surrogateMotiveType prev resultant
             Meta.mkFreshExprMVar surrogateMotiveType .syntheticOpaque (userName := `motive)
           else
             Meta.mkFreshExprMVar argType .syntheticOpaque (userName := .anonymous)
