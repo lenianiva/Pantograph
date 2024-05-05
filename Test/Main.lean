@@ -50,6 +50,7 @@ def main (args: List String) := do
     ("Proofs", Proofs.suite env_default),
     ("Serial", Serial.suite env_default),
     ("Tactic/Motivated Apply", Tactic.MotivatedApply.suite env_default),
+    ("Tactic/No Confuse", Tactic.NoConfuse.suite env_default),
   ]
   let tests: List (String × IO LSpec.TestSeq) := suites.foldl (λ acc (name, suite) => acc ++ (addPrefix name suite)) []
   LSpec.lspecIO (← runTestGroup name_filter tests)
