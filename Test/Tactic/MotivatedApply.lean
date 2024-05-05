@@ -36,7 +36,7 @@ def test_type_extract (env: Environment): IO LSpec.TestSeq :=
       (← exprToStr motiveType))
     return tests
 
-def test_execute (env: Environment): IO LSpec.TestSeq :=
+def test_nat_brec_on (env: Environment): IO LSpec.TestSeq :=
   let expr := "λ (n t: Nat) => n + 0 = n"
   runMetaMSeq env do
     let (expr, exprType) ← valueAndType expr
@@ -64,10 +64,41 @@ def test_execute (env: Environment): IO LSpec.TestSeq :=
       tests := tests ++ test
       return tests
 
+def test_list_brec_on (env: Environment): IO LSpec.TestSeq :=
+  let expr := "λ {α : Type} (l: List α) => l ++ [] = [] ++ l"
+  runMetaMSeq env do
+    let (expr, exprType) ← valueAndType expr
+    Meta.lambdaTelescope expr $ λ _ body => do
+      let recursor ← match Parser.runParserCategory
+        (env := ← MonadEnv.getEnv)
+        (catName := `term)
+        (input := "@List.brecOn")
+        (fileName := filename) with
+        | .ok syn => pure syn
+        | .error error => throwError "Failed to parse: {error}"
+      let mut tests := LSpec.TestSeq.done
+      -- Apply the tactic
+      let target ← Meta.mkFreshExprSyntheticOpaqueMVar body
+      let tactic := Tactic.motivatedApply recursor
+      let test ← runTermElabMInMeta do
+        let newGoals ← runTacticOnMVar tactic target.mvarId!
+        pure $ LSpec.check "goals" ((← newGoals.mapM (λ g => do exprToStr (← g.getType))) =
+          [
+            "Type ?u.92",
+            "List ?m.94 → Prop",
+            "List ?m.94",
+            "∀ (t : List ?m.94), List.below t → ?motive t",
+            "?motive ?m.96 = (l ++ [] = [] ++ l)",
+          ])
+      tests := tests ++ test
+      return tests
+
+
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   [
     ("type_extract", test_type_extract env),
-    ("execute", test_execute env),
+    ("nat_brec_on", test_nat_brec_on env),
+    ("list_brec_on", test_list_brec_on env),
   ]
 
 end Pantograph.Test.Tactic.MotivatedApply
