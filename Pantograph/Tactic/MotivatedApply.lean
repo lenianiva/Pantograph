@@ -94,11 +94,11 @@ def motivatedApply: Elab.Tactic.Tactic := λ stx => do
 
     -- Create the conduit type which proves the result of the motive is equal to the goal
     let conduitType ← info.conduitType newMVars resultant
-    let goalConduit ← Meta.mkFreshExprMVar conduitType .syntheticOpaque (userName := `conduit)
+    let goalConduit ← Meta.mkFreshExprMVar conduitType .natural (userName := `conduit)
     goal.assign $ ← Meta.mkEqMP goalConduit (mkAppN recursor newMVars)
     newMVars := newMVars ++ [goalConduit]
 
-    let nextGoals ← newMVars.toList.map (·.mvarId!) |>.filterM (not <$> ·.isAssigned)
+    let nextGoals := newMVars.toList.map (·.mvarId!)
     pure nextGoals
   Elab.Tactic.setGoals nextGoals
 
