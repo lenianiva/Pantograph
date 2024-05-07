@@ -102,9 +102,12 @@ partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM
     | .fvar fvarId =>
       let name := ofName fvarId.name
       pure s!"(:fv {name})"
-    | .mvar mvarId =>
-      let name := ofName mvarId.name
-      pure s!"(:mv {name})"
+    | .mvar mvarId => do
+      if ← mvarId.isDelayedAssigned then
+        pure s!"(:mv)"
+      else
+        let name := ofName mvarId.name
+        pure s!"(:mv {name})"
     | .sort level =>
       let level := serializeSortLevel level sanitize
       pure s!"(:sort {level})"
