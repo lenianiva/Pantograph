@@ -212,4 +212,8 @@ def goalMotivatedApply (state: GoalState) (goalId: Nat) (recursor: String): Lean
 def goalNoConfuse (state: GoalState) (goalId: Nat) (eq: String): Lean.CoreM TacticResult :=
   runTermElabM <| state.tryNoConfuse goalId eq
 
+@[export pantograph_goal_diag]
+def goalDiag (state: GoalState) (diagOptions: Protocol.GoalDiag) : Lean.CoreM String :=
+  runMetaM $ state.diag diagOptions
+
 end Pantograph

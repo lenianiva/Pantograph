@@ -270,51 +270,56 @@ protected def GoalState.serializeGoals
     | .none => throwError s!"Metavariable does not exist in context {goal.name}"
 
 /-- Print the metavariables in a readable format -/
-protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag := {}): MetaM Unit := do
+protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag := {}): MetaM String := do
   goalState.restoreMetaM
   let savedState := goalState.savedState
   let goals := savedState.tactic.goals
   let mctx ← getMCtx
   let root := goalState.root
   -- Print the root
-  match mctx.decls.find? root with
-  | .some decl => printMVar ">" root decl
-  | .none => IO.println s!">{root.name}: ??"
-  goals.forM (fun mvarId => do
-    if mvarId != root then
-      match mctx.decls.find? mvarId with
-      | .some decl => printMVar "⊢" mvarId decl
-      | .none => IO.println s!"⊢{mvarId.name}: ??"
+  let result: String ← match mctx.decls.find? root with
+    | .some decl => printMVar ">" root decl
+    | .none => pure s!">{root.name}: ??"
+  let resultGoals ← goals.filter (· != root) |>.mapM (fun mvarId =>
+    match mctx.decls.find? mvarId with
+    | .some decl => printMVar "⊢" mvarId decl
+    | .none => pure s!"⊢{mvarId.name}: ??"
   )
   let goals := goals.toSSet
-  mctx.decls.forM (fun mvarId decl => do
-    if goals.contains mvarId || mvarId == root then
-      pure ()
-    -- Print the remainig ones that users don't see in Lean
-    else if options.printAll then
+  let resultOthers ← mctx.decls.toList.filter (λ (mvarId, _) =>
+      !(goals.contains mvarId || mvarId == root) && options.printAll)
+  |>.mapM (fun (mvarId, decl) => do
       let pref := if goalState.newMVars.contains mvarId then "~" else " "
       printMVar pref mvarId decl
-    else
-      pure ()
-      --IO.println s!" {mvarId.name}{userNameToString decl.userName}"
   )
+  pure $ result ++ (resultGoals.map (· ++ "\n") |> String.join) ++ (resultOthers.map (· ++ "\n") |> String.join)
   where
-    printMVar (pref: String) (mvarId: MVarId) (decl: MetavarDecl): MetaM Unit := do
-      if options.printContext then
-        decl.lctx.fvarIdToDecl.forM printFVar
+    printMVar (pref: String) (mvarId: MVarId) (decl: MetavarDecl): MetaM String := do
+      let resultFVars: List String ←
+        if options.printContext then
+          decl.lctx.fvarIdToDecl.toList.mapM (λ (fvarId, decl) =>
+            do pure $ (← printFVar fvarId decl) ++ "\n")
+        else
+          pure []
       let type ← if options.instantiate
         then instantiateMVars decl.type
         else pure $ decl.type
       let type_sexp ← serializeExpressionSexp type (sanitize := false)
-      IO.println s!"{pref}{mvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type} {type_sexp}"
-      if options.printValue then
-        if let Option.some value := (← getMCtx).eAssignment.find? mvarId then
-          let value ← if options.instantiate
-            then instantiateMVars value
-            else pure $ value
-          IO.println s!" := {← Meta.ppExpr value}"
-    printFVar (fvarId: FVarId) (decl: LocalDecl): MetaM Unit := do
-      IO.println s!" | {fvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type}"
+      let resultMain: String := s!"{pref}{mvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type} {type_sexp}"
+      let resultValue: String ←
+        if options.printValue then
+          if let Option.some value := (← getMCtx).eAssignment.find? mvarId then
+            let value ← if options.instantiate
+              then instantiateMVars value
+              else pure $ value
+            pure s!"\n := {← Meta.ppExpr value}"
+          else
+            pure ""
+        else
+          pure ""
+      pure $ (String.join resultFVars) ++ resultMain ++ resultValue
+    printFVar (fvarId: FVarId) (decl: LocalDecl): MetaM String := do
+      pure s!" | {fvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type}"
     userNameToString : Name → String
       | .anonymous => ""
       | other => s!"[{other}]"
