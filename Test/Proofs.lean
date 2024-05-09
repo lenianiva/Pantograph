@@ -726,6 +726,57 @@ def test_nat_zero_add: TestM Unit := do
   let (expr, _) := instantiateMVarsCore (mctx := stateF.mctx) (e := expr)
   addTest $ LSpec.check "(F root)" stateF.rootExpr?.isSome
 
+def test_nat_zero_add_alt: TestM Unit := do
+  let state? ← startProof (.expr "∀ (n: Nat), n + 0 = n")
+  let state0 ← match state? with
+    | .some state => pure state
+    | .none => do
+      addTest $ assertUnreachable "Goal could not parse"
+      return ()
+  let tactic := "intro n"
+  let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check tactic ((← state1.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[buildGoal [("n", "Nat")] "n + 0 = n"])
+  let recursor := "@Nat.brecOn"
+  let state2 ← match ← state1.tryMotivatedApply (goalId := 0) (recursor := recursor) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check s!"mapply {recursor}" ((← state2.serializeGoals (options := ← read)).map (·.devolatilizeVars) =
+    #[
+      buildNamedGoal "_uniq.67" [("n", "Nat")] "Nat → Prop" (.some "motive"),
+      buildNamedGoal "_uniq.68" [("n", "Nat")] "Nat",
+      buildNamedGoal "_uniq.69" [("n", "Nat")] "∀ (t : Nat), Nat.below t → ?motive t",
+      buildNamedGoal "_uniq.70" [("n", "Nat")] "?motive ?m.68 = (n + 0 = n)" (.some "conduit")
+    ])
+
+  let tactic := "intro x"
+  let state3m ← match ← state2.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check tactic ((← state3m.serializeGoals (options := ← read)).map (·.devolatilize) =
+    #[buildGoal [("n", "Nat"), ("x", "Nat")] "Prop" (.some "motive")])
+  let tactic := "apply Eq"
+  let state3m2 ← match ← state3m.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  let state2b ← match state3m2.resume (state3m2.goals ++ state2.goals) with
+    | .ok state => pure state
+    | .error e => do
+      addTest $ assertUnreachable e
+      return ()
+  addTest $ LSpec.check "resume" ((← state2b.serializeGoals (options := ← read)).map (·.devolatilizeVars) =
+    #[buildGoal [("n", "Nat"), ("t", "Nat"), ("h", "Nat.below t")] "t + 0 = t"])
+
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
     ("Nat.add_comm", test_nat_add_comm false),
@@ -739,6 +790,7 @@ def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
     ("let via assign", test_let false),
     ("let via tryLet", test_let true),
     ("Nat.zero_add", test_nat_zero_add),
+    ("Nat.zero_add alt", test_nat_zero_add_alt),
   ]
   tests.map (fun (name, test) => (name, proofRunner env test))
 
