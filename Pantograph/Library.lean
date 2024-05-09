@@ -180,6 +180,9 @@ def goalPrint (state: GoalState) (options: @&Protocol.Options): Lean.CoreM Proto
       parent? := ← state.parentExpr?.mapM (λ expr => do
         serializeExpression options (← unfoldAuxLemmas expr)),
     }
+@[export pantograph_goal_diag_m]
+def goalDiag (state: GoalState) (diagOptions: Protocol.GoalDiag) : Lean.CoreM String :=
+  runMetaM $ state.diag diagOptions
 
 @[export pantograph_goal_tactic_m]
 def goalTactic (state: GoalState) (goalId: Nat) (tactic: String): Lean.CoreM TacticResult :=
@@ -211,9 +214,5 @@ def goalMotivatedApply (state: GoalState) (goalId: Nat) (recursor: String): Lean
 @[export pantograph_goal_no_confuse_m]
 def goalNoConfuse (state: GoalState) (goalId: Nat) (eq: String): Lean.CoreM TacticResult :=
   runTermElabM <| state.tryNoConfuse goalId eq
-
-@[export pantograph_goal_diag]
-def goalDiag (state: GoalState) (diagOptions: Protocol.GoalDiag) : Lean.CoreM String :=
-  runMetaM $ state.diag diagOptions
 
 end Pantograph
