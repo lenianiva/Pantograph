@@ -245,7 +245,7 @@ def test_or_comm: TestM Unit := do
   let state2parent ← serializeExpressionSexp state2.parentExpr?.get! (sanitize := false)
   -- This is due to delayed assignment
   addTest $ LSpec.test "(2 parent)" (state2parent ==
-    "((:mv) (:fv _uniq.16) ((:c Eq.refl) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16)))")
+    "((:mvd _uniq.43) (:fv _uniq.16) ((:c Eq.refl) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16)))")
 
   let state3_1 ← match ← state2.tryTactic (goalId := 0) (tactic := "apply Or.inr") with
     | .success state => pure state

@@ -52,6 +52,7 @@ def test_sexp_of_elab (env: Environment): IO LSpec.TestSeq := do
     ("λ x: Array Nat => x.data", "(:lambda x ((:c Array) (:c Nat)) ((:c Array.data) (:c Nat) 0))"),
     -- This tests `autoBoundImplicit`
     ("λ {α : Sort (u + 1)} => List α", "(:lambda α (:sort (+ u 1)) ((:c List) 0) :implicit)"),
+    ("(2: Nat) <= (5: Nat)", "((:c LE.le) (:mv _uniq.37) (:mv _uniq.38) ((:c OfNat.ofNat) (:mv _uniq.23) (:lit 2) (:mv _uniq.24)) ((:c OfNat.ofNat) (:mv _uniq.33) (:lit 5) (:mv _uniq.34)))"),
   ]
   let termElabM: Elab.TermElabM LSpec.TestSeq := entries.foldlM (λ suites (source, target) => do
     let env ← MonadEnv.getEnv

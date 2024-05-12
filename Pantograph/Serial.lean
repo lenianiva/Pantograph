@@ -18,6 +18,23 @@ namespace Pantograph
 def unfoldAuxLemmas (e : Expr) : CoreM Expr := do
   Lean.Meta.deltaExpand e Lean.Name.isAuxLemma
 
+def instantiatePartialDelayedMVars (e: Expr): MetaM Expr := do
+  Meta.transform e
+    (pre := fun e => e.withApp fun f args => do
+      if let .mvar mvarId := f then
+        if let some decl ← getDelayedMVarAssignment? mvarId then
+          if args.size ≥ decl.fvars.size then
+            let pending ← instantiateMVars (.mvar decl.mvarIdPending)
+            if !pending.isMVar then
+              return .visit <| (← Meta.mkLambdaFVars decl.fvars pending).beta args
+      return .continue)
+
+def instantiateAll (e: Expr): MetaM Expr := do
+  let e ← instantiateMVars e
+  let e ← unfoldAuxLemmas e
+  let e ← instantiatePartialDelayedMVars e
+  return e
+
 --- Input Functions ---
 
 /-- Read syntax object from string -/
@@ -103,11 +120,9 @@ partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM
       let name := ofName fvarId.name
       pure s!"(:fv {name})"
     | .mvar mvarId => do
-      if ← mvarId.isDelayedAssigned then
-        pure s!"(:mv)"
-      else
+        let pref := if ← mvarId.isDelayedAssigned then "mvd" else "mv"
         let name := ofName mvarId.name
-        pure s!"(:mv {name})"
+        pure s!"(:{pref} {name})"
     | .sort level =>
       let level := serializeSortLevel level sanitize
       pure s!"(:sort {level})"
@@ -210,7 +225,7 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
       match localDecl with
       | .cdecl _ fvarId userName type _ _ =>
         let userName := userName.simpMacroScopes
-        let type ← instantiateMVars type
+        let type ← instantiate type
         return {
           name := ofName fvarId.name,
           userName:= ofName userName,
@@ -219,9 +234,9 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
         }
       | .ldecl _ fvarId userName type val _ _ => do
         let userName := userName.simpMacroScopes
-        let type ← instantiateMVars type
+        let type ← instantiate type
         let value? ← if showLetValues then
-          let val ← instantiateMVars val
+          let val ← instantiate val
           pure $ .some (← serializeExpression options val)
         else
           pure $ .none
@@ -248,10 +263,11 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
       name := ofName goal.name,
       userName? := if mvarDecl.userName == .anonymous then .none else .some (ofName mvarDecl.userName),
       isConversion := isLHSGoal? mvarDecl.type |>.isSome,
-      target := (← serializeExpression options (← instantiateMVars mvarDecl.type)),
+      target := (← serializeExpression options (← instantiateAll mvarDecl.type)),
       vars := vars.reverse.toArray
     }
   where
+  instantiate := instantiateAll
   ofName (n: Name) := serializeName n (sanitize := false)
 
 protected def GoalState.serializeGoals
