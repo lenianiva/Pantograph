@@ -101,6 +101,26 @@ partial def serializeSortLevel (level: Level) (sanitize: Bool): String :=
   | _, .zero => s!"{k}"
   | _, _ => s!"(+ {u_str} {k})"
 
+structure DelayedMVarInvocation where
+  mvarIdPending: MVarId
+  args: Array (FVarId × Expr)
+  tail: Array Expr
+
+def toDelayedMVarInvocation (e: Expr): MetaM (Option DelayedMVarInvocation) := do
+  let .mvar mvarId := e.getAppFn | return .none
+  let .some decl ← getDelayedMVarAssignment? mvarId | return .none
+  let mvarIdPending := decl.mvarIdPending
+  -- Print the function application e. See Lean's `withOverApp`
+  let args := e.getAppArgs
+
+  assert! args.size >= decl.fvars.size
+
+  return .some {
+    mvarIdPending,
+    args := decl.fvars.map (·.fvarId!) |>.zip args,
+    tail := args.toList.drop decl.fvars.size |>.toArray,
+  }
+
 
 /--
  Completely serializes an expression tree. Json not used due to compactness
@@ -111,30 +131,19 @@ partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM
   self expr
   where
   delayedMVarToSexp (e: Expr): MetaM (Option String) := do
-    let .mvar mvarId := e.getAppFn | return .none
-    let .some decl ← getDelayedMVarAssignment? mvarId | return .none
-    let mvarIdPending := decl.mvarIdPending
-    -- Print the function application e. See Lean's `withOverApp`
-    let args := e.getAppArgs
-
-    -- Not enough arguments to instantiate this
-    if args.size < decl.fvars.size then
-      return .none
-
-    let callee ← self $ ← instantiateMVars $ .mvar mvarIdPending
-    let sites ←
-      decl.fvars.zip args |>.mapM (λ (fvar, arg) => do
-        let fvarName := Expr.fvarId! fvar |>.name
-        return s!"({toString fvarName} {← self arg})"
+    let .some invocation ← toDelayedMVarInvocation e | return .none
+    let callee ← self $ ← instantiateMVars $ .mvar invocation.mvarIdPending
+    let sites ← invocation.args.mapM (λ (fvar, arg) => do
+        pure s!"({toString fvar.name} {← self arg})"
       )
-    let tailArgs ← args.toList.drop decl.fvars.size |>.mapM self
+    let tailArgs ← invocation.tail.mapM self
 
 
     let sites := " ".intercalate sites.toList
     let result := if tailArgs.isEmpty then
         s!"(:subst {callee} {sites})"
       else
-        let tailArgs := " ".intercalate tailArgs
+        let tailArgs := " ".intercalate tailArgs.toList
         s!"((:subst {callee} {sites}) {tailArgs})"
     return .some result
 
