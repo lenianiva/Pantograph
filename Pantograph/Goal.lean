@@ -98,7 +98,8 @@ Brings into scope a list of goals
 -/
 protected def GoalState.resume (state: GoalState) (goals: List MVarId): Except String GoalState :=
   if ¬ (goals.all (λ goal => state.mvars.contains goal)) then
-    .error s!"Goals not in scope"
+    let invalid_goals := goals.filter (λ goal => ¬ state.mvars.contains goal) |>.map (·.name.toString)
+    .error s!"Goals {invalid_goals} are not in scope"
   else
     -- Set goals to the goals that have not been assigned yet, similar to the `focus` tactic.
     let unassigned := goals.filter (λ goal =>

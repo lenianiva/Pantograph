@@ -243,9 +243,10 @@ def test_or_comm: TestM Unit := do
   addTest $ LSpec.check "(2 root)" state2.rootExpr?.isNone
 
   let state2parent ← serializeExpressionSexp state2.parentExpr?.get! (sanitize := false)
-  -- This is due to delayed assignment
+  let substHead := "((:c Or.casesOn) (:fv _uniq.10) (:fv _uniq.13) (:lambda t._@._hyg.26 ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:forall h ((:c Eq) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16) 0) ((:c Or) (:fv _uniq.13) (:fv _uniq.10)))) (:fv _uniq.16) (:lambda h._@._hyg.27 (:fv _uniq.10) (:subst (:lambda h._@._hyg.28 ((:c Eq) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16) ((:c Or.inl) (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.47))) (:subst (:subst (:mv _uniq.59) (_uniq.54 (:fv _uniq.16)) (_uniq.55 (:fv _uniq.50))) (_uniq.50 0))) (_uniq.47 0))) (:lambda h._@._hyg.29 (:fv _uniq.13) (:subst (:lambda h._@._hyg.30 ((:c Eq) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16) ((:c Or.inr) (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.60))) (:subst (:subst (:mv _uniq.72) (_uniq.67 (:fv _uniq.16)) (_uniq.68 (:fv _uniq.63))) (_uniq.63 0))) (_uniq.60 0))))"
+  let extra := "((:c Eq.refl) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16)))"
   addTest $ LSpec.test "(2 parent)" (state2parent ==
-    "((:mvd _uniq.43) (:fv _uniq.16) ((:c Eq.refl) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16)))")
+    s!"((:subst {substHead} (_uniq.41 (:fv _uniq.16))) {extra}")
 
   let state3_1 ← match ← state2.tryTactic (goalId := 0) (tactic := "apply Or.inr") with
     | .success state => pure state
@@ -769,13 +770,34 @@ def test_nat_zero_add_alt: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  let state2b ← match state3m2.resume (state3m2.goals ++ state2.goals) with
+  addTest $ LSpec.check tactic $ state3m2.goals.map (·.name.toString) = ["_uniq.85", "_uniq.86", "_uniq.84"]
+  let [_motive, _major, _step, conduit] := state2.goals | panic! "Goals conflict"
+  let state2b ← match state3m2.resume [conduit] with
     | .ok state => pure state
     | .error e => do
       addTest $ assertUnreachable e
       return ()
-  addTest $ LSpec.check "resume" ((← state2b.serializeGoals (options := ← read)).map (·.devolatilizeVars) =
-    #[buildGoal [("n", "Nat"), ("t", "Nat"), ("h", "Nat.below t")] "t + 0 = t"])
+
+  let cNatAdd := "(:c HAdd.hAdd) (:c Nat) (:c Nat) (:c Nat) ((:c instHAdd) (:c Nat) (:c instAddNat))"
+  let cNat0 := "((:c OfNat.ofNat) (:c Nat) (:lit 0) ((:c instOfNatNat) (:lit 0)))"
+  let fvN := "_uniq.63"
+  addTest $ LSpec.check "resume" ((← state2b.serializeGoals (options := { ← read with printExprAST := true })) =
+    #[
+      {
+        name := "_uniq.70",
+        userName? := .some "conduit",
+        target := {
+          pp? := .some "?m.79 ?m.68 = (n + 0 = n)",
+          sexp? := .some s!"((:c Eq) (:sort 0) (:subst ((:c Eq) (:mv _uniq.84) (:mv _uniq.85) (:mv _uniq.86)) (_uniq.77 (:mv _uniq.68))) ((:c Eq) (:c Nat) ({cNatAdd} (:fv {fvN}) {cNat0}) (:fv {fvN})))",
+        },
+        vars := #[{
+          name := fvN,
+          userName := "n",
+          type? := .some { pp? := .some "Nat", sexp? := .some "(:c Nat)" },
+          isInaccessible? := .some false
+        }],
+      }
+    ])
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [

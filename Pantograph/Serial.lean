@@ -32,7 +32,7 @@ def instantiatePartialDelayedMVars (e: Expr): MetaM Expr := do
 def instantiateAll (e: Expr): MetaM Expr := do
   let e ← instantiateMVars e
   let e ← unfoldAuxLemmas e
-  let e ← instantiatePartialDelayedMVars e
+  --let e ← instantiatePartialDelayedMVars e
   return e
 
 --- Input Functions ---
@@ -101,6 +101,7 @@ partial def serializeSortLevel (level: Level) (sanitize: Bool): String :=
   | _, .zero => s!"{k}"
   | _, _ => s!"(+ {u_str} {k})"
 
+
 /--
  Completely serializes an expression tree. Json not used due to compactness
 
@@ -109,7 +110,37 @@ A `_` symbol in the AST indicates automatic deductions not present in the origin
 partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM String := do
   self expr
   where
-  self (e: Expr): MetaM String :=
+  delayedMVarToSexp (e: Expr): MetaM (Option String) := do
+    let .mvar mvarId := e.getAppFn | return .none
+    let .some decl ← getDelayedMVarAssignment? mvarId | return .none
+    let mvarIdPending := decl.mvarIdPending
+    -- Print the function application e. See Lean's `withOverApp`
+    let args := e.getAppArgs
+
+    -- Not enough arguments to instantiate this
+    if args.size < decl.fvars.size then
+      return .none
+
+    let callee ← self $ ← instantiateMVars $ .mvar mvarIdPending
+    let sites ←
+      decl.fvars.zip args |>.mapM (λ (fvar, arg) => do
+        let fvarName := Expr.fvarId! fvar |>.name
+        return s!"({toString fvarName} {← self arg})"
+      )
+    let tailArgs ← args.toList.drop decl.fvars.size |>.mapM self
+
+
+    let sites := " ".intercalate sites.toList
+    let result := if tailArgs.isEmpty then
+        s!"(:subst {callee} {sites})"
+      else
+        let tailArgs := " ".intercalate tailArgs
+        s!"((:subst {callee} {sites}) {tailArgs})"
+    return .some result
+
+  self (e: Expr): MetaM String := do
+    if let .some result ← delayedMVarToSexp e then
+      return result
     match e with
     | .bvar deBruijnIndex =>
       -- This is very common so the index alone is shown. Literals are handled below.

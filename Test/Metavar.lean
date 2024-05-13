@@ -263,7 +263,7 @@ def test_partial_continuation: TestM Unit := do
 
   -- Continuation should fail if the state does not exist:
   match state0.resume coupled_goals with
-  | .error error => addTest $ LSpec.check "(continuation failure message)" (error = "Goals not in scope")
+  | .error error => addTest $ LSpec.check "(continuation failure message)" (error = "Goals [_uniq.40, _uniq.41, _uniq.38, _uniq.47] are not in scope")
   | .ok _ => addTest $ assertUnreachable "(continuation failure)"
   -- Continuation should fail if some goals have not been solved
   match state2.continue state1 with

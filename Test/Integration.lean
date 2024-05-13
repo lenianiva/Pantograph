@@ -88,11 +88,11 @@ def test_tactic : IO LSpec.TestSeq :=
     vars := #[{ name := "_uniq.10", userName := "x", isInaccessible? := .some false, type? := .some { pp? := .some "Prop" }}],
   }
   let goal2: Protocol.Goal := {
-    name := "_uniq.17",
+    name := "_uniq.14",
     target := { pp? := .some "x ∨ y → y ∨ x" },
     vars := #[
       { name := "_uniq.10", userName := "x", isInaccessible? := .some false, type? := .some { pp? := .some "Prop" }},
-      { name := "_uniq.16", userName := "y", isInaccessible? := .some false, type? := .some { pp? := .some "Prop" }}
+      { name := "_uniq.13", userName := "y", isInaccessible? := .some false, type? := .some { pp? := .some "Prop" }}
     ],
   }
   subroutine_runner [
