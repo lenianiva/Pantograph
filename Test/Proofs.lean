@@ -243,10 +243,10 @@ def test_or_comm: TestM Unit := do
   addTest $ LSpec.check "(2 root)" state2.rootExpr?.isNone
 
   let state2parent ← serializeExpressionSexp state2.parentExpr?.get! (sanitize := false)
-  let substHead := "((:c Or.casesOn) (:fv _uniq.10) (:fv _uniq.13) (:lambda t._@._hyg.26 ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:forall h ((:c Eq) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16) 0) ((:c Or) (:fv _uniq.13) (:fv _uniq.10)))) (:fv _uniq.16) (:lambda h._@._hyg.27 (:fv _uniq.10) (:subst (:lambda h._@._hyg.28 ((:c Eq) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16) ((:c Or.inl) (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.47))) (:subst (:subst (:mv _uniq.59) (_uniq.54 (:fv _uniq.16)) (_uniq.55 (:fv _uniq.50))) (_uniq.50 0))) (_uniq.47 0))) (:lambda h._@._hyg.29 (:fv _uniq.13) (:subst (:lambda h._@._hyg.30 ((:c Eq) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16) ((:c Or.inr) (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.60))) (:subst (:subst (:mv _uniq.72) (_uniq.67 (:fv _uniq.16)) (_uniq.68 (:fv _uniq.63))) (_uniq.63 0))) (_uniq.60 0))))"
-  let extra := "((:c Eq.refl) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16)))"
+  let substHead := "((:c Or.casesOn) (:fv _uniq.10) (:fv _uniq.13) (:lambda t._@._hyg.26 ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:forall h ((:c Eq) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16) 0) ((:c Or) (:fv _uniq.13) (:fv _uniq.10)))) (:fv _uniq.16) (:lambda h._@._hyg.27 (:fv _uniq.10) (:subst (:lambda h._@._hyg.28 ((:c Eq) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16) ((:c Or.inl) (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.47))) (:subst (:subst (:mv _uniq.59) (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.47) (:fv _uniq.16) (:fv _uniq.50)) (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.16) (:fv _uniq.47) 0)) (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.16) 0)) (:lambda h._@._hyg.29 (:fv _uniq.13) (:subst (:lambda h._@._hyg.30 ((:c Eq) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16) ((:c Or.inr) (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.60))) (:subst (:subst (:mv _uniq.72) (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.60) (:fv _uniq.16) (:fv _uniq.63)) (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.16) (:fv _uniq.60) 0)) (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.16) 0)))"
+  let extra := "((:c Eq.refl) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16))"
   addTest $ LSpec.test "(2 parent)" (state2parent ==
-    s!"((:subst {substHead} (_uniq.41 (:fv _uniq.16))) {extra}")
+    s!"((:subst {substHead} (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.16) (:fv _uniq.16)) {extra})")
 
   let state3_1 ← match ← state2.tryTactic (goalId := 0) (tactic := "apply Or.inr") with
     | .success state => pure state
@@ -790,7 +790,7 @@ def test_nat_zero_add_alt: TestM Unit := do
         userName? := .some "conduit",
         target := {
           pp? := .some "?m.79 ?m.68 = (n + 0 = n)",
-          sexp? := .some s!"((:c Eq) (:sort 0) (:subst ((:c Eq) (:mv {eqT}) (:mv {eqL}) (:mv {eqR})) (_uniq.77 (:mv {major}))) ((:c Eq) (:c Nat) ({cNatAdd} (:fv {fvN}) {cNat0}) (:fv {fvN})))",
+          sexp? := .some s!"((:c Eq) (:sort 0) (:subst ((:c Eq) (:mv {eqT}) (:mv {eqL}) (:mv {eqR})) (:fv {fvN}) (:mv {major})) ((:c Eq) (:c Nat) ({cNatAdd} (:fv {fvN}) {cNat0}) (:fv {fvN})))",
         },
         vars := #[{
           name := fvN,

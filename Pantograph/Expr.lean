@@ -30,7 +30,7 @@ def instantiateAll (e: Expr): MetaM Expr := do
 
 structure DelayedMVarInvocation where
   mvarIdPending: MVarId
-  args: Array (FVarId × Expr)
+  args: Array (FVarId × (Option Expr))
   tail: Array Expr
 
 @[export pantograph_to_delayed_mvar_invocation_meta_m]
@@ -38,14 +38,22 @@ def toDelayedMVarInvocation (e: Expr): MetaM (Option DelayedMVarInvocation) := d
   let .mvar mvarId := e.getAppFn | return .none
   let .some decl ← getDelayedMVarAssignment? mvarId | return .none
   let mvarIdPending := decl.mvarIdPending
+  let mvarDecl ← mvarIdPending.getDecl
   -- Print the function application e. See Lean's `withOverApp`
   let args := e.getAppArgs
 
   assert! args.size >= decl.fvars.size
+  let fvarArgMap: HashMap FVarId Expr := HashMap.ofList $ (decl.fvars.map (·.fvarId!) |>.zip args).toList
+  let subst ← mvarDecl.lctx.foldlM (init := []) λ acc localDecl => do
+    let fvarId := localDecl.fvarId
+    let a := fvarArgMap.find? fvarId
+    return acc ++ [(fvarId, a)]
+
+  assert! decl.fvars.all (λ fvar => mvarDecl.lctx.findFVar? fvar |>.isSome)
 
   return .some {
     mvarIdPending,
-    args := decl.fvars.map (·.fvarId!) |>.zip args,
+    args := subst.toArray,
     tail := args.toList.drop decl.fvars.size |>.toArray,
   }
 

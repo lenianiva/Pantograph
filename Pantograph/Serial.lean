@@ -92,11 +92,13 @@ partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM
   delayedMVarToSexp (e: Expr): MetaM (Option String) := do
     let .some invocation ← toDelayedMVarInvocation e | return .none
     let callee ← self $ ← instantiateMVars $ .mvar invocation.mvarIdPending
-    let sites ← invocation.args.mapM (λ (fvar, arg) => do
-        pure s!"({toString fvar.name} {← self arg})"
+    let sites ← invocation.args.mapM (λ (fvarId, arg) => do
+        let arg := match arg with
+          | .some arg => arg
+          | .none => .fvar fvarId
+        self arg
       )
     let tailArgs ← invocation.tail.mapM self
-
 
     let sites := " ".intercalate sites.toList
     let result := if tailArgs.isEmpty then
