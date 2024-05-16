@@ -771,7 +771,7 @@ def test_nat_zero_add_alt: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  let (eqL, eqR, eqT) := ("_uniq.85", "_uniq.86", "_uniq.84")
+  let (eqL, eqR, eqT) := ("_uniq.88", "_uniq.89", "_uniq.87")
   addTest $ LSpec.check tactic $ state3m2.goals.map (·.name.toString) = [eqL, eqR, eqT]
   let [_motive, _major, _step, conduit] := state2.goals | panic! "Goals conflict"
   let state2b ← match state3m2.resume [conduit] with
@@ -789,8 +789,8 @@ def test_nat_zero_add_alt: TestM Unit := do
         name := "_uniq.70",
         userName? := .some "conduit",
         target := {
-          pp? := .some "?m.79 ?m.68 = (n + 0 = n)",
-          sexp? := .some s!"((:c Eq) (:sort 0) (:subst ((:c Eq) (:mv {eqT}) (:mv {eqL}) (:mv {eqR})) (:fv {fvN}) (:mv {major})) ((:c Eq) (:c Nat) ({cNatAdd} (:fv {fvN}) {cNat0}) (:fv {fvN})))",
+          pp? := .some "(?motive.a = ?motive.a) = (n + 0 = n)",
+          sexp? := .some s!"((:c Eq) (:sort 0) ((:c Eq) (:mv {eqT}) (:mv {eqL}) (:mv {eqR})) ((:c Eq) (:c Nat) ({cNatAdd} (:fv {fvN}) {cNat0}) (:fv {fvN})))",
         },
         vars := #[{
           name := fvN,

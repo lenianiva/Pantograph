@@ -14,18 +14,24 @@ def instantiatePartialDelayedMVars (e: Expr): MetaM Expr := do
   Meta.transform e
     (pre := fun e => e.withApp fun f args => do
       if let .mvar mvarId := f then
+        if ← mvarId.isAssigned then
+          return .visit <| (← instantiateMVars e)
         if let some decl ← getDelayedMVarAssignment? mvarId then
           if args.size ≥ decl.fvars.size then
+            -- Do not use instantiateMVars here. Only one step of instantiation should happen.
             let pending ← instantiateMVars (.mvar decl.mvarIdPending)
             if !pending.isMVar then
-              return .visit <| (← Meta.mkLambdaFVars decl.fvars pending).beta args
+              let pending := pending.abstract decl.fvars
+              let pending := pending.instantiateRevRange 0 decl.fvars.size args
+              let pending := mkAppRange pending decl.fvars.size args.size args
+              return .visit <| pending
       return .continue)
 
 @[export pantograph_instantiate_all_meta_m]
 def instantiateAll (e: Expr): MetaM Expr := do
   let e ← instantiateMVars e
+  let e ← instantiatePartialDelayedMVars e
   let e ← unfoldAuxLemmas e
-  --let e ← instantiatePartialDelayedMVars e
   return e
 
 structure DelayedMVarInvocation where
