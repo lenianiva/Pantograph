@@ -226,11 +226,25 @@ def test_or_comm: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.check tactic ((← state1.serializeGoals (options := ← read)).map (·.devolatilize) =
-    #[buildGoal [("p", "Prop"), ("q", "Prop"), ("h", "p ∨ q")] "q ∨ p"])
+  let fvP := "_uniq.10"
+  let fvQ := "_uniq.13"
+  let fvH := "_uniq.16"
+  let state1g0 := "_uniq.17"
+  addTest $ LSpec.check tactic ((← state1.serializeGoals (options := ← read)) =
+    #[{
+      name := state1g0,
+      target := { pp? := .some "q ∨ p" },
+      vars := #[
+        { name := fvP, userName := "p", type? := .some { pp? := .some "Prop" }, isInaccessible? := .some false },
+        { name := fvQ, userName := "q", type? := .some { pp? := .some "Prop" }, isInaccessible? := .some false },
+        { name := fvH, userName := "h", type? := .some { pp? := .some "p ∨ q" }, isInaccessible? := .some false }
+      ]
+    }])
   addTest $ LSpec.check "(1 parent)" state1.parentExpr?.isSome
   addTest $ LSpec.check "(1 root)" state1.rootExpr?.isNone
 
+  let state1parent ← serializeExpressionSexp (← instantiateAll state1.parentExpr?.get!) (sanitize := false)
+  addTest $ LSpec.test "(1 parent)" (state1parent == s!"(:lambda p (:sort 0) (:lambda q (:sort 0) (:lambda h ((:c Or) 1 0) (:subst (:mv {state1g0}) (:fv {fvP}) (:fv {fvQ}) 0))))")
   let tactic := "cases h"
   let state2 ← match ← state1.tryTactic (goalId := 0) (tactic := tactic) with
     | .success state => pure state
@@ -239,22 +253,25 @@ def test_or_comm: TestM Unit := do
       return ()
   addTest $ LSpec.check tactic ((← state2.serializeGoals (options := ← read)).map (·.devolatilize) =
     #[branchGoal "inl" "p", branchGoal "inr" "q"])
+  let (caseL, caseR) := ("_uniq.62", "_uniq.75")
+  addTest $ LSpec.check tactic ((← state2.serializeGoals (options := ← read)).map (·.name) =
+    #[caseL, caseR])
   addTest $ LSpec.check "(2 parent)" state2.parentExpr?.isSome
   addTest $ LSpec.check "(2 root)" state2.rootExpr?.isNone
 
-  let state2parent ← serializeExpressionSexp state2.parentExpr?.get! (sanitize := false)
-  let substHead := "((:c Or.casesOn) (:fv _uniq.10) (:fv _uniq.13) (:lambda t._@._hyg.26 ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:forall h ((:c Eq) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16) 0) ((:c Or) (:fv _uniq.13) (:fv _uniq.10)))) (:fv _uniq.16) (:lambda h._@._hyg.27 (:fv _uniq.10) (:subst (:lambda h._@._hyg.28 ((:c Eq) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16) ((:c Or.inl) (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.47))) (:subst (:subst (:mv _uniq.59) (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.47) (:fv _uniq.16) (:fv _uniq.50)) (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.16) (:fv _uniq.47) 0)) (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.16) 0)) (:lambda h._@._hyg.29 (:fv _uniq.13) (:subst (:lambda h._@._hyg.30 ((:c Eq) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16) ((:c Or.inr) (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.60))) (:subst (:subst (:mv _uniq.72) (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.60) (:fv _uniq.16) (:fv _uniq.63)) (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.16) (:fv _uniq.60) 0)) (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.16) 0)))"
-  let extra := "((:c Eq.refl) ((:c Or) (:fv _uniq.10) (:fv _uniq.13)) (:fv _uniq.16))"
+  let state2parent ← serializeExpressionSexp (← instantiateAll state2.parentExpr?.get!) (sanitize := false)
+  let orPQ := s!"((:c Or) (:fv {fvP}) (:fv {fvQ}))"
+  let orQP := s!"((:c Or) (:fv {fvQ}) (:fv {fvP}))"
   addTest $ LSpec.test "(2 parent)" (state2parent ==
-    s!"((:subst {substHead} (:fv _uniq.10) (:fv _uniq.13) (:fv _uniq.16) (:fv _uniq.16)) {extra})")
+    s!"((:c Or.casesOn) (:fv {fvP}) (:fv {fvQ}) (:lambda t._@._hyg.26 {orPQ} (:forall h ((:c Eq) {orPQ} (:fv {fvH}) 0) {orQP})) (:fv {fvH}) (:lambda h._@._hyg.27 (:fv {fvP}) (:lambda h._@._hyg.28 ((:c Eq) {orPQ} (:fv {fvH}) ((:c Or.inl) (:fv {fvP}) (:fv {fvQ}) 0)) (:mv {caseL}))) (:lambda h._@._hyg.29 (:fv {fvQ}) (:lambda h._@._hyg.30 ((:c Eq) {orPQ} (:fv {fvH}) ((:c Or.inr) (:fv {fvP}) (:fv {fvQ}) 0)) (:mv {caseR}))) ((:c Eq.refl) {orPQ} (:fv {fvH})))")
 
   let state3_1 ← match ← state2.tryTactic (goalId := 0) (tactic := "apply Or.inr") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  let state3_1parent ← serializeExpressionSexp state3_1.parentExpr?.get! (sanitize := false)
-  addTest $ LSpec.test "(3_1 parent)" (state3_1parent == "((:c Or.inr) (:fv _uniq.13) (:fv _uniq.10) (:mv _uniq.78))")
+  let state3_1parent ← serializeExpressionSexp (← instantiateAll state3_1.parentExpr?.get!) (sanitize := false)
+  addTest $ LSpec.test "(3_1 parent)" (state3_1parent == s!"((:c Or.inr) (:fv {fvQ}) (:fv {fvP}) (:mv _uniq.87))")
   addTest $ LSpec.check "· apply Or.inr" (state3_1.goals.length = 1)
   let state4_1 ← match ← state3_1.tryTactic (goalId := 0) (tactic := "assumption") with
     | .success state => pure state
@@ -262,8 +279,8 @@ def test_or_comm: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "  assumption" state4_1.goals.isEmpty
-  let state4_1parent ← serializeExpressionSexp state4_1.parentExpr?.get! (sanitize := false)
-  addTest $ LSpec.test "(4_1 parent)" (state4_1parent == "(:fv _uniq.47)")
+  let state4_1parent ← instantiateAll state4_1.parentExpr?.get!
+  addTest $ LSpec.test "(4_1 parent)" state4_1parent.isFVar
   addTest $ LSpec.check "(4_1 root)" state4_1.rootExpr?.isNone
   let state3_2 ← match ← state2.tryTactic (goalId := 1) (tactic := "apply Or.inl") with
     | .success state => pure state

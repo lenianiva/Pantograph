@@ -91,7 +91,7 @@ partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM
   where
   delayedMVarToSexp (e: Expr): MetaM (Option String) := do
     let .some invocation ← toDelayedMVarInvocation e | return .none
-    let callee ← self $ ← instantiateMVars $ .mvar invocation.mvarIdPending
+    let callee ← self $ .mvar invocation.mvarIdPending
     let sites ← invocation.args.mapM (λ (fvarId, arg) => do
         let arg := match arg with
           | .some arg => arg
@@ -264,7 +264,7 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
       name := ofName goal.name,
       userName? := if mvarDecl.userName == .anonymous then .none else .some (ofName mvarDecl.userName),
       isConversion := isLHSGoal? mvarDecl.type |>.isSome,
-      target := (← serializeExpression options (← instantiateAll mvarDecl.type)),
+      target := (← serializeExpression options (← instantiate mvarDecl.type)),
       vars := vars.reverse.toArray
     }
   where
