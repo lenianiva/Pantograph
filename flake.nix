@@ -5,8 +5,8 @@
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
     lean = {
-      url = "github:leanprover/lean4?ref=b4caee80a3dfc5c9619d88b16c40cc3db90da4e2";
       # Do not follow input's nixpkgs since it could cause build failures
+      url = "github:leanprover/lean4?ref=v4.8.0-rc1";
     };
     lspec = {
       url = "github:lurk-lab/LSpec?ref=3388be5a1d1390594a74ec469fd54a5d84ff6114";
