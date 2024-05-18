@@ -13,9 +13,15 @@ For Nix based workflow, see below.
 
 Install `elan` and `lake`. Execute
 ``` sh
-make build/bin/pantograph
+make
 ```
-setup the `LEAN_PATH` environment variable so it contains the library path of lean libraries. The libraries must be built in advance. For example, if `mathlib4` is stored at `../lib/mathlib4`,
+This builds the executable in `.lake/build/bin/pantograph`.
+
+To use Pantograph in a project environment, setup the `LEAN_PATH` environment
+variable so it contains the library path of lean libraries. The libraries must
+be built in advance. For example, if `mathlib4` is stored at `../lib/mathlib4`,
+the environment might be setup like this:
+
 ``` sh
 LIB="../lib"
 LIB_MATHLIB="$LIB/mathlib4/lake-packages"
@@ -23,7 +29,10 @@ export LEAN_PATH="$LIB/mathlib4/build/lib:$LIB_MATHLIB/aesop/build/lib:$LIB_MATH
 
 LEAN_PATH=$LEAN_PATH build/bin/pantograph $@
 ```
-The provided `flake.nix` has a develop environment with Lean already setup.
+The `$LEAN_PATH` executable of any project can be extracted by
+``` sh
+lake env printenv LEAN_PATH
+```
 
 ## Executable Usage
 
@@ -71,33 +80,42 @@ where the application of `assumption` should lead to a failure.
 ### Commands
 
 See `Pantograph/Protocol.lean` for a description of the parameters and return values in JSON.
-- `reset`: Delete all cached expressions and proof trees
-- `expr.echo {"expr": <expr>, "type": <optional expected type>}`: Determine the type of an expression and round-trip it
-- `env.catalog`: Display a list of all safe Lean symbols in the current environment
-- `env.inspect {"name": <name>, "value": <bool>}`: Show the type and package of a
+* `reset`: Delete all cached expressions and proof trees
+* `stat`: Display resource usage
+* `expr.echo {"expr": <expr>, "type": <optional expected type>}`: Determine the
+  type of an expression and format it
+* `env.catalog`: Display a list of all safe Lean symbols in the current environment
+* `env.inspect {"name": <name>, "value": <bool>}`: Show the type and package of a
   given symbol; If value flag is set, the value is printed or hidden. By default
   only the values of definitions are printed.
-- `options.set { key: value, ... }`: Set one or more options (not Lean options; those
+* `options.set { key: value, ... }`: Set one or more options (not Lean options; those
   have to be set via command line arguments.), for options, see `Pantograph/Protocol.lean`
-- `options.print`: Display the current set of options
-- `goal.start {["name": <name>], ["expr": <expr>], ["copyFrom": <symbol>]}`: Start a new goal from a given expression or symbol
-- `goal.tactic {"stateId": <id>, "goalId": <id>, ["tactic": <tactic>], ["expr":
-  <expr>]}`: Execute a tactic string on a given goal. `tactic` executes an
-  ordinary tactic, `expr` assigns an expression to the current goal, `have`
-  executes the have tactic, ``calc` (of the form `lhs op rhs`) executes one step
-  of `calc`, and `"conv": true`/`"conv": false` enters/exits conversion tactic
-  mode.
-- `goal.continue {"stateId": <id>, ["branch": <id>], ["goals": <names>]}`: Continue from a proof state
-- `goal.remove {"stateIds": [<id>]}"`: Remove a bunch of stored goals.
-- `goal.print {"stateId": <id>}"`: Print a goal state
-- `stat`: Display resource usage
+* `options.print`: Display the current set of options
+* `goal.start {["name": <name>], ["expr": <expr>], ["copyFrom": <symbol>]}`:
+  Start a new proof from a given expression or symbol
+* `goal.tactic {"stateId": <id>, "goalId": <id>, ...}`: Execute a tactic string on a
+  given goal. The tactic is supplied as additional key-value pairs in one of the following formats:
+  - `{ "tactic": <tactic> }`: Execute an ordinary tactic
+  - `{ "expr": <expr> }`: Assign the given proof term to the current goal
+  - `{ "have": <expr>, "binderName": <name> }`: Execute `have` and creates a branch goal
+  - `{ "calc": <expr> }`: Execute one step of a `calc` tactic. Each step must
+    be of the form `lhs op rhs`. An `lhs` of `_` indicates that it should be set
+    to the previous `rhs`.
+  - `{ "conv": <bool> }`: Enter or exit conversion tactic mode. In the case of
+    exit, the goal id is ignored.
+* `goal.continue {"stateId": <id>, ["branch": <id>], ["goals": <names>]}`:
+  Execute continuation/resumption
+  - `{ "branch": <id> }`: Continue on branch state. The current state must have no goals.
+  - `{ "goals": <names> }`: Resume the given goals
+* `goal.remove {"stateIds": [<id>]}"`: Drop the goal states specified in the list
+* `goal.print {"stateId": <id>}"`: Print a goal state
 
 ### Errors
 
 When an error pertaining to the execution of a command happens, the returning JSON structure is
 
 ``` json
-{ error: "type", desc: "description" }
+{ "error": "type", "desc": "description" }
 ```
 Common error forms:
 * `command`: Indicates malformed command structure which results from either
@@ -121,6 +139,8 @@ with `Pantograph` which mirrors the REPL commands above. It is recommended to
 call Pantograph via this FFI since it provides a tremendous speed up.
 
 ## Developing
+
+A Lean development shell is provided in the Nix flake.
 
 ### Testing
 
