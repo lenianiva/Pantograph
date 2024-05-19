@@ -179,10 +179,12 @@ def goalPrint (state: GoalState) (options: @&Protocol.Options): Lean.CoreM Proto
   runMetaM do
     state.restoreMetaM
     return {
-      root? := ← state.rootExpr?.mapM (λ expr => do
-        serializeExpression options (← instantiateAll expr)),
-      parent? := ← state.parentExpr?.mapM (λ expr => do
-        serializeExpression options (← instantiateAll expr)),
+      root? := ← state.rootExpr?.mapM (λ expr =>
+        state.withRootContext do
+          serializeExpression options (← instantiateAll expr)),
+      parent? := ← state.parentExpr?.mapM (λ expr =>
+        state.withParentContext do
+          serializeExpression options (← instantiateAll expr)),
     }
 @[export pantograph_goal_diag_m]
 def goalDiag (state: GoalState) (diagOptions: Protocol.GoalDiag) : Lean.CoreM String :=

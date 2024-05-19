@@ -264,7 +264,7 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
       name := ofName goal.name,
       userName? := if mvarDecl.userName == .anonymous then .none else .some (ofName mvarDecl.userName),
       isConversion := isLHSGoal? mvarDecl.type |>.isSome,
-      target := (← serializeExpression options (← instantiate mvarDecl.type)),
+      target := (← serializeExpression options (← instantiateMVars (← instantiate mvarDecl.type))),
       vars := vars.reverse.toArray
     }
   where

@@ -84,6 +84,27 @@ def proofRunner (env: Lean.Environment) (tests: TestM Unit): IO LSpec.TestSeq :=
   | .ok (_, a) =>
     return a
 
+def test_identity: TestM Unit := do
+  let state? ← startProof (.expr "∀ (p: Prop), p → p")
+  let state0 ← match state? with
+    | .some state => pure state
+    | .none => do
+      addTest $ assertUnreachable "Goal could not parse"
+      return ()
+
+  let tactic := "intro p h"
+  let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  let inner := "_uniq.12"
+  addTest $ LSpec.check tactic ((← state1.serializeGoals (options := ← read)).map (·.name) =
+    #[inner])
+  let state1parent ← state1.withParentContext do
+    serializeExpressionSexp (← instantiateAll state1.parentExpr?.get!) (sanitize := false)
+  addTest $ LSpec.test "(1 parent)" (state1parent == s!"(:lambda p (:sort 0) (:lambda h 0 (:subst (:mv {inner}) 1 0)))")
+
 -- Individual test cases
 example: ∀ (a b: Nat), a + b = b + a := by
   intro n m
@@ -243,8 +264,9 @@ def test_or_comm: TestM Unit := do
   addTest $ LSpec.check "(1 parent)" state1.parentExpr?.isSome
   addTest $ LSpec.check "(1 root)" state1.rootExpr?.isNone
 
-  let state1parent ← serializeExpressionSexp (← instantiateAll state1.parentExpr?.get!) (sanitize := false)
-  addTest $ LSpec.test "(1 parent)" (state1parent == s!"(:lambda p (:sort 0) (:lambda q (:sort 0) (:lambda h ((:c Or) 1 0) (:subst (:mv {state1g0}) (:fv {fvP}) (:fv {fvQ}) 0))))")
+  let state1parent ← state1.withParentContext do
+    serializeExpressionSexp (← instantiateAll state1.parentExpr?.get!) (sanitize := false)
+  addTest $ LSpec.test "(1 parent)" (state1parent == s!"(:lambda p (:sort 0) (:lambda q (:sort 0) (:lambda h ((:c Or) 1 0) (:subst (:mv {state1g0}) 2 1 0))))")
   let tactic := "cases h"
   let state2 ← match ← state1.tryTactic (goalId := 0) (tactic := tactic) with
     | .success state => pure state
@@ -253,25 +275,31 @@ def test_or_comm: TestM Unit := do
       return ()
   addTest $ LSpec.check tactic ((← state2.serializeGoals (options := ← read)).map (·.devolatilize) =
     #[branchGoal "inl" "p", branchGoal "inr" "q"])
-  let (caseL, caseR) := ("_uniq.62", "_uniq.75")
+  let (caseL, caseR) := ("_uniq.64", "_uniq.77")
   addTest $ LSpec.check tactic ((← state2.serializeGoals (options := ← read)).map (·.name) =
     #[caseL, caseR])
-  addTest $ LSpec.check "(2 parent)" state2.parentExpr?.isSome
+  addTest $ LSpec.check "(2 parent exists)" state2.parentExpr?.isSome
   addTest $ LSpec.check "(2 root)" state2.rootExpr?.isNone
 
-  let state2parent ← serializeExpressionSexp (← instantiateAll state2.parentExpr?.get!) (sanitize := false)
+  let state2parent ← state2.withParentContext do
+    serializeExpressionSexp (← instantiateAll state2.parentExpr?.get!) (sanitize := false)
   let orPQ := s!"((:c Or) (:fv {fvP}) (:fv {fvQ}))"
   let orQP := s!"((:c Or) (:fv {fvQ}) (:fv {fvP}))"
+  let motive := s!"(:lambda t._@._hyg.26 {orPQ} (:forall h ((:c Eq) ((:c Or) (:fv {fvP}) (:fv {fvQ})) (:fv {fvH}) 0) {orQP}))"
+  let caseL := s!"(:lambda h._@._hyg.27 (:fv {fvP}) (:lambda h._@._hyg.28 ((:c Eq) {orPQ} (:fv {fvH}) ((:c Or.inl) (:fv {fvP}) (:fv {fvQ}) 0)) (:subst (:mv {caseL}) (:fv {fvP}) (:fv {fvQ}) 1)))"
+  let caseR := s!"(:lambda h._@._hyg.29 (:fv {fvQ}) (:lambda h._@._hyg.30 ((:c Eq) {orPQ} (:fv {fvH}) ((:c Or.inr) (:fv {fvP}) (:fv {fvQ}) 0)) (:subst (:mv {caseR}) (:fv {fvP}) (:fv {fvQ}) 1)))"
+  let conduit := s!"((:c Eq.refl) {orPQ} (:fv {fvH}))"
   addTest $ LSpec.test "(2 parent)" (state2parent ==
-    s!"((:c Or.casesOn) (:fv {fvP}) (:fv {fvQ}) (:lambda t._@._hyg.26 {orPQ} (:forall h ((:c Eq) {orPQ} (:fv {fvH}) 0) {orQP})) (:fv {fvH}) (:lambda h._@._hyg.27 (:fv {fvP}) (:lambda h._@._hyg.28 ((:c Eq) {orPQ} (:fv {fvH}) ((:c Or.inl) (:fv {fvP}) (:fv {fvQ}) 0)) (:mv {caseL}))) (:lambda h._@._hyg.29 (:fv {fvQ}) (:lambda h._@._hyg.30 ((:c Eq) {orPQ} (:fv {fvH}) ((:c Or.inr) (:fv {fvP}) (:fv {fvQ}) 0)) (:mv {caseR}))) ((:c Eq.refl) {orPQ} (:fv {fvH})))")
+    s!"((:c Or.casesOn) (:fv {fvP}) (:fv {fvQ}) {motive} (:fv {fvH}) {caseL} {caseR} {conduit})")
 
   let state3_1 ← match ← state2.tryTactic (goalId := 0) (tactic := "apply Or.inr") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  let state3_1parent ← serializeExpressionSexp (← instantiateAll state3_1.parentExpr?.get!) (sanitize := false)
-  addTest $ LSpec.test "(3_1 parent)" (state3_1parent == s!"((:c Or.inr) (:fv {fvQ}) (:fv {fvP}) (:mv _uniq.87))")
+  let state3_1parent ← state3_1.withParentContext do
+    serializeExpressionSexp (← instantiateAll state3_1.parentExpr?.get!) (sanitize := false)
+  addTest $ LSpec.test "(3_1 parent)" (state3_1parent == s!"((:c Or.inr) (:fv {fvQ}) (:fv {fvP}) (:mv _uniq.91))")
   addTest $ LSpec.check "· apply Or.inr" (state3_1.goals.length = 1)
   let state4_1 ← match ← state3_1.tryTactic (goalId := 0) (tactic := "assumption") with
     | .success state => pure state
@@ -800,14 +828,16 @@ def test_nat_zero_add_alt: TestM Unit := do
   let cNatAdd := "(:c HAdd.hAdd) (:c Nat) (:c Nat) (:c Nat) ((:c instHAdd) (:c Nat) (:c instAddNat))"
   let cNat0 := "((:c OfNat.ofNat) (:c Nat) (:lit 0) ((:c instOfNatNat) (:lit 0)))"
   let fvN := "_uniq.63"
+  let conduitRight := s!"((:c Eq) (:c Nat) ({cNatAdd} (:fv {fvN}) {cNat0}) (:fv {fvN}))"
+  let substOf (mv: String) := s!"(:subst (:mv {mv}) (:fv {fvN}) (:mv {major}))"
   addTest $ LSpec.check "resume" ((← state2b.serializeGoals (options := { ← read with printExprAST := true })) =
     #[
       {
         name := "_uniq.70",
         userName? := .some "conduit",
         target := {
-          pp? := .some "(?motive.a = ?motive.a) = (n + 0 = n)",
-          sexp? := .some s!"((:c Eq) (:sort 0) ((:c Eq) (:mv {eqT}) (:mv {eqL}) (:mv {eqR})) ((:c Eq) (:c Nat) ({cNatAdd} (:fv {fvN}) {cNat0}) (:fv {fvN})))",
+          pp? := .some "(?m.92 ?m.68 = ?m.94 ?m.68) = (n + 0 = n)",
+          sexp? := .some s!"((:c Eq) (:sort 0) ((:c Eq) {substOf eqT} {substOf eqL} {substOf eqR}) {conduitRight})",
         },
         vars := #[{
           name := fvN,
@@ -820,6 +850,7 @@ def test_nat_zero_add_alt: TestM Unit := do
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
+    ("identity", test_identity),
     ("Nat.add_comm", test_nat_add_comm false),
     ("Nat.add_comm manual", test_nat_add_comm true),
     ("Nat.add_comm delta", test_delta_variable),

@@ -12,7 +12,8 @@ def unfoldAuxLemmas (e : Expr) : CoreM Expr := do
 
 /--
 Force the instantiation of delayed metavariables even if they cannot be fully
-instantiated. This is used during resumption.
+instantiated. This is used during resumption to provide diagnostic data about
+the current goal.
 
 Since Lean 4 does not have an `Expr` constructor corresponding to delayed
 metavariables, any delayed metavariables must be recursively handled by this
@@ -24,60 +25,73 @@ This function ensures any metavariable in the result is either
 1. Delayed assigned with its pending mvar not assigned in any form
 2. Not assigned (delay or not)
  -/
-partial def instantiateDelayedMVars (eOrig: Expr): MetaM Expr := do
-  --let padding := String.join $ List.replicate level "  "
+partial def instantiateDelayedMVars (eOrig: Expr) : MetaM Expr := do
+  --let padding := String.join $ List.replicate level "│ "
   --IO.println s!"{padding}Starting {toString eOrig}"
-  let result ← Meta.transform (← instantiateMVars eOrig)
+  let mut result ← Meta.transform (← instantiateMVars eOrig)
     (pre := fun e => e.withApp fun f args => do
-      --IO.println s!"{padding} V {toString e}"
-      if let .mvar mvarId := f then
-        if ← mvarId.isAssigned then
-          --IO.println s!"{padding} A ?{mvarId.name}"
-          return .continue <| .some (← self e)
-        if let some { fvars, mvarIdPending } ← getDelayedMVarAssignment? mvarId then
-          -- No progress can be made on this
-          if !(← mvarIdPending.isAssigned) then
-            --IO.println s!"{padding} D/T1: {toString e}"
-            let args ← args.mapM self
-            let result := mkAppN f args
-            return .done result
+      let .mvar mvarId := f | return .continue
+      --IO.println s!"{padding}├V {e}"
+      let mvarDecl ← mvarId.getDecl
 
-          --IO.println s!"{padding} D ?{mvarId.name} := [{fvars.size}] ?{mvarIdPending.name}"
-          -- This asstion fails when a tactic or elaboration function is
-          -- implemented incorrectly. See `instantiateExprMVars`
-          if args.size < fvars.size then
-            --IO.println s!"{padding} Illegal callsite: {args.size} < {fvars.size}"
-            throwError "Not enough arguments to instantiate a delay assigned mvar. This is due to bad implementations of a tactic: {args.size} < {fvars.size}. Expr: {toString e}; Origin: {toString eOrig}"
-          assert! !(← mvarIdPending.isDelayedAssigned)
-          let pending ← self (.mvar mvarIdPending)
-          if pending == .mvar mvarIdPending then
-            -- No progress could be made on this case
-            --IO.println s!"{padding}D/N {toString e}"
-            assert! !(← mvarIdPending.isAssigned)
-            assert! !(← mvarIdPending.isDelayedAssigned)
-          --else if pending.isMVar then
-          --  assert! !(← pending.mvarId!.isAssigned)
-          --  assert! !(← pending.mvarId!.isDelayedAssigned)
-          --  -- Progress made, but this is now another delayed assigned mvar
-          --  let nextMVarId ← mkFreshMVarId
-          --  assignDelayedMVar nextMVarId fvars pending.mvarId!
-          --  let args ← args.mapM self
-          --  let result := mkAppN (.mvar nextMVarId) args
-          --  return .done result
-          else
-            -- Progress has been made on this mvar
-            let pending := pending.abstract fvars
-            let args ← args.mapM self
-            -- Craete the function call structure
-            let subst := pending.instantiateRevRange 0 fvars.size args
-            let result := mkAppRange subst fvars.size args.size args
-            --IO.println s!"{padding}D/T2 {toString result}"
-            return .done result
-      return .continue)
-  --IO.println s!"{padding}Result {toString result}"
+      -- This is critical to maintaining the interdependency of metavariables.
+      -- Without setting `.syntheticOpaque`, Lean's metavariable elimination
+      -- system will not make the necessary delayed assigned mvars in case of
+      -- nested mvars.
+      mvarId.setKind .syntheticOpaque
+
+      let lctx ← MonadLCtx.getLCtx
+      if mvarDecl.lctx.any (λ decl => !lctx.contains decl.fvarId) then
+        let violations := mvarDecl.lctx.decls.foldl (λ acc decl? => match decl? with
+          | .some decl => if lctx.contains decl.fvarId then acc else acc ++ [decl.fvarId.name]
+          | .none => acc) []
+        panic! s!"Local context variable violation: {violations}"
+
+      if let .some assign ← getExprMVarAssignment? mvarId then
+        --IO.println s!"{padding}├A ?{mvarId.name}"
+        assert! !(← mvarId.isDelayedAssigned)
+        return .visit (mkAppN assign args)
+      else if let some { fvars, mvarIdPending } ← getDelayedMVarAssignment? mvarId then
+        --let substTableStr := String.intercalate ", " $ Array.zipWith fvars args (λ fvar assign => s!"{fvar.fvarId!.name} := {assign}") |>.toList
+        --IO.println s!"{padding}├MD ?{mvarId.name} := ?{mvarIdPending.name} [{substTableStr}]"
+
+        if args.size < fvars.size then
+          throwError "Not enough arguments to instantiate a delay assigned mvar. This is due to bad implementations of a tactic: {args.size} < {fvars.size}. Expr: {toString e}; Origin: {toString eOrig}"
+        --if !args.isEmpty then
+          --IO.println s!"{padding}├── Arguments Begin"
+        let args ← args.mapM self
+        --if !args.isEmpty then
+          --IO.println s!"{padding}├── Arguments End"
+        if !(← mvarIdPending.isAssignedOrDelayedAssigned) then
+          --IO.println s!"{padding}├T1"
+          let result := mkAppN f args
+          return .done result
+
+        let pending ← mvarIdPending.withContext do
+          let inner ← instantiateDelayedMVars (.mvar mvarIdPending) --(level := level + 1)
+          --IO.println s!"{padding}├Pre: {inner}"
+          let r := (← Expr.abstractM inner fvars).instantiateRev args
+          pure r
+
+        -- Tail arguments
+        let result := mkAppN pending (List.drop fvars.size args.toList |>.toArray)
+        --IO.println s!"{padding}├MD {result}"
+        return .done result
+      else
+        assert! !(← mvarId.isAssigned)
+        assert! !(← mvarId.isDelayedAssigned)
+        --if !args.isEmpty then
+        --  IO.println s!"{padding}├── Arguments Begin"
+        let args ← args.mapM self
+        --if !args.isEmpty then
+        --  IO.println s!"{padding}├── Arguments End"
+
+        --IO.println s!"{padding}├M ?{mvarId.name}"
+        return .done (mkAppN f args))
+  --IO.println s!"{padding}└Result {result}"
   return result
   where
-  self e := instantiateDelayedMVars e
+  self e := instantiateDelayedMVars e --(level := level + 1)
 
 /--
 Convert an expression to an equiavlent form with

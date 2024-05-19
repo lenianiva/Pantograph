@@ -62,6 +62,16 @@ protected def GoalState.mctx (state: GoalState): MetavarContext :=
   state.savedState.term.meta.meta.mctx
 protected def GoalState.env (state: GoalState): Environment :=
   state.savedState.term.meta.core.env
+
+protected def GoalState.withContext (state: GoalState) (mvarId: MVarId) (m: MetaM α): MetaM α := do
+  let metaM := mvarId.withContext m
+  metaM.run' (← read) state.savedState.term.meta.meta
+
+protected def GoalState.withParentContext (state: GoalState) (m: MetaM α): MetaM α := do
+  state.withContext state.parentMVar?.get! m
+protected def GoalState.withRootContext (state: GoalState) (m: MetaM α): MetaM α := do
+  state.withContext state.root m
+
 private def GoalState.mvars (state: GoalState): SSet MVarId :=
   state.mctx.decls.foldl (init := .empty) fun acc k _ => acc.insert k
 protected def GoalState.restoreMetaM (state: GoalState): MetaM Unit :=
