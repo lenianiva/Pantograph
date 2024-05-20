@@ -27,6 +27,7 @@ def Goal.devolatilize (goal: Goal): Goal :=
     name := "",
   }
 
+deriving instance DecidableEq, Repr for Name
 deriving instance DecidableEq, Repr for Expression
 deriving instance DecidableEq, Repr for Variable
 deriving instance DecidableEq, Repr for Goal
@@ -65,9 +66,23 @@ def runTermElabMInMeta { α } (termElabM: Lean.Elab.TermElabM α): Lean.MetaM α
 
 def exprToStr (e: Expr): Lean.MetaM String := toString <$> Meta.ppExpr e
 
+def parseSentence (s: String): MetaM Expr := do
+  let recursor ← match Parser.runParserCategory
+    (env := ← MonadEnv.getEnv)
+    (catName := `term)
+    (input := s)
+    (fileName := filename) with
+    | .ok syn => pure syn
+    | .error error => throwError "Failed to parse: {error}"
+  runTermElabMInMeta $ Elab.Term.elabTerm (stx := recursor) .none
+
 def runTacticOnMVar (tacticM: Elab.Tactic.TacticM Unit) (goal: MVarId): Elab.TermElabM (List MVarId) := do
     let (_, newGoals) ← tacticM { elaborator := .anonymous } |>.run { goals := [goal] }
     return newGoals.goals
+def mvarUserNameAndType (mvarId: MVarId): MetaM (Name × String) := do
+  let name := (← mvarId.getDecl).userName
+  let t ← exprToStr (← mvarId.getType)
+  return (name, t)
 
 end Test
 

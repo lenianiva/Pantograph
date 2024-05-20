@@ -49,6 +49,7 @@ def main (args: List String) := do
     ("Metavar", Metavar.suite env_default),
     ("Proofs", Proofs.suite env_default),
     ("Serial", Serial.suite env_default),
+    ("Tactic/Congruence", Tactic.Congruence.suite env_default),
     ("Tactic/Motivated Apply", Tactic.MotivatedApply.suite env_default),
     ("Tactic/No Confuse", Tactic.NoConfuse.suite env_default),
   ]

@@ -92,9 +92,9 @@ def test_list (env: Environment): IO LSpec.TestSeq :=
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   [
-    ("nat", test_nat env),
-    ("nat_fail", test_nat_fail env),
-    ("list", test_list env),
+    ("Nat", test_nat env),
+    ("Nat fail", test_nat_fail env),
+    ("List", test_list env),
   ]
 
 end Pantograph.Test.Tactic.NoConfuse
