@@ -212,11 +212,10 @@ inductive TacticExecute where
 def goalTacticExecute (state: GoalState) (goalId: Nat) (tacticExecute: TacticExecute): Lean.CoreM TacticResult :=
   runTermElabM do
     state.restoreElabM
-    let tactic := match tacticExecute with
+    state.execute goalId $ match tacticExecute with
       | .congruenceArg => Tactic.congruenceArg
       | .congruenceFun => Tactic.congruenceFun
       | .congruence => Tactic.congruence
-    state.execute goalId tactic
 
 
 

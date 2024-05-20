@@ -70,11 +70,10 @@ partial def instantiateDelayedMVars (eOrig: Expr) : MetaM Expr := do
         let pending ← mvarIdPending.withContext do
           let inner ← instantiateDelayedMVars (.mvar mvarIdPending) --(level := level + 1)
           --IO.println s!"{padding}├Pre: {inner}"
-          let r := (← Expr.abstractM inner fvars).instantiateRev args
-          pure r
+          pure <| (← inner.abstractM fvars).instantiateRev args
 
         -- Tail arguments
-        let result := mkAppN pending (List.drop fvars.size args.toList |>.toArray)
+        let result := mkAppRange pending fvars.size args.size args
         --IO.println s!"{padding}├MD {result}"
         return .done result
       else
