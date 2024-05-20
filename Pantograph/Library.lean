@@ -86,23 +86,6 @@ def createMetaContext: IO Lean.Meta.Context := do
 def envCatalog: Lean.CoreM Protocol.EnvCatalogResult :=
   Environment.catalog ({}: Protocol.EnvCatalog)
 
-@[export pantograph_mk_options]
-def mkOptions
-  (printJsonPretty: Bool)
-  (printExprPretty: Bool)
-  (printExprAST: Bool)
-  (noRepeat: Bool)
-  (printAuxDecls: Bool)
-  (printImplementationDetailHyps: Bool)
-  : Protocol.Options := {
-    printJsonPretty,
-    printExprPretty,
-    printExprAST,
-    noRepeat,
-    printAuxDecls,
-    printImplementationDetailHyps,
-  }
-
 @[export pantograph_env_inspect_m]
 def envInspect (name: String) (value: Bool) (dependency: Bool) (options: @&Protocol.Options):
     Lean.CoreM (Protocol.CR Protocol.EnvInspectResult) :=

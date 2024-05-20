@@ -91,7 +91,6 @@ private def newMVarSet (mctxOld: @&MetavarContext) (mctxNew: @&MetavarContext): 
       acc.insert mvarId
     ) SSet.empty
 
-
 protected def GoalState.focus (state: GoalState) (goalId: Nat): Option GoalState := do
   let goal ← state.savedState.tactic.goals.get? goalId
   return {
