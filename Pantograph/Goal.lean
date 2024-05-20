@@ -76,7 +76,7 @@ private def GoalState.mvars (state: GoalState): SSet MVarId :=
   state.mctx.decls.foldl (init := .empty) fun acc k _ => acc.insert k
 protected def GoalState.restoreMetaM (state: GoalState): MetaM Unit :=
   state.savedState.term.meta.restore
-private def GoalState.restoreElabM (state: GoalState): Elab.TermElabM Unit :=
+protected def GoalState.restoreElabM (state: GoalState): Elab.TermElabM Unit :=
   state.savedState.term.restore
 private def GoalState.restoreTacticM (state: GoalState) (goal: MVarId): Elab.Tactic.TacticM Unit := do
   state.savedState.restore
@@ -518,11 +518,6 @@ protected def GoalState.tryCalc (state: GoalState) (goalId: Nat) (pred: String):
 protected def GoalState.tryMotivatedApply (state: GoalState) (goalId: Nat) (recursor: String):
       Elab.TermElabM TacticResult := do
   state.restoreElabM
-  let goal ← match state.savedState.tactic.goals.get? goalId with
-    | .some goal => pure goal
-    | .none => return .indexError goalId
-  goal.checkNotAssigned `GoalState.tryMotivatedApply
-
   let recursor ← match Parser.runParserCategory
     (env := state.env)
     (catName := `term)
@@ -534,11 +529,6 @@ protected def GoalState.tryMotivatedApply (state: GoalState) (goalId: Nat) (recu
 protected def GoalState.tryNoConfuse (state: GoalState) (goalId: Nat) (eq: String):
       Elab.TermElabM TacticResult := do
   state.restoreElabM
-  let goal ← match state.savedState.tactic.goals.get? goalId with
-    | .some goal => pure goal
-    | .none => return .indexError goalId
-  goal.checkNotAssigned `GoalState.tryMotivatedApply
-
   let recursor ← match Parser.runParserCategory
     (env := state.env)
     (catName := `term)

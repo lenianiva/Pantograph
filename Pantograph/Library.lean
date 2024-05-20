@@ -204,4 +204,20 @@ def goalMotivatedApply (state: GoalState) (goalId: Nat) (recursor: String): Lean
 def goalNoConfuse (state: GoalState) (goalId: Nat) (eq: String): Lean.CoreM TacticResult :=
   runTermElabM <| state.tryNoConfuse goalId eq
 
+inductive TacticExecute where
+  | congruenceArg
+  | congruenceFun
+  | congruence
+@[export pantograph_goal_tactic_execute_m]
+def goalTacticExecute (state: GoalState) (goalId: Nat) (tacticExecute: TacticExecute): Lean.CoreM TacticResult :=
+  runTermElabM do
+    state.restoreElabM
+    let tactic := match tacticExecute with
+      | .congruenceArg => Tactic.congruenceArg
+      | .congruenceFun => Tactic.congruenceFun
+      | .congruence => Tactic.congruence
+    state.execute goalId tactic
+
+
+
 end Pantograph
