@@ -1,9 +1,10 @@
+import Lean.Data.HashMap
+import Pantograph.Compile
+import Pantograph.Environment
 import Pantograph.Goal
+import Pantograph.Library
 import Pantograph.Protocol
 import Pantograph.Serial
-import Pantograph.Environment
-import Pantograph.Library
-import Lean.Data.HashMap
 
 namespace Pantograph
 
@@ -44,6 +45,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   | "goal.continue" => run goal_continue
   | "goal.delete"   => run goal_delete
   | "goal.print"    => run goal_print
+  | "compile.tactics" => run compile_tactics
   | cmd =>
     let error: Protocol.InteractionError :=
       errorCommand s!"Unknown command {cmd}"
@@ -190,5 +192,12 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     | .none => return .error $ errorIndex s!"Invalid state index {args.stateId}"
     | .some goalState => runMetaM <| do
       return .ok (← goalPrint goalState state.options)
+  compile_tactics (args: Protocol.CompileTactics): MainM (CR Protocol.CompileTacticsResult) := do
+    let module := args.module.toName
+    try
+      let result ← Compile.compileAndCollectTacticInvocations module
+      return .ok result
+    catch e =>
+      return .error $ errorI "compile" (← e.toMessageData.toString)
 
 end Pantograph

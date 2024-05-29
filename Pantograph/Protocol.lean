@@ -275,6 +275,19 @@ structure GoalDiag where
   printAll: Bool := false
   instantiate: Bool := true
 
+structure CompileTactics where
+  module: String
+  deriving Lean.FromJson
+
+structure InvokedTactic where
+  goalBefore: String
+  goalAfter: String
+  tactic: String
+  deriving Lean.ToJson
+structure CompileTacticsResult where
+  invocations: List InvokedTactic
+  deriving Lean.ToJson
+
 abbrev CR α := Except InteractionError α
 
 end Pantograph.Protocol
