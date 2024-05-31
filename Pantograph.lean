@@ -45,7 +45,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   | "goal.continue" => run goal_continue
   | "goal.delete"   => run goal_delete
   | "goal.print"    => run goal_print
-  | "compile.tactics" => run compile_tactics
+  | "compile.unit"  => run compile_unit
   | cmd =>
     let error: Protocol.InteractionError :=
       errorCommand s!"Unknown command {cmd}"
@@ -192,11 +192,19 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     | .none => return .error $ errorIndex s!"Invalid state index {args.stateId}"
     | .some goalState => runMetaM <| do
       return .ok (← goalPrint goalState state.options)
-  compile_tactics (args: Protocol.CompileTactics): MainM (CR Protocol.CompileTacticsResult) := do
+  compile_unit (args: Protocol.CompileUnit): MainM (CR Protocol.CompileUnitResult) := do
     let module := args.module.toName
     try
-      let result ← Compile.compileAndCollectTacticInvocations module
-      return .ok result
+      let steps ← Compile.processSource module
+      let units? := if args.compilationUnits then
+          .some $ steps.map λ step => (step.src.startPos.byteIdx, step.src.stopPos.byteIdx)
+        else
+          .none
+      let invocations? ← if args.invocations then
+          pure $ .some (← Compile.collectTacticsFromCompilation steps)
+        else
+          pure .none
+      return .ok { units?, invocations? }
     catch e =>
       return .error $ errorI "compile" (← e.toMessageData.toString)
 

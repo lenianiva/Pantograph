@@ -275,17 +275,23 @@ structure GoalDiag where
   printAll: Bool := false
   instantiate: Bool := true
 
-structure CompileTactics where
-  module: String
-  deriving Lean.FromJson
 
+/-- Executes the Lean compiler on a single file -/
+structure CompileUnit where
+  module: String
+  -- If set to true, query the string boundaries of compilation units
+  compilationUnits: Bool := false
+  -- If set to true, collect tactic invocations
+  invocations: Bool := false
+  deriving Lean.FromJson
 structure InvokedTactic where
   goalBefore: String
   goalAfter: String
   tactic: String
   deriving Lean.ToJson
-structure CompileTacticsResult where
-  invocations: List InvokedTactic
+structure CompileUnitResult where
+  units?: Option $ List (Nat × Nat)
+  invocations?: Option $ List InvokedTactic
   deriving Lean.ToJson
 
 abbrev CR α := Except InteractionError α
