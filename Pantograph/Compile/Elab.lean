@@ -109,12 +109,6 @@ protected def runMetaM (t : TacticInvocation) (x : MVarId → MetaM α) : IO α 
   | none => throw <| IO.userError s!"No goals at {← t.pp}"
   | some g => t.runMetaMGoalsBefore fun _ => do g.withContext <| x g
 
-protected def mainGoal (t : TacticInvocation) : IO Expr :=
-  t.runMetaM (fun g => do instantiateMVars (← g.getType))
-
-protected def formatMainGoal (t : TacticInvocation) : IO Format :=
-  t.runMetaM (fun g => do Meta.ppExpr (← instantiateMVars (← g.getType)))
-
 protected def goalState (t : TacticInvocation) : IO (List Format) := do
   t.runMetaMGoalsBefore (fun gs => gs.mapM fun g => do Meta.ppGoal g)
 
@@ -137,17 +131,16 @@ partial def findAllInfo (t : Elab.InfoTree) (ctx : Option Elab.ContextInfo) (pre
 
 /-- Return all `TacticInfo` nodes in an `InfoTree` corresponding to tactics,
 each equipped with its relevant `ContextInfo`, and any children info trees. -/
-def collectTacticNodes (t : Elab.InfoTree) : List (Elab.TacticInfo × Elab.ContextInfo × PersistentArray Elab.InfoTree) :=
+def collectTacticNodes (t : Elab.InfoTree) : List TacticInvocation :=
   let infos := findAllInfo t none fun i => match i with
     | .ofTacticInfo _ => true
     | _ => false
   infos.filterMap fun p => match p with
-    | (.ofTacticInfo i, some ctx, children) => (i, ctx, children)
+    | (.ofTacticInfo i, some ctx, children) => .some ⟨i, ctx, children⟩
     | _ => none
 
 def collectTactics (t : Elab.InfoTree) : List TacticInvocation :=
-  collectTacticNodes t |>.map (fun ⟨i, ctx, children⟩ => ⟨i, ctx, children⟩)
-    |>.filter fun i => i.info.isSubstantive
+  collectTacticNodes t |>.filter fun i => i.info.isSubstantive
 
 
 end Pantograph.Compile
