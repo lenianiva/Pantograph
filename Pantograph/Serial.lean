@@ -264,7 +264,7 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
       name := ofName goal.name,
       userName? := if mvarDecl.userName == .anonymous then .none else .some (ofName mvarDecl.userName),
       isConversion := isLHSGoal? mvarDecl.type |>.isSome,
-      target := (← serializeExpression options (← instantiateMVars (← instantiate mvarDecl.type))),
+      target := (← serializeExpression options (← instantiate mvarDecl.type)),
       vars := vars.reverse.toArray
     }
   where
@@ -319,7 +319,7 @@ protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag 
         else
           pure []
       let type ← if options.instantiate
-        then instantiateMVars decl.type
+        then instantiateAll decl.type
         else pure $ decl.type
       let type_sexp ← serializeExpressionSexp type (sanitize := false)
       let resultMain: String := s!"{pref}{mvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type} {type_sexp}"
@@ -327,7 +327,7 @@ protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag 
         if options.printValue then
           if let Option.some value := (← getMCtx).eAssignment.find? mvarId then
             let value ← if options.instantiate
-              then instantiateMVars value
+              then instantiateAll value
               else pure $ value
             pure s!"\n := {← Meta.ppExpr value}"
           else
