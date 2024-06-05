@@ -329,11 +329,13 @@ protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag 
       let resultMain: String := s!"{pref}{mvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type}{type_sexp}"
       let resultValue: String ←
         if options.printValue then
-          if let Option.some value := (← getMCtx).eAssignment.find? mvarId then
+          if let .some value ← getExprMVarAssignment? mvarId then
             let value ← if options.instantiate
               then instantiateAll value
               else pure $ value
             pure s!"\n := {← Meta.ppExpr value}"
+          else if let .some { mvarIdPending, .. } ← getDelayedMVarAssignment? mvarId then
+            pure s!"\n := $ {mvarIdPending.name}"
           else
             pure ""
         else
