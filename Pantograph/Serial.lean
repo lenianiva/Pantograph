@@ -311,7 +311,7 @@ protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag 
   )
   pure $ result ++ (resultGoals.map (· ++ "\n") |> String.join) ++ (resultOthers.map (· ++ "\n") |> String.join)
   where
-    printMVar (pref: String) (mvarId: MVarId) (decl: MetavarDecl): MetaM String := do
+    printMVar (pref: String) (mvarId: MVarId) (decl: MetavarDecl): MetaM String := mvarId.withContext do
       let resultFVars: List String ←
         if options.printContext then
           decl.lctx.fvarIdToDecl.toList.mapM (λ (fvarId, decl) =>
@@ -321,8 +321,12 @@ protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag 
       let type ← if options.instantiate
         then instantiateAll decl.type
         else pure $ decl.type
-      let type_sexp ← serializeExpressionSexp type (sanitize := false)
-      let resultMain: String := s!"{pref}{mvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type} {type_sexp}"
+      let type_sexp ← if options.printSexp then
+          let sexp ← serializeExpressionSexp type (sanitize := false)
+          pure <| " " ++ sexp
+        else
+          pure ""
+      let resultMain: String := s!"{pref}{mvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type}{type_sexp}"
       let resultValue: String ←
         if options.printValue then
           if let Option.some value := (← getMCtx).eAssignment.find? mvarId then

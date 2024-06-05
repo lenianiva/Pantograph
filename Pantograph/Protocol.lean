@@ -273,6 +273,7 @@ structure GoalDiag where
   -- Print all mvars
   printAll: Bool := false
   instantiate: Bool := true
+  printSexp: Bool := false
 
 abbrev CR α := Except InteractionError α
 
