@@ -35,7 +35,7 @@ def subroutine_runner (steps: List (MainM LSpec.TestSeq)): IO LSpec.TestSeq := d
 def test_elab : IO LSpec.TestSeq :=
   subroutine_runner [
     subroutine_step "expr.echo"
-      [("expr", .str "λ {α : Sort (u + 1)} => List α")]
+      [("expr", .str "λ {α : Sort (u + 1)} => List α"), ("levels", .arr #["u"])]
      (Lean.toJson ({
        type := { pp? := .some "{α : Type u} → Type u" },
        expr := { pp? := .some "fun {α} => List α" }

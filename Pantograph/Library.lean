@@ -34,16 +34,16 @@ def setOptionFromString' (opts : Options) (entry : String) : ExceptT String IO O
 
 end Lean
 
+open Lean
+
 namespace Pantograph
 
-def defaultTermElabMContext: Lean.Elab.Term.Context := {
-    autoBoundImplicit := true,
-    declName? := some "_pantograph".toName,
+def defaultTermElabMContext: Elab.Term.Context := {
     errToSorry := false
   }
-def runMetaM { α } (metaM: Lean.MetaM α): Lean.CoreM α :=
+def runMetaM { α } (metaM: MetaM α): CoreM α :=
   metaM.run'
-def runTermElabM { α } (termElabM: Lean.Elab.TermElabM α): Lean.CoreM α :=
+def runTermElabM { α } (termElabM: Elab.TermElabM α): CoreM α :=
   termElabM.run' (ctx := defaultTermElabMContext) |>.run'
 
 def errorI (type desc: String): Protocol.InteractionError := { error := type, desc := desc }
@@ -56,13 +56,13 @@ unsafe def initSearch (sp: String): IO Unit := do
 
 /-- Creates a Core.Context object needed to run all monads -/
 @[export pantograph_create_core_context]
-def createCoreContext (options: Array String): IO Lean.Core.Context := do
-  let options? ← options.foldlM Lean.setOptionFromString' Lean.Options.empty |>.run
+def createCoreContext (options: Array String): IO Core.Context := do
+  let options? ← options.foldlM setOptionFromString' Options.empty |>.run
   let options ← match options? with
     | .ok options => pure options
     | .error e => throw $ IO.userError s!"Options cannot be parsed: {e}"
   return {
-    currNamespace := Lean.Name.str .anonymous "Aniva"
+    currNamespace := Name.str .anonymous "Aniva"
     openDecls := [],     -- No 'open' directives needed
     fileName := "<Pantograph>",
     fileMap := { source := "", positions := #[0] },
@@ -71,7 +71,7 @@ def createCoreContext (options: Array String): IO Lean.Core.Context := do
 
 /-- Creates a Core.State object needed to run all monads -/
 @[export pantograph_create_core_state]
-def createCoreState (imports: Array String): IO Lean.Core.State := do
+def createCoreState (imports: Array String): IO Core.State := do
   let env ← Lean.importModules
     (imports := imports.map (λ str => { module := str.toName, runtimeOnly := false }))
     (opts := {})
@@ -79,33 +79,33 @@ def createCoreState (imports: Array String): IO Lean.Core.State := do
   return { env := env }
 
 @[export pantograph_env_catalog_m]
-def envCatalog: Lean.CoreM Protocol.EnvCatalogResult :=
+def envCatalog: CoreM Protocol.EnvCatalogResult :=
   Environment.catalog ({}: Protocol.EnvCatalog)
 
 @[export pantograph_env_inspect_m]
 def envInspect (name: String) (value: Bool) (dependency: Bool) (options: @&Protocol.Options):
-    Lean.CoreM (Protocol.CR Protocol.EnvInspectResult) :=
+    CoreM (Protocol.CR Protocol.EnvInspectResult) :=
   Environment.inspect ({
     name, value? := .some value, dependency?:= .some dependency
   }: Protocol.EnvInspect) options
 
 @[export pantograph_env_add_m]
 def envAdd (name: String) (type: String) (value: String) (isTheorem: Bool):
-    Lean.CoreM (Protocol.CR Protocol.EnvAddResult) :=
+    CoreM (Protocol.CR Protocol.EnvAddResult) :=
   Environment.addDecl { name, type, value, isTheorem }
 
-def parseElabType (type: String): Lean.Elab.TermElabM (Protocol.CR Lean.Expr) := do
-  let env ← Lean.MonadEnv.getEnv
+def parseElabType (type: String): Elab.TermElabM (Protocol.CR Expr) := do
+  let env ← MonadEnv.getEnv
   let syn ← match parseTerm env type with
     | .error str => return .error $ errorI "parsing" str
     | .ok syn => pure syn
   match ← elabType syn with
   | .error str => return .error $ errorI "elab" str
-  | .ok expr => return .ok (← Lean.instantiateMVars expr)
+  | .ok expr => return .ok (← instantiateMVars expr)
 
 /-- This must be a TermElabM since the parsed expr contains extra information -/
-def parseElabExpr (expr: String) (expectedType?: Option String := .none): Lean.Elab.TermElabM (Protocol.CR Lean.Expr) := do
-  let env ← Lean.MonadEnv.getEnv
+def parseElabExpr (expr: String) (expectedType?: Option String := .none): Elab.TermElabM (Protocol.CR Expr) := do
+  let env ← MonadEnv.getEnv
   let expectedType? ← match ← expectedType?.mapM parseElabType with
     | .none => pure $ .none
     | .some (.ok t) => pure $ .some t
@@ -115,17 +115,17 @@ def parseElabExpr (expr: String) (expectedType?: Option String := .none): Lean.E
     | .ok syn => pure syn
   match ← elabTerm syn expectedType? with
   | .error str => return .error $ errorI "elab" str
-  | .ok expr => return .ok (← Lean.instantiateMVars expr)
+  | .ok expr => return .ok (← instantiateMVars expr)
 
 @[export pantograph_expr_echo_m]
-def exprEcho (expr: String) (expectedType?: Option String := .none) (options: @&Protocol.Options):
-    Lean.CoreM (Protocol.CR Protocol.ExprEchoResult) :=
-  runTermElabM do
+def exprEcho (expr: String) (expectedType?: Option String := .none) (levels: Array String := #[])  (options: @&Protocol.Options := {}):
+    CoreM (Protocol.CR Protocol.ExprEchoResult) :=
+  runTermElabM $ Elab.Term.withLevelNames (levels.toList.map (·.toName)) do
     let expr ← match ← parseElabExpr expr expectedType? with
       | .error e => return .error e
       | .ok expr => pure expr
     try
-      let type ← unfoldAuxLemmas (← Lean.Meta.inferType expr)
+      let type ← unfoldAuxLemmas (← Meta.inferType expr)
       return .ok {
           type := (← serializeExpression options type),
           expr := (← serializeExpression options expr)
@@ -134,38 +134,38 @@ def exprEcho (expr: String) (expectedType?: Option String := .none) (options: @&
       return .error $ errorI "typing" (← exception.toMessageData.toString)
 
 @[export pantograph_goal_start_expr_m]
-def goalStartExpr (expr: String): Lean.CoreM (Protocol.CR GoalState) :=
-  runTermElabM do
+def goalStartExpr (expr: String) (levels: Array String): CoreM (Protocol.CR GoalState) :=
+  runTermElabM $ Elab.Term.withLevelNames (levels.toList.map (·.toName)) do
     let expr ← match ← parseElabType expr with
       | .error e => return .error e
       | .ok expr => pure $ expr
     return .ok $ ← GoalState.create expr
 
 @[export pantograph_goal_tactic_m]
-def goalTactic (state: GoalState) (goalId: Nat) (tactic: String): Lean.CoreM TacticResult :=
+def goalTactic (state: GoalState) (goalId: Nat) (tactic: String): CoreM TacticResult :=
   runTermElabM <| state.tryTactic goalId tactic
 
 @[export pantograph_goal_assign_m]
-def goalAssign (state: GoalState) (goalId: Nat) (expr: String): Lean.CoreM TacticResult :=
+def goalAssign (state: GoalState) (goalId: Nat) (expr: String): CoreM TacticResult :=
   runTermElabM <| state.tryAssign goalId expr
 
 @[export pantograph_goal_have_m]
-def goalHave (state: GoalState) (goalId: Nat) (binderName: String) (type: String): Lean.CoreM TacticResult :=
+def goalHave (state: GoalState) (goalId: Nat) (binderName: String) (type: String): CoreM TacticResult :=
   runTermElabM <| state.tryHave goalId binderName type
 @[export pantograph_goal_let_m]
-def goalLet (state: GoalState) (goalId: Nat) (binderName: String) (type: String): Lean.CoreM TacticResult :=
+def goalLet (state: GoalState) (goalId: Nat) (binderName: String) (type: String): CoreM TacticResult :=
   runTermElabM <| state.tryLet goalId binderName type
 
 @[export pantograph_goal_conv_m]
-def goalConv (state: GoalState) (goalId: Nat): Lean.CoreM TacticResult :=
+def goalConv (state: GoalState) (goalId: Nat): CoreM TacticResult :=
   runTermElabM <| state.conv goalId
 
 @[export pantograph_goal_conv_exit_m]
-def goalConvExit (state: GoalState): Lean.CoreM TacticResult :=
+def goalConvExit (state: GoalState): CoreM TacticResult :=
   runTermElabM <| state.convExit
 
 @[export pantograph_goal_calc_m]
-def goalCalc (state: GoalState) (goalId: Nat) (pred: String): Lean.CoreM TacticResult :=
+def goalCalc (state: GoalState) (goalId: Nat) (pred: String): CoreM TacticResult :=
   runTermElabM <| state.tryCalc goalId pred
 
 @[export pantograph_goal_focus]
@@ -181,11 +181,11 @@ def goalContinue (target: GoalState) (branch: GoalState): Except String GoalStat
   target.continue branch
 
 @[export pantograph_goal_serialize_m]
-def goalSerialize (state: GoalState) (options: @&Protocol.Options): Lean.CoreM (Array Protocol.Goal) :=
+def goalSerialize (state: GoalState) (options: @&Protocol.Options): CoreM (Array Protocol.Goal) :=
   runMetaM <| state.serializeGoals (parent := .none) options
 
 @[export pantograph_goal_print_m]
-def goalPrint (state: GoalState) (options: @&Protocol.Options): Lean.CoreM Protocol.GoalPrintResult :=
+def goalPrint (state: GoalState) (options: @&Protocol.Options): CoreM Protocol.GoalPrintResult :=
   runMetaM do
     state.restoreMetaM
     return {

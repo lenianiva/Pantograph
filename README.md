@@ -82,8 +82,8 @@ where the application of `assumption` should lead to a failure.
 See `Pantograph/Protocol.lean` for a description of the parameters and return values in JSON.
 * `reset`: Delete all cached expressions and proof trees
 * `stat`: Display resource usage
-* `expr.echo {"expr": <expr>, "type": <optional expected type>}`: Determine the
-  type of an expression and format it
+* `expr.echo {"expr": <expr>, "type": <optional expected type>, ["levels": [<levels>]]}`: Determine the
+  type of an expression and format it.
 * `env.catalog`: Display a list of all safe Lean symbols in the current environment
 * `env.inspect {"name": <name>, "value": <bool>}`: Show the type and package of a
   given symbol; If value flag is set, the value is printed or hidden. By default
@@ -91,7 +91,7 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
 * `options.set { key: value, ... }`: Set one or more options (not Lean options; those
   have to be set via command line arguments.), for options, see `Pantograph/Protocol.lean`
 * `options.print`: Display the current set of options
-* `goal.start {["name": <name>], ["expr": <expr>], ["copyFrom": <symbol>]}`:
+* `goal.start {["name": <name>], ["expr": <expr>], ["levels": [<levels>]], ["copyFrom": <symbol>]}`:
   Start a new proof from a given expression or symbol
 * `goal.tactic {"stateId": <id>, "goalId": <id>, ...}`: Execute a tactic string on a
   given goal. The tactic is supplied as additional key-value pairs in one of the following formats:
