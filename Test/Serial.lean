@@ -47,24 +47,26 @@ def test_sexp_of_symbol (env: Environment): IO LSpec.TestSeq := do
     return LSpec.TestSeq.append suites test) LSpec.TestSeq.done
 
 def test_sexp_of_elab (env: Environment): IO LSpec.TestSeq := do
-  let entries: List (String × String) := [
-    ("λ x: Nat × Bool => x.1", "(:lambda x ((:c Prod) (:c Nat) (:c Bool)) ((:c Prod.fst) (:c Nat) (:c Bool) 0))"),
-    ("λ x: Array Nat => x.data", "(:lambda x ((:c Array) (:c Nat)) ((:c Array.data) (:c Nat) 0))"),
-    -- This tests `autoBoundImplicit`
-    ("λ {α : Sort (u + 1)} => List α", "(:lambda α (:sort (+ u 1)) ((:c List) 0) :implicit)"),
-    ("(2: Nat) <= (5: Nat)", "((:c LE.le) (:mv _uniq.37) (:mv _uniq.38) ((:c OfNat.ofNat) (:mv _uniq.23) (:lit 2) (:mv _uniq.24)) ((:c OfNat.ofNat) (:mv _uniq.33) (:lit 5) (:mv _uniq.34)))"),
+  let entries: List (String × (List Name) × String) := [
+    ("λ x: Nat × Bool => x.1", [], "(:lambda x ((:c Prod) (:c Nat) (:c Bool)) ((:c Prod.fst) (:c Nat) (:c Bool) 0))"),
+    ("λ x: Array Nat => x.data", [], "(:lambda x ((:c Array) (:c Nat)) ((:c Array.data) (:c Nat) 0))"),
+    ("λ {α: Sort (u + 1)} => List α", [`u], "(:lambda α (:sort (+ u 1)) ((:c List) 0) :implicit)"),
+    ("λ {α} => List α", [], "(:lambda α (:sort (+ (:mv _uniq.4) 1)) ((:c List) 0) :implicit)"),
+    ("(2: Nat) <= (5: Nat)", [], "((:c LE.le) (:mv _uniq.18) (:mv _uniq.19) ((:c OfNat.ofNat) (:mv _uniq.4) (:lit 2) (:mv _uniq.5)) ((:c OfNat.ofNat) (:mv _uniq.14) (:lit 5) (:mv _uniq.15)))"),
   ]
-  let termElabM: Elab.TermElabM LSpec.TestSeq := entries.foldlM (λ suites (source, target) => do
-    let env ← MonadEnv.getEnv
-    let s ← match parseTerm env source with
-      | .ok s => pure s
-      | .error e => return parseFailure e
-    let expr ← match (← elabTerm s) with
-      | .ok expr => pure expr
-      | .error e => return elabFailure e
-    let test := LSpec.check source ((← serializeExpressionSexp expr) = target)
-    return LSpec.TestSeq.append suites test) LSpec.TestSeq.done
-  runMetaMSeq env $ termElabM.run' (ctx := defaultTermElabMContext)
+  entries.foldlM (λ suites (source, levels, target) =>
+    let termElabM := do
+      let env ← MonadEnv.getEnv
+      let s ← match parseTerm env source with
+        | .ok s => pure s
+        | .error e => return parseFailure e
+      let expr ← match (← elabTerm s) with
+        | .ok expr => pure expr
+        | .error e => return elabFailure e
+      return LSpec.check source ((← serializeExpressionSexp expr) = target)
+    let metaM := (Elab.Term.withLevelNames levels termElabM).run' (ctx := defaultTermElabMContext)
+    return LSpec.TestSeq.append suites (← runMetaMSeq env metaM))
+    LSpec.TestSeq.done
 
 def test_sexp_of_expr (env: Environment): IO LSpec.TestSeq := do
   let entries: List (Expr × String) := [

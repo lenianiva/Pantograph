@@ -1,5 +1,7 @@
 /-
-All serialisation functions
+All serialisation functions;
+This replicates the behaviour of `Scope`s in `Lean/Elab/Command.lean` without
+using `Scope`s.
 -/
 import Lean
 import Pantograph.Expr
