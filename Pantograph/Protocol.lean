@@ -279,6 +279,25 @@ structure GoalDiag where
   instantiate: Bool := true
   printSexp: Bool := false
 
+
+/-- Executes the Lean compiler on a single file -/
+structure CompileUnit where
+  module: String
+  -- If set to true, query the string boundaries of compilation units
+  compilationUnits: Bool := false
+  -- If set to true, collect tactic invocations
+  invocations: Bool := false
+  deriving Lean.FromJson
+structure InvokedTactic where
+  goalBefore: String
+  goalAfter: String
+  tactic: String
+  deriving Lean.ToJson
+structure CompileUnitResult where
+  units?: Option $ List (Nat × Nat)
+  invocations?: Option $ List InvokedTactic
+  deriving Lean.ToJson
+
 abbrev CR α := Except InteractionError α
 
 end Pantograph.Protocol
