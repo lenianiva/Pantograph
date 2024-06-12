@@ -35,7 +35,7 @@ def subroutine_runner (steps: List (MainM LSpec.TestSeq)): IO LSpec.TestSeq := d
 def test_elab : IO LSpec.TestSeq :=
   subroutine_runner [
     subroutine_step "expr.echo"
-      [("expr", .str "λ {α : Sort (u + 1)} => List α")]
+      [("expr", .str "λ {α : Sort (u + 1)} => List α"), ("levels", .arr #["u"])]
      (Lean.toJson ({
        type := { pp? := .some "{α : Type u} → Type u" },
        expr := { pp? := .some "fun {α} => List α" }
@@ -65,7 +65,7 @@ def test_option_modify : IO LSpec.TestSeq :=
     subroutine_step "options.print"
       []
      (Lean.toJson ({ options with printExprAST := true }:
-      Protocol.OptionsPrintResult))
+      Protocol.Options))
   ]
 def test_malformed_command : IO LSpec.TestSeq :=
   let invalid := "invalid"
@@ -88,11 +88,11 @@ def test_tactic : IO LSpec.TestSeq :=
     vars := #[{ name := "_uniq.10", userName := "x", isInaccessible? := .some false, type? := .some { pp? := .some "Prop" }}],
   }
   let goal2: Protocol.Goal := {
-    name := "_uniq.14",
+    name := "_uniq.17",
     target := { pp? := .some "x ∨ y → y ∨ x" },
     vars := #[
       { name := "_uniq.10", userName := "x", isInaccessible? := .some false, type? := .some { pp? := .some "Prop" }},
-      { name := "_uniq.13", userName := "y", isInaccessible? := .some false, type? := .some { pp? := .some "Prop" }}
+      { name := "_uniq.16", userName := "y", isInaccessible? := .some false, type? := .some { pp? := .some "Prop" }}
     ],
   }
   subroutine_runner [

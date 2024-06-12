@@ -73,7 +73,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     Environment.addDecl args
   expr_echo (args: Protocol.ExprEcho): MainM (CR Protocol.ExprEchoResult) := do
     let state ← get
-    exprEcho args.expr args.type? state.options
+    exprEcho args.expr (expectedType? := args.type?) (levels := args.levels.getD #[]) (options := state.options)
   options_set (args: Protocol.OptionsSet): MainM (CR Protocol.OptionsSetResult) := do
     let state ← get
     let options := state.options
@@ -90,13 +90,13 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
       }
     }
     return .ok {  }
-  options_print (_: Protocol.OptionsPrint): MainM (CR Protocol.OptionsPrintResult) := do
+  options_print (_: Protocol.OptionsPrint): MainM (CR Protocol.Options) := do
     return .ok (← get).options
   goal_start (args: Protocol.GoalStart): MainM (CR Protocol.GoalStartResult) := do
     let state ← get
     let env ← Lean.MonadEnv.getEnv
     let expr?: Except _ GoalState ← runTermElabM (match args.expr, args.copyFrom with
-      | .some expr, .none => goalStartExpr expr
+      | .some expr, .none => goalStartExpr expr (args.levels.getD #[])
       | .none, .some copyFrom =>
         (match env.find? <| copyFrom.toName with
         | .none => return .error <| errorIndex s!"Symbol not found: {copyFrom}"

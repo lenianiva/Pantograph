@@ -101,6 +101,8 @@ structure StatResult where
 structure ExprEcho where
   expr: String
   type?: Option String
+  -- universe levels
+  levels: Option (Array String) := .none
   deriving Lean.FromJson
 structure ExprEchoResult where
   expr: Expression
@@ -193,11 +195,12 @@ structure OptionsSetResult where
   deriving Lean.ToJson
 structure OptionsPrint where
   deriving Lean.FromJson
-abbrev OptionsPrintResult := Options
 
 structure GoalStart where
   -- Only one of the fields below may be populated.
   expr: Option String     -- Directly parse in an expression
+  -- universe levels
+  levels: Option (Array String) := .none
   copyFrom: Option String -- Copy the type from a theorem in the environment
   deriving Lean.FromJson
 structure GoalStartResult where
@@ -274,6 +277,7 @@ structure GoalDiag where
   -- Print all mvars
   printAll: Bool := false
   instantiate: Bool := true
+  printSexp: Bool := false
 
 
 /-- Executes the Lean compiler on a single file -/

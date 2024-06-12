@@ -4,6 +4,7 @@ Functions for handling metavariables
 All the functions starting with `try` resume their inner monadic state.
 -/
 import Pantograph.Protocol
+import Pantograph.Tactic
 import Lean
 
 def Lean.MessageLog.getErrorMessages (log : MessageLog) : MessageLog :=
@@ -61,11 +62,21 @@ protected def GoalState.mctx (state: GoalState): MetavarContext :=
   state.savedState.term.meta.meta.mctx
 protected def GoalState.env (state: GoalState): Environment :=
   state.savedState.term.meta.core.env
+
+protected def GoalState.withContext (state: GoalState) (mvarId: MVarId) (m: MetaM α): MetaM α := do
+  let metaM := mvarId.withContext m
+  metaM.run' (← read) state.savedState.term.meta.meta
+
+protected def GoalState.withParentContext (state: GoalState) (m: MetaM α): MetaM α := do
+  state.withContext state.parentMVar?.get! m
+protected def GoalState.withRootContext (state: GoalState) (m: MetaM α): MetaM α := do
+  state.withContext state.root m
+
 private def GoalState.mvars (state: GoalState): SSet MVarId :=
   state.mctx.decls.foldl (init := .empty) fun acc k _ => acc.insert k
 protected def GoalState.restoreMetaM (state: GoalState): MetaM Unit :=
   state.savedState.term.meta.restore
-private def GoalState.restoreElabM (state: GoalState): Elab.TermElabM Unit :=
+protected def GoalState.restoreElabM (state: GoalState): Elab.TermElabM Unit :=
   state.savedState.term.restore
 private def GoalState.restoreTacticM (state: GoalState) (goal: MVarId): Elab.Tactic.TacticM Unit := do
   state.savedState.restore
@@ -80,23 +91,69 @@ private def newMVarSet (mctxOld: @&MetavarContext) (mctxNew: @&MetavarContext): 
       acc.insert mvarId
     ) SSet.empty
 
-/-- Inner function for executing tactic on goal state -/
-def executeTactic (state: Elab.Tactic.SavedState) (goal: MVarId) (tactic: Syntax) :
-    Elab.TermElabM (Except (Array String) Elab.Tactic.SavedState):= do
-  let tacticM (stx: Syntax):  Elab.Tactic.TacticM (Except (Array String) Elab.Tactic.SavedState) := do
-    state.restore
-    Elab.Tactic.setGoals [goal]
-    try
-      Elab.Tactic.evalTactic stx
-      if (← getThe Core.State).messages.hasErrors then
-        let messages := (← getThe Core.State).messages.getErrorMessages |>.toList.toArray
-        let errors ← (messages.map (·.data)).mapM fun md => md.toString
-        return .error errors
-      else
-        return .ok (← MonadBacktrack.saveState)
-    catch exception =>
-      return .error #[← exception.toMessageData.toString]
-  tacticM tactic { elaborator := .anonymous } |>.run' state.tactic
+protected def GoalState.focus (state: GoalState) (goalId: Nat): Option GoalState := do
+  let goal ← state.savedState.tactic.goals.get? goalId
+  return {
+    state with
+    savedState := {
+      state.savedState with
+      tactic := { goals := [goal] },
+    },
+    calcPrevRhs? := .none,
+  }
+
+/--
+Brings into scope a list of goals
+-/
+protected def GoalState.resume (state: GoalState) (goals: List MVarId): Except String GoalState :=
+  if ¬ (goals.all (λ goal => state.mvars.contains goal)) then
+    let invalid_goals := goals.filter (λ goal => ¬ state.mvars.contains goal) |>.map (·.name.toString)
+    .error s!"Goals {invalid_goals} are not in scope"
+  else
+    -- Set goals to the goals that have not been assigned yet, similar to the `focus` tactic.
+    let unassigned := goals.filter (λ goal =>
+      let mctx := state.mctx
+      ¬(mctx.eAssignment.contains goal || mctx.dAssignment.contains goal))
+    .ok {
+      state with
+      savedState := {
+        term := state.savedState.term,
+        tactic := { goals := unassigned },
+      },
+      calcPrevRhs? := .none,
+    }
+/--
+Brings into scope all goals from `branch`
+-/
+protected def GoalState.continue (target: GoalState) (branch: GoalState): Except String GoalState :=
+  if !target.goals.isEmpty then
+    .error s!"Target state has unresolved goals"
+  else if target.root != branch.root then
+    .error s!"Roots of two continued goal states do not match: {target.root.name} != {branch.root.name}"
+  else
+    target.resume (goals := branch.goals)
+
+protected def GoalState.rootExpr? (goalState: GoalState): Option Expr := do
+  let expr ← goalState.mctx.eAssignment.find? goalState.root
+  let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
+  if expr.hasExprMVar then
+    -- Must not assert that the goal state is empty here. We could be in a branch goal.
+    --assert! ¬goalState.goals.isEmpty
+    .none
+  else
+    assert! goalState.goals.isEmpty
+    return expr
+protected def GoalState.parentExpr? (goalState: GoalState): Option Expr := do
+  let parent ← goalState.parentMVar?
+  let expr := goalState.mctx.eAssignment.find! parent
+  let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
+  return expr
+protected def GoalState.assignedExprOf? (goalState: GoalState) (mvar: MVarId): Option Expr := do
+  let expr ← goalState.mctx.eAssignment.find? mvar
+  let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
+  return expr
+
+--- Tactic execution functions ---
 
 /-- Response for executing a tactic -/
 inductive TacticResult where
@@ -111,14 +168,35 @@ inductive TacticResult where
   -- The given action cannot be executed in the state
   | invalidAction (message: String)
 
-/-- Execute tactic on given state -/
-protected def GoalState.tryTactic (state: GoalState) (goalId: Nat) (tactic: String):
-    Elab.TermElabM TacticResult := do
+protected def GoalState.execute (state: GoalState) (goalId: Nat) (tacticM: Elab.Tactic.TacticM Unit):
+          Elab.TermElabM TacticResult := do
   state.restoreElabM
   let goal ← match state.savedState.tactic.goals.get? goalId with
     | .some goal => pure $ goal
     | .none => return .indexError goalId
-  goal.checkNotAssigned `GoalState.tryTactic
+  goal.checkNotAssigned `GoalState.execute
+  try
+    let (_, newGoals) ← tacticM { elaborator := .anonymous } |>.run { goals := [goal] }
+    if (← getThe Core.State).messages.hasErrors then
+      let messages := (← getThe Core.State).messages.getErrorMessages |>.toList.toArray
+      let errors ← (messages.map (·.data)).mapM fun md => md.toString
+      return .failure errors
+    let nextElabState ← MonadBacktrack.saveState
+    let nextMCtx := nextElabState.meta.meta.mctx
+    let prevMCtx := state.mctx
+    return .success {
+      state with
+      savedState := { term := nextElabState, tactic := newGoals },
+      newMVars := newMVarSet prevMCtx nextMCtx,
+      parentMVar? := .some goal,
+      calcPrevRhs? := .none,
+    }
+  catch exception =>
+    return .failure #[← exception.toMessageData.toString]
+
+/-- Execute tactic on given state -/
+protected def GoalState.tryTactic (state: GoalState) (goalId: Nat) (tactic: String):
+    Elab.TermElabM TacticResult := do
   let tactic ← match Parser.runParserCategory
     (env := ← MonadEnv.getEnv)
     (catName := if state.isConv then `conv else `tactic)
@@ -126,22 +204,7 @@ protected def GoalState.tryTactic (state: GoalState) (goalId: Nat) (tactic: Stri
     (fileName := filename) with
     | .ok stx => pure $ stx
     | .error error => return .parseError error
-  match ← executeTactic (state := state.savedState) (goal := goal) (tactic := tactic) with
-  | .error errors =>
-    return .failure errors
-  | .ok nextSavedState =>
-    -- Assert that the definition of metavariables are the same
-    let nextMCtx := nextSavedState.term.meta.meta.mctx
-    let prevMCtx := state.mctx
-    -- Generate a list of mvarIds that exist in the parent state; Also test the
-    -- assertion that the types have not changed on any mvars.
-    return .success {
-      state with
-      savedState := nextSavedState
-      newMVars := newMVarSet prevMCtx nextMCtx,
-      parentMVar? := .some goal,
-      calcPrevRhs? := .none,
-    }
+  state.execute goalId $ Elab.Tactic.evalTactic tactic
 
 /-- Assumes elabM has already been restored. Assumes expr has already typechecked -/
 protected def GoalState.assign (state: GoalState) (goal: MVarId) (expr: Expr):
@@ -168,7 +231,7 @@ protected def GoalState.assign (state: GoalState) (goal: MVarId) (expr: Expr):
     -- Generate a list of mvarIds that exist in the parent state; Also test the
     -- assertion that the types have not changed on any mvars.
     let newMVars := newMVarSet prevMCtx nextMCtx
-    let nextGoals ← newMVars.toList.filterM (λ mvar => do pure !(← mvar.isAssigned))
+    let nextGoals ← newMVars.toList.filterM (not <$> ·.isAssigned)
     return .success {
       root := state.root,
       savedState := {
@@ -188,6 +251,7 @@ protected def GoalState.tryAssign (state: GoalState) (goalId: Nat) (expr: String
   let goal ← match state.savedState.tactic.goals.get? goalId with
     | .some goal => pure goal
     | .none => return .indexError goalId
+  goal.checkNotAssigned `GoalState.tryAssign
   let expr ← match Parser.runParserCategory
     (env := state.env)
     (catName := `term)
@@ -211,6 +275,7 @@ protected def GoalState.tryHave (state: GoalState) (goalId: Nat) (binderName: St
   let goal ← match state.savedState.tactic.goals.get? goalId with
     | .some goal => pure goal
     | .none => return .indexError goalId
+  goal.checkNotAssigned `GoalState.tryHave
   let type ← match Parser.runParserCategory
     (env := state.env)
     (catName := `term)
@@ -260,6 +325,7 @@ protected def GoalState.tryLet (state: GoalState) (goalId: Nat) (binderName: Str
   let goal ← match state.savedState.tactic.goals.get? goalId with
     | .some goal => pure goal
     | .none => return .indexError goalId
+  goal.checkNotAssigned `GoalState.tryLet
   let type ← match Parser.runParserCategory
     (env := state.env)
     (catName := `term)
@@ -305,6 +371,7 @@ protected def GoalState.conv (state: GoalState) (goalId: Nat):
   let goal ← match state.savedState.tactic.goals.get? goalId with
     | .some goal => pure goal
     | .none => return .indexError goalId
+  goal.checkNotAssigned `GoalState.conv
   let tacticM :  Elab.Tactic.TacticM (Elab.Tactic.SavedState × MVarId) := do
     state.restoreTacticM goal
 
@@ -388,6 +455,7 @@ protected def GoalState.tryCalc (state: GoalState) (goalId: Nat) (pred: String):
     (fileName := filename) with
     | .ok syn => pure syn
     | .error error => return .parseError error
+  goal.checkNotAssigned `GoalState.tryCalc
   let calcPrevRhs? := state.calcPrevRhsOf? goalId
   let target ← instantiateMVars (← goal.getDecl).type
   let tag := (← goal.getDecl).userName
@@ -447,66 +515,27 @@ protected def GoalState.tryCalc (state: GoalState) (goalId: Nat) (pred: String):
     return .failure #[← exception.toMessageData.toString]
 
 
-protected def GoalState.focus (state: GoalState) (goalId: Nat): Option GoalState := do
-  let goal ← state.savedState.tactic.goals.get? goalId
-  return {
-    state with
-    savedState := {
-      state.savedState with
-      tactic := { goals := [goal] },
-    },
-    calcPrevRhs? := .none,
-  }
-
-/--
-Brings into scope a list of goals
--/
-protected def GoalState.resume (state: GoalState) (goals: List MVarId): Except String GoalState :=
-  if ¬ (goals.all (λ goal => state.mvars.contains goal)) then
-    .error s!"Goals not in scope"
-  else
-    -- Set goals to the goals that have not been assigned yet, similar to the `focus` tactic.
-    let unassigned := goals.filter (λ goal =>
-      let mctx := state.mctx
-      ¬(mctx.eAssignment.contains goal || mctx.dAssignment.contains goal))
-    .ok {
-      state with
-      savedState := {
-        term := state.savedState.term,
-        tactic := { goals := unassigned },
-      },
-      calcPrevRhs? := .none,
-    }
-/--
-Brings into scope all goals from `branch`
--/
-protected def GoalState.continue (target: GoalState) (branch: GoalState): Except String GoalState :=
-  if !target.goals.isEmpty then
-    .error s!"Target state has unresolved goals"
-  else if target.root != branch.root then
-    .error s!"Roots of two continued goal states do not match: {target.root.name} != {branch.root.name}"
-  else
-    target.resume (goals := branch.goals)
-
-protected def GoalState.rootExpr? (goalState: GoalState): Option Expr := do
-  let expr ← goalState.mctx.eAssignment.find? goalState.root
-  let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
-  if expr.hasMVar then
-    -- Must not assert that the goal state is empty here. We could be in a branch goal.
-    --assert! ¬goalState.goals.isEmpty
-    .none
-  else
-    assert! goalState.goals.isEmpty
-    return expr
-protected def GoalState.parentExpr? (goalState: GoalState): Option Expr := do
-  let parent ← goalState.parentMVar?
-  let expr := goalState.mctx.eAssignment.find! parent
-  let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
-  return expr
-protected def GoalState.assignedExprOf? (goalState: GoalState) (mvar: MVarId): Option Expr := do
-  let expr ← goalState.mctx.eAssignment.find? mvar
-  let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
-  return expr
-
+protected def GoalState.tryMotivatedApply (state: GoalState) (goalId: Nat) (recursor: String):
+      Elab.TermElabM TacticResult := do
+  state.restoreElabM
+  let recursor ← match Parser.runParserCategory
+    (env := state.env)
+    (catName := `term)
+    (input := recursor)
+    (fileName := filename) with
+    | .ok syn => pure syn
+    | .error error => return .parseError error
+  state.execute goalId (tacticM := Tactic.motivatedApply recursor)
+protected def GoalState.tryNoConfuse (state: GoalState) (goalId: Nat) (eq: String):
+      Elab.TermElabM TacticResult := do
+  state.restoreElabM
+  let recursor ← match Parser.runParserCategory
+    (env := state.env)
+    (catName := `term)
+    (input := eq)
+    (fileName := filename) with
+    | .ok syn => pure syn
+    | .error error => return .parseError error
+  state.execute goalId (tacticM := Tactic.noConfuse recursor)
 
 end Pantograph

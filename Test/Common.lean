@@ -10,11 +10,9 @@ namespace Pantograph
 
 -- Auxiliary functions
 namespace Protocol
-/-- Set internal names to "" -/
-def Goal.devolatilize (goal: Goal): Goal :=
+def Goal.devolatilizeVars (goal: Goal): Goal :=
   {
     goal with
-    name := "",
     vars := goal.vars.map removeInternalAux,
   }
   where removeInternalAux (v: Variable): Variable :=
@@ -22,6 +20,14 @@ def Goal.devolatilize (goal: Goal): Goal :=
       v with
       name := ""
     }
+/-- Set internal names to "" -/
+def Goal.devolatilize (goal: Goal): Goal :=
+  {
+    goal.devolatilizeVars with
+    name := "",
+  }
+
+deriving instance DecidableEq, Repr for Name
 deriving instance DecidableEq, Repr for Expression
 deriving instance DecidableEq, Repr for Variable
 deriving instance DecidableEq, Repr for Goal
@@ -57,6 +63,26 @@ def runMetaMSeq (env: Environment) (metaM: MetaM LSpec.TestSeq): IO LSpec.TestSe
   runCoreMSeq env metaM.run'
 def runTermElabMInMeta { α } (termElabM: Lean.Elab.TermElabM α): Lean.MetaM α :=
   termElabM.run' (ctx := Pantograph.defaultTermElabMContext)
+
+def exprToStr (e: Expr): Lean.MetaM String := toString <$> Meta.ppExpr e
+
+def parseSentence (s: String): MetaM Expr := do
+  let recursor ← match Parser.runParserCategory
+    (env := ← MonadEnv.getEnv)
+    (catName := `term)
+    (input := s)
+    (fileName := filename) with
+    | .ok syn => pure syn
+    | .error error => throwError "Failed to parse: {error}"
+  runTermElabMInMeta $ Elab.Term.elabTerm (stx := recursor) .none
+
+def runTacticOnMVar (tacticM: Elab.Tactic.TacticM Unit) (goal: MVarId): Elab.TermElabM (List MVarId) := do
+    let (_, newGoals) ← tacticM { elaborator := .anonymous } |>.run { goals := [goal] }
+    return newGoals.goals
+def mvarUserNameAndType (mvarId: MVarId): MetaM (Name × String) := do
+  let name := (← mvarId.getDecl).userName
+  let t ← exprToStr (← mvarId.getType)
+  return (name, t)
 
 end Test
 

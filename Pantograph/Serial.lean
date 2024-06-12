@@ -1,7 +1,10 @@
 /-
-All serialisation functions
+All serialisation functions;
+This replicates the behaviour of `Scope`s in `Lean/Elab/Command.lean` without
+using `Scope`s.
 -/
 import Lean
+import Pantograph.Expr
 
 import Pantograph.Protocol
 import Pantograph.Goal
@@ -10,13 +13,8 @@ open Lean
 
 -- Symbol processing functions --
 
-def Lean.Name.isAuxLemma (n : Lean.Name) : Bool := n matches .num (.str _ "_auxLemma") _
-
 namespace Pantograph
 
-/-- Unfold all lemmas created by `Lean.Meta.mkAuxLemma`. These end in `_auxLemma.nn` where `nn` is a number. -/
-def unfoldAuxLemmas (e : Expr) : CoreM Expr := do
-  Lean.Meta.deltaExpand e Lean.Name.isAuxLemma
 
 --- Input Functions ---
 
@@ -84,6 +82,7 @@ partial def serializeSortLevel (level: Level) (sanitize: Bool): String :=
   | _, .zero => s!"{k}"
   | _, _ => s!"(+ {u_str} {k})"
 
+
 /--
  Completely serializes an expression tree. Json not used due to compactness
 
@@ -92,7 +91,28 @@ A `_` symbol in the AST indicates automatic deductions not present in the origin
 partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM String := do
   self expr
   where
-  self (e: Expr): MetaM String :=
+  delayedMVarToSexp (e: Expr): MetaM (Option String) := do
+    let .some invocation ← toDelayedMVarInvocation e | return .none
+    let callee ← self $ .mvar invocation.mvarIdPending
+    let sites ← invocation.args.mapM (λ (fvarId, arg) => do
+        let arg := match arg with
+          | .some arg => arg
+          | .none => .fvar fvarId
+        self arg
+      )
+    let tailArgs ← invocation.tail.mapM self
+
+    let sites := " ".intercalate sites.toList
+    let result := if tailArgs.isEmpty then
+        s!"(:subst {callee} {sites})"
+      else
+        let tailArgs := " ".intercalate tailArgs.toList
+        s!"((:subst {callee} {sites}) {tailArgs})"
+    return .some result
+
+  self (e: Expr): MetaM String := do
+    if let .some result ← delayedMVarToSexp e then
+      return result
     match e with
     | .bvar deBruijnIndex =>
       -- This is very common so the index alone is shown. Literals are handled below.
@@ -102,9 +122,10 @@ partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM
     | .fvar fvarId =>
       let name := ofName fvarId.name
       pure s!"(:fv {name})"
-    | .mvar mvarId =>
-      let name := ofName mvarId.name
-      pure s!"(:mv {name})"
+    | .mvar mvarId => do
+        let pref := if ← mvarId.isDelayedAssigned then "mvd" else "mv"
+        let name := ofName mvarId.name
+        pure s!"(:{pref} {name})"
     | .sort level =>
       let level := serializeSortLevel level sanitize
       pure s!"(:sort {level})"
@@ -207,7 +228,7 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
       match localDecl with
       | .cdecl _ fvarId userName type _ _ =>
         let userName := userName.simpMacroScopes
-        let type ← instantiateMVars type
+        let type ← instantiate type
         return {
           name := ofName fvarId.name,
           userName:= ofName userName,
@@ -216,9 +237,9 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
         }
       | .ldecl _ fvarId userName type val _ _ => do
         let userName := userName.simpMacroScopes
-        let type ← instantiateMVars type
+        let type ← instantiate type
         let value? ← if showLetValues then
-          let val ← instantiateMVars val
+          let val ← instantiate val
           pure $ .some (← serializeExpression options val)
         else
           pure $ .none
@@ -245,10 +266,11 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
       name := ofName goal.name,
       userName? := if mvarDecl.userName == .anonymous then .none else .some (ofName mvarDecl.userName),
       isConversion := isLHSGoal? mvarDecl.type |>.isSome,
-      target := (← serializeExpression options (← instantiateMVars mvarDecl.type)),
+      target := (← serializeExpression options (← instantiate mvarDecl.type)),
       vars := vars.reverse.toArray
     }
   where
+  instantiate := instantiateAll
   ofName (n: Name) := serializeName n (sanitize := false)
 
 protected def GoalState.serializeGoals
@@ -267,51 +289,62 @@ protected def GoalState.serializeGoals
     | .none => throwError s!"Metavariable does not exist in context {goal.name}"
 
 /-- Print the metavariables in a readable format -/
-protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag := {}): MetaM Unit := do
+protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag := {}): MetaM String := do
   goalState.restoreMetaM
   let savedState := goalState.savedState
   let goals := savedState.tactic.goals
   let mctx ← getMCtx
   let root := goalState.root
   -- Print the root
-  match mctx.decls.find? root with
-  | .some decl => printMVar ">" root decl
-  | .none => IO.println s!">{root.name}: ??"
-  goals.forM (fun mvarId => do
-    if mvarId != root then
-      match mctx.decls.find? mvarId with
-      | .some decl => printMVar "⊢" mvarId decl
-      | .none => IO.println s!"⊢{mvarId.name}: ??"
+  let result: String ← match mctx.decls.find? root with
+    | .some decl => printMVar ">" root decl
+    | .none => pure s!">{root.name}: ??"
+  let resultGoals ← goals.filter (· != root) |>.mapM (fun mvarId =>
+    match mctx.decls.find? mvarId with
+    | .some decl => printMVar "⊢" mvarId decl
+    | .none => pure s!"⊢{mvarId.name}: ??"
   )
   let goals := goals.toSSet
-  mctx.decls.forM (fun mvarId decl => do
-    if goals.contains mvarId || mvarId == root then
-      pure ()
-    -- Print the remainig ones that users don't see in Lean
-    else if options.printAll then
+  let resultOthers ← mctx.decls.toList.filter (λ (mvarId, _) =>
+      !(goals.contains mvarId || mvarId == root) && options.printAll)
+  |>.mapM (fun (mvarId, decl) => do
       let pref := if goalState.newMVars.contains mvarId then "~" else " "
       printMVar pref mvarId decl
-    else
-      pure ()
-      --IO.println s!" {mvarId.name}{userNameToString decl.userName}"
   )
+  pure $ result ++ (resultGoals.map (· ++ "\n") |> String.join) ++ (resultOthers.map (· ++ "\n") |> String.join)
   where
-    printMVar (pref: String) (mvarId: MVarId) (decl: MetavarDecl): MetaM Unit := do
-      if options.printContext then
-        decl.lctx.fvarIdToDecl.forM printFVar
+    printMVar (pref: String) (mvarId: MVarId) (decl: MetavarDecl): MetaM String := mvarId.withContext do
+      let resultFVars: List String ←
+        if options.printContext then
+          decl.lctx.fvarIdToDecl.toList.mapM (λ (fvarId, decl) =>
+            do pure $ (← printFVar fvarId decl) ++ "\n")
+        else
+          pure []
       let type ← if options.instantiate
-        then instantiateMVars decl.type
+        then instantiateAll decl.type
         else pure $ decl.type
-      let type_sexp ← serializeExpressionSexp type (sanitize := false)
-      IO.println s!"{pref}{mvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type} {type_sexp}"
-      if options.printValue then
-        if let Option.some value := (← getMCtx).eAssignment.find? mvarId then
-          let value ← if options.instantiate
-            then instantiateMVars value
-            else pure $ value
-          IO.println s!" := {← Meta.ppExpr value}"
-    printFVar (fvarId: FVarId) (decl: LocalDecl): MetaM Unit := do
-      IO.println s!" | {fvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type}"
+      let type_sexp ← if options.printSexp then
+          let sexp ← serializeExpressionSexp type (sanitize := false)
+          pure <| " " ++ sexp
+        else
+          pure ""
+      let resultMain: String := s!"{pref}{mvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type}{type_sexp}"
+      let resultValue: String ←
+        if options.printValue then
+          if let .some value ← getExprMVarAssignment? mvarId then
+            let value ← if options.instantiate
+              then instantiateAll value
+              else pure $ value
+            pure s!"\n := {← Meta.ppExpr value}"
+          else if let .some { mvarIdPending, .. } ← getDelayedMVarAssignment? mvarId then
+            pure s!"\n := $ {mvarIdPending.name}"
+          else
+            pure ""
+        else
+          pure ""
+      pure $ (String.join resultFVars) ++ resultMain ++ resultValue
+    printFVar (fvarId: FVarId) (decl: LocalDecl): MetaM String := do
+      pure s!" | {fvarId.name}{userNameToString decl.userName}: {← Meta.ppExpr decl.type}"
     userNameToString : Name → String
       | .anonymous => ""
       | other => s!"[{other}]"
