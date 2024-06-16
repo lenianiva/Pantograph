@@ -52,21 +52,22 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): CoreM (Pr
     | .some false, _ => .none
     | .none, .defnInfo _ => info.value?
     | .none, _ => .none
+  let type ← unfoldAuxLemmas info.type
+  let value? ← value?.mapM (λ v => unfoldAuxLemmas v)
   -- Information common to all symbols
   let core := {
-    type := ← (serializeExpression options info.type).run',
+    type := ← (serializeExpression options type).run',
     isUnsafe := info.isUnsafe,
     value? := ← value?.mapM (λ v => serializeExpression options v |>.run'),
     publicName? := Lean.privateToUserName? name |>.map (·.toString),
     -- BUG: Warning: getUsedConstants here will not include projections. This is a known bug.
     typeDependency? := if args.dependency?.getD false
-      then .some <| info.type.getUsedConstants.map (λ n => serializeName n)
+      then .some <| type.getUsedConstants.map (λ n => serializeName n)
       else .none,
-    valueDependency? := ← if args.dependency?.getD false
-      then info.value?.mapM (λ e => do
-        let e ← unfoldAuxLemmas e
-        pure $ e.getUsedConstants.filter (!isNameInternal ·) |>.map (λ n => serializeName n) )
-      else pure (.none),
+    valueDependency? := if args.dependency?.getD false
+      then value?.map (λ e =>
+        e.getUsedConstants.filter (!isNameInternal ·) |>.map (λ n => serializeName n) )
+      else .none,
     module? := module?
   }
   let result ← match info with
