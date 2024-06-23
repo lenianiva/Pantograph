@@ -302,6 +302,7 @@ protected def GoalState.tryHave (state: GoalState) (goalId: Nat) (binderName: St
           Meta.withNewLocalInstances #[fvar] 0 do
             let mvarUpstream ← Meta.mkFreshExprMVarAt (← getLCtx) (← Meta.getLocalInstances)
               (← goal.getType) (kind := MetavarKind.synthetic) (userName := .anonymous)
+            -- FIXME: May be redundant?
             let expr: Expr := .app (.lam binderName type mvarBranch .default) mvarUpstream
             goal.assign expr
             pure mvarUpstream
@@ -537,5 +538,16 @@ protected def GoalState.tryNoConfuse (state: GoalState) (goalId: Nat) (eq: Strin
     | .ok syn => pure syn
     | .error error => return .parseError error
   state.execute goalId (tacticM := Tactic.noConfuse recursor)
+protected def GoalState.tryEval (state: GoalState) (goalId: Nat) (binderName: Name) (expr: String) :
+      Elab.TermElabM TacticResult := do
+  state.restoreElabM
+  let expr ← match Parser.runParserCategory
+    (env := state.env)
+    (catName := `term)
+    (input := expr)
+    (fileName := filename) with
+    | .ok syn => pure syn
+    | .error error => return .parseError error
+  state.execute goalId (tacticM := Tactic.tacticEval binderName expr)
 
 end Pantograph
