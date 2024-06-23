@@ -307,11 +307,11 @@ protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag 
   let goals := goals.toSSet
   let resultOthers ← mctx.decls.toList.filter (λ (mvarId, _) =>
       !(goals.contains mvarId || mvarId == root) && options.printAll)
-  |>.mapM (fun (mvarId, decl) => do
-      let pref := if goalState.newMVars.contains mvarId then "~" else " "
-      printMVar pref mvarId decl
-  )
-  pure $ result ++ (resultGoals.map (· ++ "\n") |> String.join) ++ (resultOthers.map (· ++ "\n") |> String.join)
+      |>.mapM (fun (mvarId, decl) => do
+        let pref := if goalState.newMVars.contains mvarId then "~" else " "
+        printMVar pref mvarId decl
+      )
+  pure $ result ++ "\n" ++ (resultGoals.map (· ++ "\n") |> String.join) ++ (resultOthers.map (· ++ "\n") |> String.join)
   where
     printMVar (pref: String) (mvarId: MVarId) (decl: MetavarDecl): MetaM String := mvarId.withContext do
       let resultFVars: List String ←
@@ -337,7 +337,7 @@ protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag 
               else pure $ value
             pure s!"\n := {← Meta.ppExpr value}"
           else if let .some { mvarIdPending, .. } ← getDelayedMVarAssignment? mvarId then
-            pure s!"\n := $ {mvarIdPending.name}"
+            pure s!"\n ::= {mvarIdPending.name}"
           else
             pure ""
         else

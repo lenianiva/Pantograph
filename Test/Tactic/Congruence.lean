@@ -7,6 +7,34 @@ open Pantograph
 
 namespace Pantograph.Test.Tactic.Congruence
 
+def test_congr_arg_list (env: Environment): IO LSpec.TestSeq :=
+  let expr := "λ {α} (l1 l2 : List α) (h: l1 = l2) => l1.reverse = l2.reverse"
+  runMetaMSeq env do
+    let expr ← parseSentence expr
+    Meta.lambdaTelescope expr $ λ _ body => do
+      let mut tests := LSpec.TestSeq.done
+      let target ← Meta.mkFreshExprSyntheticOpaqueMVar body
+      let (newGoals, test) ← runTermElabMInMeta do
+        let newGoals ← runTacticOnMVar Tactic.congruenceArg target.mvarId!
+        let test := LSpec.check "goals" ((← newGoals.mapM (λ x => mvarUserNameAndType x)) =
+          [
+            (`α, "Sort ?u.30"),
+            (`a₁, "?α"),
+            (`a₂, "?α"),
+            (`f, "?α → List α"),
+            (`h, "?a₁ = ?a₂"),
+            (`conduit, "(?f ?a₁ = ?f ?a₂) = (l1.reverse = l2.reverse)"),
+          ])
+        return (newGoals, test)
+      tests := tests ++ test
+      let f := newGoals.get! 3
+      let h := newGoals.get! 4
+      let c := newGoals.get! 5
+      let results ← f.apply (← parseSentence "List.reverse")
+      tests := tests ++ (LSpec.check "apply" (results.length = 0))
+      tests := tests ++ (LSpec.check "h" ((← exprToStr $ ← h.getType) = "?a₁ = ?a₂"))
+      tests := tests ++ (LSpec.check "conduit" ((← exprToStr $ ← c.getType) = "(?a₁.reverse = ?a₂.reverse) = (l1.reverse = l2.reverse)"))
+      return tests
 def test_congr_arg (env: Environment): IO LSpec.TestSeq :=
   let expr := "λ (n m: Nat) (h: n = m) => n * n = m * m"
   runMetaMSeq env do
@@ -72,6 +100,7 @@ def test_congr (env: Environment): IO LSpec.TestSeq :=
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   [
+    ("congrArg List.reverse", test_congr_arg_list env),
     ("congrArg", test_congr_arg env),
     ("congrFun", test_congr_fun env),
     ("congr", test_congr env),

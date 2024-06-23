@@ -204,15 +204,16 @@ def goalMotivatedApply (state: GoalState) (goalId: Nat) (recursor: String): Core
 def goalNoConfuse (state: GoalState) (goalId: Nat) (eq: String): CoreM TacticResult :=
   runTermElabM <| state.tryNoConfuse goalId eq
 
-inductive TacticExecute where
+inductive SyntheticTactic where
   | congruenceArg
   | congruenceFun
   | congruence
-@[export pantograph_goal_tactic_execute_m]
-def goalTacticExecute (state: GoalState) (goalId: Nat) (tacticExecute: TacticExecute): CoreM TacticResult :=
+/-- Executes a synthetic tactic which has no arguments -/
+@[export pantograph_goal_synthetic_tactic_m]
+def goalSyntheticTactic (state: GoalState) (goalId: Nat) (case: SyntheticTactic): CoreM TacticResult :=
   runTermElabM do
     state.restoreElabM
-    state.execute goalId $ match tacticExecute with
+    state.execute goalId $ match case with
       | .congruenceArg => Tactic.congruenceArg
       | .congruenceFun => Tactic.congruenceFun
       | .congruence => Tactic.congruence
