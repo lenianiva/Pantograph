@@ -8,6 +8,17 @@ open Lean
 
 namespace Pantograph
 
+deriving instance Repr for Expr
+-- Use strict equality check for expressions
+--instance : BEq Expr := ⟨Expr.equal⟩
+instance (priority := 80) (x y : Expr) : LSpec.Testable (x.equal y) :=
+  if h : Expr.equal x y then
+    .isTrue h
+  else
+    .isFalse h $ s!"Expected to be equalaaa: '{x.dbgToString}' and '{y.dbgToString}'"
+
+def uniq (n: Nat): Name := .num (.str .anonymous "_uniq") n
+
 -- Auxiliary functions
 namespace Protocol
 def Goal.devolatilizeVars (goal: Goal): Goal :=
