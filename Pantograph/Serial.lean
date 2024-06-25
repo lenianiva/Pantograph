@@ -202,7 +202,7 @@ def serializeExpression (options: @&Protocol.Options) (e: Expr): MetaM Protocol.
   }
 
 /-- Adapted from ppGoal -/
-def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl)
+def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl := .none)
       : MetaM Protocol.Goal := do
   -- Options for printing; See Meta.ppGoal for details
   let showLetValues  := true

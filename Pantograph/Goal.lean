@@ -548,6 +548,6 @@ protected def GoalState.tryEval (state: GoalState) (goalId: Nat) (binderName: Na
     (fileName := filename) with
     | .ok syn => pure syn
     | .error error => return .parseError error
-  state.execute goalId (tacticM := Tactic.tacticEval binderName expr)
+  state.execute goalId (tacticM := Tactic.evaluate binderName expr)
 
 end Pantograph
