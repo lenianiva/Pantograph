@@ -1,6 +1,7 @@
 import Pantograph.Goal
 import Pantograph.Library
 import Pantograph.Protocol
+import Pantograph.Condensed
 import Lean
 import LSpec
 
@@ -10,12 +11,7 @@ namespace Pantograph
 
 deriving instance Repr for Expr
 -- Use strict equality check for expressions
---instance : BEq Expr := ⟨Expr.equal⟩
-instance (priority := 80) (x y : Expr) : LSpec.Testable (x.equal y) :=
-  if h : Expr.equal x y then
-    .isTrue h
-  else
-    .isFalse h $ s!"Expected to be equalaaa: '{x.dbgToString}' and '{y.dbgToString}'"
+instance : BEq Expr := ⟨Expr.equal⟩
 
 def uniq (n: Nat): Name := .num (.str .anonymous "_uniq") n
 
@@ -25,6 +21,7 @@ def Goal.devolatilizeVars (goal: Goal): Goal :=
   {
     goal with
     vars := goal.vars.map removeInternalAux,
+
   }
   where removeInternalAux (v: Variable): Variable :=
     {
@@ -46,6 +43,24 @@ deriving instance DecidableEq, Repr for ExprEchoResult
 deriving instance DecidableEq, Repr for InteractionError
 deriving instance DecidableEq, Repr for Option
 end Protocol
+
+namespace Condensed
+
+deriving instance BEq, Repr for LocalDecl
+deriving instance BEq, Repr for Goal
+
+protected def LocalDecl.devolatilize (decl: LocalDecl): LocalDecl :=
+  {
+    decl with fvarId := { name := .anonymous }
+  }
+protected def Goal.devolatilize (goal: Goal): Goal :=
+  {
+    goal with
+    mvarId := { name := .anonymous },
+    context := goal.context.map LocalDecl.devolatilize
+  }
+
+end Condensed
 
 def TacticResult.toString : TacticResult → String
   | .success state => s!".success ({state.goals.length} goals)"

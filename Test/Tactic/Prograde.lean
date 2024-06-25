@@ -25,12 +25,33 @@ def test_eval (env: Environment): IO LSpec.TestSeq :=
       let target: Expr := mkAnd
         (mkOr (.fvar ⟨uniq 8⟩) (.fvar ⟨uniq 9⟩))
         (mkOr (.fvar ⟨uniq 8⟩) (.fvar ⟨uniq 9⟩))
-      let test := LSpec.test "goals before" ((← goal.mvarId!.getType) == target)
+      let h := .fvar ⟨uniq 8⟩
+      let test := LSpec.test "goals before" ((← toCondensedGoal goal.mvarId!).devolatilize == {
+        context := #[
+          { userName := `p, type := .sort 0 },
+          { userName := `q, type := .sort 0 },
+          { userName := `h, type := h}
+        ],
+        target,
+      })
       tests := tests ++ test
       let tactic := Tactic.evaluate `h2 e
+      let m := .mvar ⟨uniq 13⟩
       let test ← runTermElabMInMeta do
-        let newGoals ← runTacticOnMVar tactic goal.mvarId!
-        pure $ LSpec.test "goals after" ((← newGoals.head!.getType) == target)
+        let [goal] ← runTacticOnMVar tactic goal.mvarId! | panic! "Incorrect goal number"
+        pure $ LSpec.test "goals after" ((← toCondensedGoal goal).devolatilize == {
+        context := #[
+          { userName := `p, type := .sort 0 },
+          { userName := `q, type := .sort 0 },
+          { userName := `h, type := h},
+          {
+            userName := `h2,
+            type := mkOr h m,
+            value? := .some $ mkApp3 (mkConst `Or.inl) h m (.fvar ⟨uniq 10⟩)
+          }
+        ],
+        target,
+      })
       tests := tests ++ test
       return tests
 
