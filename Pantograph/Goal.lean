@@ -63,9 +63,16 @@ protected def GoalState.mctx (state: GoalState): MetavarContext :=
 protected def GoalState.env (state: GoalState): Environment :=
   state.savedState.term.meta.core.env
 
+@[export pantograph_goal_state_meta_context_of_goal]
+protected def GoalState.metaContextOfGoal (state: GoalState) (mvarId: MVarId): Option Meta.Context := do
+  let mvarDecl ← state.mctx.findDecl? mvarId
+  return { lctx := mvarDecl.lctx, localInstances := mvarDecl.localInstances }
+@[export pantograph_goal_state_meta_state]
+protected def GoalState.metaState (state: GoalState): Meta.State :=
+  state.savedState.term.meta.meta
+
 protected def GoalState.withContext (state: GoalState) (mvarId: MVarId) (m: MetaM α): MetaM α := do
-  let metaM := mvarId.withContext m
-  metaM.run' (← read) state.savedState.term.meta.meta
+  mvarId.withContext m |>.run' (← read) state.metaState
 
 protected def GoalState.withParentContext (state: GoalState) (m: MetaM α): MetaM α := do
   state.withContext state.parentMVar?.get! m
@@ -81,6 +88,7 @@ protected def GoalState.restoreElabM (state: GoalState): Elab.TermElabM Unit :=
 private def GoalState.restoreTacticM (state: GoalState) (goal: MVarId): Elab.Tactic.TacticM Unit := do
   state.savedState.restore
   Elab.Tactic.setGoals [goal]
+
 
 private def newMVarSet (mctxOld: @&MetavarContext) (mctxNew: @&MetavarContext): SSet MVarId :=
   mctxNew.decls.foldl (fun acc mvarId mvarDecl =>
