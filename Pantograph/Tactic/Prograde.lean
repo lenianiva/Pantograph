@@ -19,7 +19,7 @@ def evaluate (binderName: Name) (expr: Syntax): Elab.Tactic.TacticM Unit := do
     pure [mvarUpstream.mvarId!]
   Elab.Tactic.setGoals nextGoals
 
-def have_t (binderName: Name) (type: Syntax): Elab.Tactic.TacticM Unit := do
+def «have» (binderName: Name) (type: Syntax): Elab.Tactic.TacticM Unit := do
   let goal ← Elab.Tactic.getMainGoal
   let nextGoals: List MVarId ← goal.withContext do
     let type ← Elab.Term.elabType (stx := type)
