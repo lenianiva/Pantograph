@@ -2,7 +2,7 @@
 import Pantograph.Protocol
 import Pantograph.Compile.Frontend
 import Pantograph.Compile.Elab
-
+import Pantograph.Compile.Parse
 
 open Lean
 

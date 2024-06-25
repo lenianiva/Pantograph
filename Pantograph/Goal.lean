@@ -5,6 +5,7 @@ All the functions starting with `try` resume their inner monadic state.
 -/
 import Pantograph.Protocol
 import Pantograph.Tactic
+import Pantograph.Compile.Parse
 import Lean
 
 def Lean.MessageLog.getErrorMessages (log : MessageLog) : MessageLog :=
@@ -277,57 +278,6 @@ protected def GoalState.tryAssign (state: GoalState) (goalId: Nat) (expr: String
 
 -- Specialized Tactics
 
-protected def GoalState.tryHave (state: GoalState) (goalId: Nat) (binderName: String) (type: String):
-      Elab.TermElabM TacticResult := do
-  state.restoreElabM
-  let goal ← match state.savedState.tactic.goals.get? goalId with
-    | .some goal => pure goal
-    | .none => return .indexError goalId
-  goal.checkNotAssigned `GoalState.tryHave
-  let type ← match Parser.runParserCategory
-    (env := state.env)
-    (catName := `term)
-    (input := type)
-    (fileName := filename) with
-    | .ok syn => pure syn
-    | .error error => return .parseError error
-  let binderName := binderName.toName
-  try
-    -- Implemented similarly to the intro tactic
-    let nextGoals: List MVarId ← goal.withContext do
-      let type ← Elab.Term.elabType (stx := type)
-      let lctx ← MonadLCtx.getLCtx
-
-      -- The branch goal inherits the same context, but with a different type
-      let mvarBranch ← Meta.mkFreshExprMVarAt lctx (← Meta.getLocalInstances) type
-
-      -- Create the context for the `upstream` goal
-      let fvarId ← mkFreshFVarId
-      let lctxUpstream := lctx.mkLocalDecl fvarId binderName type
-      let fvar   := mkFVar fvarId
-      let mvarUpstream ←
-        withTheReader Meta.Context (fun ctx => { ctx with lctx := lctxUpstream }) do
-          Meta.withNewLocalInstances #[fvar] 0 do
-            let mvarUpstream ← Meta.mkFreshExprMVarAt (← getLCtx) (← Meta.getLocalInstances)
-              (← goal.getType) (kind := MetavarKind.synthetic) (userName := .anonymous)
-            -- FIXME: May be redundant?
-            let expr: Expr := .app (.lam binderName type mvarBranch .default) mvarUpstream
-            goal.assign expr
-            pure mvarUpstream
-
-      pure [mvarBranch.mvarId!, mvarUpstream.mvarId!]
-    return .success {
-      root := state.root,
-      savedState := {
-        term := ← MonadBacktrack.saveState,
-        tactic := { goals := nextGoals }
-      },
-      newMVars := nextGoals.toSSet,
-      parentMVar? := .some goal,
-      calcPrevRhs? := .none
-    }
-  catch exception =>
-    return .failure #[← exception.toMessageData.toString]
 protected def GoalState.tryLet (state: GoalState) (goalId: Nat) (binderName: String) (type: String):
       Elab.TermElabM TacticResult := do
   state.restoreElabM
@@ -527,33 +477,21 @@ protected def GoalState.tryCalc (state: GoalState) (goalId: Nat) (pred: String):
 protected def GoalState.tryMotivatedApply (state: GoalState) (goalId: Nat) (recursor: String):
       Elab.TermElabM TacticResult := do
   state.restoreElabM
-  let recursor ← match Parser.runParserCategory
-    (env := state.env)
-    (catName := `term)
-    (input := recursor)
-    (fileName := filename) with
+  let recursor ← match (← Compile.parseTermM recursor) with
     | .ok syn => pure syn
     | .error error => return .parseError error
   state.execute goalId (tacticM := Tactic.motivatedApply recursor)
 protected def GoalState.tryNoConfuse (state: GoalState) (goalId: Nat) (eq: String):
       Elab.TermElabM TacticResult := do
   state.restoreElabM
-  let recursor ← match Parser.runParserCategory
-    (env := state.env)
-    (catName := `term)
-    (input := eq)
-    (fileName := filename) with
+  let eq ← match (← Compile.parseTermM eq) with
     | .ok syn => pure syn
     | .error error => return .parseError error
-  state.execute goalId (tacticM := Tactic.noConfuse recursor)
+  state.execute goalId (tacticM := Tactic.noConfuse eq)
 protected def GoalState.tryEval (state: GoalState) (goalId: Nat) (binderName: Name) (expr: String) :
       Elab.TermElabM TacticResult := do
   state.restoreElabM
-  let expr ← match Parser.runParserCategory
-    (env := state.env)
-    (catName := `term)
-    (input := expr)
-    (fileName := filename) with
+  let expr ← match (← Compile.parseTermM expr) with
     | .ok syn => pure syn
     | .error error => return .parseError error
   state.execute goalId (tacticM := Tactic.evaluate binderName expr)

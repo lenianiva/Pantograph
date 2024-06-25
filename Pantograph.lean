@@ -125,7 +125,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           pure ( Except.ok (← goalAssign goalState args.goalId expr))
         | .none, .none, .some type, .none, .none => do
           let binderName := args.binderName?.getD ""
-          pure ( Except.ok (← goalHave goalState args.goalId binderName type))
+          pure ( Except.ok (← goalState.tryHave args.goalId binderName type))
         | .none, .none, .none, .some pred, .none => do
           pure ( Except.ok (← goalCalc goalState args.goalId pred))
         | .none, .none, .none, .none, .some true => do
