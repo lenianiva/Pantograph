@@ -188,13 +188,13 @@ protected def GoalState.tryHave (state: GoalState) (goalId: Nat) (binderName: St
     state.restoreElabM
     state.execute goalId (Tactic.«have» binderName.toName type)
 @[export pantograph_goal_evaluate_m]
-protected def GoalState.tryEvaluate (state: GoalState) (goalId: Nat) (binderName: String) (type: String): CoreM TacticResult := do
-  let type ← match (← Compile.parseTermM type) with
+protected def GoalState.tryEvaluate (state: GoalState) (goalId: Nat) (binderName: String) (expr: String): CoreM TacticResult := do
+  let expr ← match (← Compile.parseTermM expr) with
     | .ok syn => pure syn
     | .error error => return .parseError error
   runTermElabM do
     state.restoreElabM
-    state.execute goalId (Tactic.evaluate binderName.toName type)
+    state.execute goalId (Tactic.evaluate binderName.toName expr)
 @[export pantograph_goal_let_m]
 def goalLet (state: GoalState) (goalId: Nat) (binderName: String) (type: String): CoreM TacticResult :=
   runTermElabM <| state.tryLet goalId binderName type

@@ -488,12 +488,5 @@ protected def GoalState.tryNoConfuse (state: GoalState) (goalId: Nat) (eq: Strin
     | .ok syn => pure syn
     | .error error => return .parseError error
   state.execute goalId (tacticM := Tactic.noConfuse eq)
-protected def GoalState.tryEval (state: GoalState) (goalId: Nat) (binderName: Name) (expr: String) :
-      Elab.TermElabM TacticResult := do
-  state.restoreElabM
-  let expr ← match (← Compile.parseTermM expr) with
-    | .ok syn => pure syn
-    | .error error => return .parseError error
-  state.execute goalId (tacticM := Tactic.evaluate binderName expr)
 
 end Pantograph
