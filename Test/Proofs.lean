@@ -357,69 +357,6 @@ def test_or_comm: TestM Unit := do
       ]
     }
 
-def test_have: TestM Unit := do
-  let state? ← startProof (.expr "∀ (p q: Prop), p → ((p ∨ q) ∨ (p ∨ q))")
-  let state0 ← match state? with
-    | .some state => pure state
-    | .none => do
-      addTest $ assertUnreachable "Goal could not parse"
-      return ()
-  let tactic := "intro p q h"
-  let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := tactic) with
-    | .success state => pure state
-    | other => do
-      addTest $ assertUnreachable $ other.toString
-      return ()
-  addTest $ LSpec.check tactic ((← state1.serializeGoals (options := ← read)).map (·.devolatilize) =
-    #[buildGoal [("p", "Prop"), ("q", "Prop"), ("h", "p")] "(p ∨ q) ∨ p ∨ q"])
-
-  let expr := "Or.inl (Or.inl h)"
-  let state2 ← match ← state1.tryAssign (goalId := 0) (expr := expr) with
-    | .success state => pure state
-    | other => do
-      addTest $ assertUnreachable $ other.toString
-      return ()
-  addTest $ LSpec.check s!":= {expr}" ((← state2.serializeGoals (options := ← read)).map (·.devolatilize) =
-    #[])
-
-  let haveBind := "y"
-  let haveType := "p ∨ q"
-  let state2 ← match ← state1.tryHave (goalId := 0) (binderName := haveBind) (type := haveType) with
-    | .success state => pure state
-    | other => do
-      addTest $ assertUnreachable $ other.toString
-      return ()
-  addTest $ LSpec.check s!"have {haveBind}: {haveType}" ((← state2.serializeGoals (options := ← read)).map (·.devolatilize) =
-    #[
-      buildGoal [("p", "Prop"), ("q", "Prop"), ("h", "p")] "p ∨ q",
-      buildGoal [("p", "Prop"), ("q", "Prop"), ("h", "p"), ("y", "p ∨ q")] "(p ∨ q) ∨ p ∨ q"
-    ])
-
-  let expr := "Or.inl h"
-  let state3 ← match ← state2.tryAssign (goalId := 0) (expr := expr) with
-    | .success state => pure state
-    | other => do
-      addTest $ assertUnreachable $ other.toString
-      return ()
-  addTest $ LSpec.check s!":= {expr}" ((← state3.serializeGoals (options := ← read)).map (·.devolatilize) =
-    #[])
-
-  let state2b ← match state3.continue state2 with
-    | .ok state => pure state
-    | .error e => do
-      addTest $ assertUnreachable e
-      return ()
-  let expr := "Or.inl y"
-  let state4 ← match ← state2b.tryAssign (goalId := 0) (expr := expr) with
-    | .success state => pure state
-    | other => do
-      addTest $ assertUnreachable $ other.toString
-      return ()
-  addTest $ LSpec.check s!":= {expr}" ((← state4.serializeGoals (options := ← read)).map (·.devolatilize) =
-    #[])
-
-  addTest $ LSpec.check "(4 root)" state4.rootExpr?.isSome
-
 example : ∀ (a b c1 c2: Nat), (b + a) + c1 = (b + a) + c2 → (a + b) + c1 = (b + a) + c2 := by
   intro a b c1 c2 h
   conv =>
@@ -856,7 +793,6 @@ def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
     ("Nat.add_comm delta", test_delta_variable),
     ("arithmetic", test_arith),
     ("Or.comm", test_or_comm),
-    ("have", test_have),
     ("conv", test_conv),
     ("calc", test_calc),
     ("let via assign", test_let false),

@@ -89,10 +89,12 @@ def runMetaMSeq (env: Environment) (metaM: MetaM LSpec.TestSeq): IO LSpec.TestSe
   runCoreMSeq env metaM.run'
 def runTermElabMInMeta { α } (termElabM: Lean.Elab.TermElabM α): Lean.MetaM α :=
   termElabM.run' (ctx := Pantograph.defaultTermElabMContext)
+def runTermElabMSeq (env: Environment) (termElabM: Elab.TermElabM LSpec.TestSeq): IO LSpec.TestSeq :=
+  runMetaMSeq env $ termElabM.run' (ctx := Pantograph.defaultTermElabMContext)
 
 def exprToStr (e: Expr): Lean.MetaM String := toString <$> Meta.ppExpr e
 
-def parseSentence (s: String): MetaM Expr := do
+def parseSentence (s: String): Elab.TermElabM Expr := do
   let recursor ← match Parser.runParserCategory
     (env := ← MonadEnv.getEnv)
     (catName := `term)
@@ -100,7 +102,7 @@ def parseSentence (s: String): MetaM Expr := do
     (fileName := filename) with
     | .ok syn => pure syn
     | .error error => throwError "Failed to parse: {error}"
-  runTermElabMInMeta $ Elab.Term.elabTerm (stx := recursor) .none
+  Elab.Term.elabTerm (stx := recursor) .none
 
 def runTacticOnMVar (tacticM: Elab.Tactic.TacticM Unit) (goal: MVarId): Elab.TermElabM (List MVarId) := do
     let (_, newGoals) ← tacticM { elaborator := .anonymous } |>.run { goals := [goal] }
@@ -109,6 +111,36 @@ def mvarUserNameAndType (mvarId: MVarId): MetaM (Name × String) := do
   let name := (← mvarId.getDecl).userName
   let t ← exprToStr (← mvarId.getType)
   return (name, t)
+
+
+-- Monadic testing
+
+abbrev TestT := StateT LSpec.TestSeq
+
+def addTest [Monad m] (test: LSpec.TestSeq): TestT m Unit := do
+  set $ (← get) ++ test
+
+def runTest [Monad m] (t: TestT m Unit): m LSpec.TestSeq :=
+  Prod.snd <$> t.run LSpec.TestSeq.done
+
+def runTestTermElabM (env: Environment) (t: TestT Elab.TermElabM Unit):
+  IO LSpec.TestSeq :=
+  runTermElabMSeq env $ runTest t
+
+def cdeclOf (userName: Name) (type: Expr): Condensed.LocalDecl :=
+  { userName, type }
+
+def buildGoal (nameType: List (String × String)) (target: String) (userName?: Option String := .none):
+    Protocol.Goal :=
+  {
+    userName?,
+    target := { pp? := .some target},
+    vars := (nameType.map fun x => ({
+      userName := x.fst,
+      type? := .some { pp? := .some x.snd },
+      isInaccessible? := .some false
+    })).toArray
+  }
 
 end Test
 
