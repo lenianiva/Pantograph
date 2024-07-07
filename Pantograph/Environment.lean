@@ -132,7 +132,7 @@ def addDecl (args: Protocol.EnvAdd): CoreM (Protocol.CR Protocol.EnvAddResult) :
     (hints := Lean.mkReducibilityHintsRegularEx 1)
     (safety := Lean.DefinitionSafety.safe)
     (all := [])
-  let env' ← match env.addDecl constant with
+  let env' ← match env.addDecl (← getOptions) constant with
     | .error e => do
       let options ← Lean.MonadOptions.getOptions
       let desc ← (e.toMessageData options).toString

@@ -52,7 +52,7 @@ def processOneCommand: Elab.Frontend.FrontendM (CompilationStep × Bool) := do
   let src := (← read).inputCtx.input.toSubstring.extract (← get).cmdPos (← get).parserState.pos
   let s' := (← get).commandState
   let after := s'.env
-  let msgs := s'.messages.msgs.drop s.messages.msgs.size
+  let msgs := s'.messages.toList.drop s.messages.toList.length
   let trees := s'.infoState.trees.drop s.infoState.trees.size
   let ⟨_, fileName, fileMap⟩  := (← read).inputCtx
   return ({ fileName, fileMap, src, stx, before, after, msgs, trees }, done)
