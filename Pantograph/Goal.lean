@@ -7,11 +7,6 @@ import Pantograph.Protocol
 import Pantograph.Tactic
 import Lean
 
-def Lean.MessageLog.getErrorMessages (log : MessageLog) : MessageLog :=
-  {
-    msgs := log.msgs.filter fun m => match m.severity with | MessageSeverity.error => true | _ => false
-  }
-
 
 namespace Pantograph
 open Lean
@@ -178,7 +173,7 @@ protected def GoalState.execute (state: GoalState) (goalId: Nat) (tacticM: Elab.
   try
     let (_, newGoals) ← tacticM { elaborator := .anonymous } |>.run { goals := [goal] }
     if (← getThe Core.State).messages.hasErrors then
-      let messages := (← getThe Core.State).messages.getErrorMessages |>.toList.toArray
+      let messages := (← getThe Core.State).messages.toArray
       let errors ← (messages.map (·.data)).mapM fun md => md.toString
       return .failure errors
     let nextElabState ← MonadBacktrack.saveState
@@ -223,7 +218,7 @@ protected def GoalState.assign (state: GoalState) (goal: MVarId) (expr: Expr):
     goal.checkNotAssigned `GoalState.assign
     goal.assign expr
     if (← getThe Core.State).messages.hasErrors then
-      let messages := (← getThe Core.State).messages.getErrorMessages |>.toList.toArray
+      let messages := (← getThe Core.State).messages.toArray
       let errors ← (messages.map (·.data)).mapM fun md => md.toString
       return .failure errors
     let prevMCtx := state.savedState.term.meta.meta.mctx
