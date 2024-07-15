@@ -17,6 +17,13 @@ def nameToStr (s: String) : Name := s.toName
 @[export pantograph_name_is_inaccessible]
 def isInaccessible (n: Name) : Bool := n.isInaccessibleUserName
 
+@[export pantograph_mk_app_meta_m]
+def mkAppM (constName : Name) (xs : Array Expr) : MetaM Expr := Meta.mkAppM constName xs
+
+@[export pantograph_pp_expr]
+def ppExpr (e: Expr) := Meta.ppExpr e
+
+
 -- Mirrors Lean's LocalDecl
 structure LocalDecl where
   -- Default value is for testing

@@ -78,9 +78,10 @@ def createCoreState (imports: Array String): IO Core.State := do
     (trustLevel := 1)
   return { env := env }
 
-@[export pantograph_create_meta_context]
-def createMetaContext: IO Lean.Meta.Context := do
-  return {}
+@[export pantograph_meta_context]
+def metaContext: Lean.Meta.Context := {}
+@[export pantograph_meta_state]
+def metaState: Lean.Meta.State := {}
 
 @[export pantograph_env_catalog_m]
 def envCatalog: CoreM Protocol.EnvCatalogResult :=
