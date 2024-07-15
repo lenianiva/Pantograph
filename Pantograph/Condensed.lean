@@ -20,8 +20,8 @@ def isInaccessible (n: Name) : Bool := n.isInaccessibleUserName
 @[export pantograph_mk_app_meta_m]
 def mkAppM (constName : Name) (xs : Array Expr) : MetaM Expr := Meta.mkAppM constName xs
 
-@[export pantograph_pp_expr]
-def ppExpr (e: Expr) := Meta.ppExpr e
+@[export pantograph_pp_expr_meta_m]
+def ppExpr (e: Expr): MetaM String := toString<$> Meta.ppExpr e
 
 
 -- Mirrors Lean's LocalDecl
