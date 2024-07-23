@@ -98,7 +98,7 @@ Convert an expression to an equiavlent form with
 2. No aux lemmas
 3. No assigned mvars
  -/
-@[export pantograph_instantiate_all_meta_m]
+@[export pantograph_instantiate_all_m]
 def instantiateAll (e: Expr): MetaM Expr := do
   let e ← instantiateDelayedMVars e
   let e ← unfoldAuxLemmas e
@@ -111,7 +111,7 @@ structure DelayedMVarInvocation where
   tail: Array Expr
 
 -- The pending mvar of any delayed assigned mvar must not be assigned in any way.
-@[export pantograph_to_delayed_mvar_invocation_meta_m]
+@[export pantograph_to_delayed_mvar_invocation_m]
 def toDelayedMVarInvocation (e: Expr): MetaM (Option DelayedMVarInvocation) := do
   let .mvar mvarId := e.getAppFn | return .none
   let .some decl ← getDelayedMVarAssignment? mvarId | return .none
