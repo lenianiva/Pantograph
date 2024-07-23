@@ -78,11 +78,6 @@ def createCoreState (imports: Array String): IO Core.State := do
     (trustLevel := 1)
   return { env := env }
 
-@[export pantograph_meta_context]
-def metaContext: Lean.Meta.Context := {}
-@[export pantograph_meta_state]
-def metaState: Lean.Meta.State := {}
-
 @[export pantograph_env_catalog_m]
 def envCatalog: CoreM Protocol.EnvCatalogResult :=
   Environment.catalog ({}: Protocol.EnvCatalog)
@@ -99,6 +94,7 @@ def envAdd (name: String) (type: String) (value: String) (isTheorem: Bool):
     CoreM (Protocol.CR Protocol.EnvAddResult) :=
   Environment.addDecl { name, type, value, isTheorem }
 
+@[export pantograph_parse_elab_type_m]
 def parseElabType (type: String): Elab.TermElabM (Protocol.CR Expr) := do
   let env ← MonadEnv.getEnv
   let syn ← match parseTerm env type with
@@ -109,6 +105,7 @@ def parseElabType (type: String): Elab.TermElabM (Protocol.CR Expr) := do
   | .ok expr => return .ok (← instantiateMVars expr)
 
 /-- This must be a TermElabM since the parsed expr contains extra information -/
+@[export pantograph_parse_elab_expr_m]
 def parseElabExpr (expr: String) (expectedType?: Option String := .none): Elab.TermElabM (Protocol.CR Expr) := do
   let env ← MonadEnv.getEnv
   let expectedType? ← match ← expectedType?.mapM parseElabType with
