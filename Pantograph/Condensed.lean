@@ -50,12 +50,13 @@ def metaContext: Meta.Context := {}
 @[export pantograph_meta_state]
 def metaState: Meta.State := {}
 @[export pantograph_elab_context]
-def elabContext: Meta.Context := {}
+def elabContext: Elab.Term.Context := {
+    errToSorry := false
+  }
 @[export pantograph_elab_state]
 def elabState (levelNames: Array Name): Elab.Term.State := {
     levelNames := levelNames.toList,
   }
-
 
 
 end Pantograph.Condensed

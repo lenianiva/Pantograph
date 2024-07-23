@@ -1,3 +1,4 @@
+import Pantograph.Condensed
 import Pantograph.Environment
 import Pantograph.Goal
 import Pantograph.Protocol
@@ -38,13 +39,10 @@ open Lean
 
 namespace Pantograph
 
-def defaultTermElabMContext: Elab.Term.Context := {
-    errToSorry := false
-  }
 def runMetaM { α } (metaM: MetaM α): CoreM α :=
   metaM.run'
 def runTermElabM { α } (termElabM: Elab.TermElabM α): CoreM α :=
-  termElabM.run' (ctx := defaultTermElabMContext) |>.run'
+  termElabM.run' (ctx := Condensed.elabContext) |>.run'
 
 def errorI (type desc: String): Protocol.InteractionError := { error := type, desc := desc }
 

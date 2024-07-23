@@ -73,7 +73,7 @@ def runCoreMSeq (env: Environment) (coreM: CoreM LSpec.TestSeq) (options: Array 
 def runMetaMSeq (env: Environment) (metaM: MetaM LSpec.TestSeq): IO LSpec.TestSeq :=
   runCoreMSeq env metaM.run'
 def runTermElabMInMeta { α } (termElabM: Lean.Elab.TermElabM α): Lean.MetaM α :=
-  termElabM.run' (ctx := Pantograph.defaultTermElabMContext)
+  termElabM.run' (ctx := Pantograph.Condensed.elabContext)
 
 def exprToStr (e: Expr): Lean.MetaM String := toString <$> Meta.ppExpr e
 

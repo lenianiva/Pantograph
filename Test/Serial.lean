@@ -64,7 +64,7 @@ def test_sexp_of_elab (env: Environment): IO LSpec.TestSeq := do
         | .ok expr => pure expr
         | .error e => return elabFailure e
       return LSpec.check source ((← serializeExpressionSexp expr) = target)
-    let metaM := (Elab.Term.withLevelNames levels termElabM).run' (ctx := defaultTermElabMContext)
+    let metaM := (Elab.Term.withLevelNames levels termElabM).run' (ctx := Condensed.elabContext)
     return LSpec.TestSeq.append suites (← runMetaMSeq env metaM))
     LSpec.TestSeq.done
 
@@ -85,7 +85,7 @@ def test_sexp_of_expr (env: Environment): IO LSpec.TestSeq := do
     let testCaseName := target.take 10
     let test := LSpec.check   testCaseName ((← serializeExpressionSexp expr) = target)
     return LSpec.TestSeq.append suites test) LSpec.TestSeq.done
-  runMetaMSeq env $ termElabM.run' (ctx := defaultTermElabMContext)
+  runMetaMSeq env $ termElabM.run' (ctx := Condensed.elabContext)
 
 -- Instance parsing
 def test_instance (env: Environment): IO LSpec.TestSeq :=
