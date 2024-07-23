@@ -201,54 +201,6 @@ def serializeExpression (options: @&Protocol.Options) (e: Expr): MetaM Protocol.
     dependentMVars?,
   }
 
-@[export pantograph_to_condensed_goal]
-def toCondensedGoal (mvarId: MVarId): MetaM Condensed.Goal := do
-  let options: Protocol.Options := {}
-  let ppAuxDecls       := options.printAuxDecls
-  let ppImplDetailHyps := options.printImplementationDetailHyps
-  let mvarDecl ← mvarId.getDecl
-  let lctx     := mvarDecl.lctx
-  let lctx     := lctx.sanitizeNames.run' { options := (← getOptions) }
-  Meta.withLCtx lctx mvarDecl.localInstances do
-    let ppVar (localDecl : LocalDecl) : MetaM Condensed.LocalDecl := do
-      match localDecl with
-      | .cdecl _ fvarId userName type _ _ =>
-        let type ← instantiate type
-        return { fvarId, userName, type }
-      | .ldecl _ fvarId userName type value _ _ => do
-        let userName := userName.simpMacroScopes
-        let type ← instantiate type
-        let value ← instantiate value
-        return { fvarId, userName, type, value? := .some value }
-    let vars ← lctx.foldlM (init := []) fun acc (localDecl : LocalDecl) => do
-      let skip := !ppAuxDecls && localDecl.isAuxDecl ||
-        !ppImplDetailHyps && localDecl.isImplementationDetail
-      if skip then
-        return acc
-      else
-        let var ← ppVar localDecl
-        return var::acc
-    return {
-        mvarId,
-        userName := mvarDecl.userName,
-        context := vars.reverse.toArray,
-        target := ← instantiate mvarDecl.type
-    }
-  where
-  instantiate := instantiateAll
-
-@[export pantograph_goal_state_to_condensed]
-protected def GoalState.toCondensed (state: GoalState):
-    CoreM (Array Condensed.Goal):= do
-  let metaM := do
-    let goals := state.goals.toArray
-    goals.mapM fun goal => do
-      match state.mctx.findDecl? goal with
-      | .some _ =>
-        let serializedGoal ← toCondensedGoal goal
-        pure serializedGoal
-      | .none => throwError s!"Metavariable does not exist in context {goal.name}"
-  metaM.run' (s := state.savedState.term.meta.meta)
 
 /-- Adapted from ppGoal -/
 def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl)
