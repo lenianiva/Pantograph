@@ -33,6 +33,7 @@ structure GoalState where
   -- WARNING: If using `state with` outside of `calc`, this must be set to `.none`
   calcPrevRhs?: Option Expr := .none
 
+@[export pantograph_goal_state_create_m]
 protected def GoalState.create (expr: Expr): Elab.TermElabM GoalState := do
   -- May be necessary to immediately synthesise all metavariables if we need to leave the elaboration context.
   -- See https://leanprover.zulipchat.com/#narrow/stream/270676-lean4/topic/Unknown.20universe.20metavariable/near/360130070
