@@ -136,6 +136,7 @@ protected def GoalState.continue (target: GoalState) (branch: GoalState): Except
   else
     target.resume (goals := branch.goals)
 
+@[export pantograph_goal_state_root_expr]
 protected def GoalState.rootExpr? (goalState: GoalState): Option Expr := do
   let expr ← goalState.mctx.eAssignment.find? goalState.root
   let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
@@ -146,12 +147,14 @@ protected def GoalState.rootExpr? (goalState: GoalState): Option Expr := do
   else
     assert! goalState.goals.isEmpty
     return expr
+@[export pantograph_goal_state_parent_expr]
 protected def GoalState.parentExpr? (goalState: GoalState): Option Expr := do
   let parent ← goalState.parentMVar?
   let expr := goalState.mctx.eAssignment.find! parent
   let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
   return expr
-protected def GoalState.assignedExprOf? (goalState: GoalState) (mvar: MVarId): Option Expr := do
+@[export pantograph_goal_state_get_mvar_e_assignment]
+protected def GoalState.getMVarEAssignment (goalState: GoalState) (mvar: MVarId): Option Expr := do
   let expr ← goalState.mctx.eAssignment.find? mvar
   let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
   return expr
