@@ -108,6 +108,7 @@ protected def GoalState.focus (state: GoalState) (goalId: Nat): Option GoalState
 /--
 Brings into scope a list of goals
 -/
+@[export pantograph_goal_state_resume]
 protected def GoalState.resume (state: GoalState) (goals: List MVarId): Except String GoalState :=
   if ¬ (goals.all (λ goal => state.mvars.contains goal)) then
     let invalid_goals := goals.filter (λ goal => ¬ state.mvars.contains goal) |>.map (·.name.toString)
