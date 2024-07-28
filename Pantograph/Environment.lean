@@ -7,15 +7,31 @@ open Pantograph
 
 namespace Pantograph.Environment
 
-def isNameInternal (n: Lean.Name): Bool :=
+@[export pantograph_is_name_internal]
+def isNameInternal (n: Name): Bool :=
   -- Returns true if the name is an implementation detail which should not be shown to the user.
   isLeanSymbol n ∨ (Lean.privateToUserName? n |>.map isLeanSymbol |>.getD false) ∨ n.isAuxLemma ∨ n.hasMacroScopes
   where
-  isLeanSymbol (name: Lean.Name): Bool := match name.getRoot with
+  isLeanSymbol (name: Name): Bool := match name.getRoot with
     | .str _ name => name == "Lean"
     | _ => true
 
-def toCompactSymbolName (n: Lean.Name) (info: Lean.ConstantInfo): String :=
+/-- Catalog all the non-internal names -/
+@[export pantograph_environment_catalog]
+def env_catalog (env: Environment): Array Name := env.constants.fold (init := #[]) (λ acc name _ =>
+  match isNameInternal name with
+  | true => acc.push name
+  | false => acc)
+
+@[export pantograph_environment_module_of_name]
+def module_of_name (env: Environment) (name: Name): Option Name := do
+  let moduleId ←  env.getModuleIdxFor? name
+  return env.allImportedModuleNames.get! moduleId.toNat
+
+@[export pantograph_constant_info_is_unsafe_or_partial]
+def constantInfoIsUnsafeOrPartial (info: ConstantInfo): Bool := info.isUnsafe || info.isPartial
+
+def toCompactSymbolName (n: Name) (info: ConstantInfo): String :=
   let pref := match info with
   | .axiomInfo  _ => "a"
   | .defnInfo   _ => "d"

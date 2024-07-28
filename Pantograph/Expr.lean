@@ -7,6 +7,7 @@ namespace Pantograph
 def _root_.Lean.Name.isAuxLemma (n : Lean.Name) : Bool := n matches .num (.str _ "_auxLemma") _
 
 /-- Unfold all lemmas created by `Lean.Meta.mkAuxLemma`. These end in `_auxLemma.nn` where `nn` is a number. -/
+@[export pantograph_unfold_aux_lemmas]
 def unfoldAuxLemmas (e : Expr) : CoreM Expr := do
   Lean.Meta.deltaExpand e Lean.Name.isAuxLemma
 
