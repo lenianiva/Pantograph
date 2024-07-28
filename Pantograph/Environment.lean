@@ -20,8 +20,8 @@ def isNameInternal (n: Name): Bool :=
 @[export pantograph_environment_catalog]
 def env_catalog (env: Environment): Array Name := env.constants.fold (init := #[]) (λ acc name _ =>
   match isNameInternal name with
-  | true => acc.push name
-  | false => acc)
+  | false => acc.push name
+  | true => acc)
 
 @[export pantograph_environment_module_of_name]
 def module_of_name (env: Environment) (name: Name): Option Name := do
