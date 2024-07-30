@@ -4,6 +4,26 @@ open Lean
 
 namespace Pantograph
 
+structure ProjectionApplication where
+  projector: Name
+  numParams: Nat
+  inner: Expr
+
+@[export pantograph_expr_proj_to_app]
+def exprProjToApp (env: Environment) (e: Expr): ProjectionApplication :=
+  let (typeName, idx, inner) := match e with
+    | .proj typeName idx inner => (typeName, idx, inner)
+    | _ => panic! "Argument must be proj"
+  let ctor := getStructureCtor env typeName
+  let fieldName := getStructureFields env typeName |>.get! idx
+  let projector := getProjFnForField? env typeName fieldName |>.get!
+  {
+    projector,
+    numParams := ctor.numParams,
+    inner,
+  }
+
+
 def _root_.Lean.Name.isAuxLemma (n : Lean.Name) : Bool := n matches .num (.str _ "_auxLemma") _
 
 /-- Unfold all lemmas created by `Lean.Meta.mkAuxLemma`. These end in `_auxLemma.nn` where `nn` is a number. -/

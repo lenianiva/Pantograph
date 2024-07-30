@@ -168,15 +168,12 @@ partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM
       -- NOTE: Equivalent to expr itself, but mdata influences the prettyprinter
       -- It may become necessary to incorporate the metadata.
       self inner
-    | .proj typeName idx inner => do
+    | .proj _ _ _ => do
       let env ← getEnv
-      let ctor := getStructureCtor env typeName
-      let fieldName := getStructureFields env typeName |>.get! idx
-      let projectorName := getProjFnForField? env typeName fieldName |>.get!
-
-      let autos := String.intercalate " " (List.replicate ctor.numParams "_")
-      let inner ← self inner
-      pure s!"((:c {projectorName}) {autos} {inner})"
+      let projApp := exprProjToApp env e
+      let autos := String.intercalate " " (List.replicate projApp.numParams "_")
+      let inner ← self projApp.inner
+      pure s!"((:c {projApp.projector}) {autos} {inner})"
   -- Elides all unhygenic names
   binderInfoSexp : Lean.BinderInfo → String
     | .default => ""
