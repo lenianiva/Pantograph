@@ -16,10 +16,10 @@ def isNameInternal (n: Name): Bool :=
     | .str _ name => name == "Lean"
     | _ => true
 
-/-- Catalog all the non-internal names -/
+/-- Catalog all the non-internal and safe names -/
 @[export pantograph_environment_catalog]
-def env_catalog (env: Environment): Array Name := env.constants.fold (init := #[]) (λ acc name _ =>
-  match isNameInternal name with
+def env_catalog (env: Environment): Array Name := env.constants.fold (init := #[]) (λ acc name info =>
+  match isNameInternal name || info.isUnsafe with
   | false => acc.push name
   | true => acc)
 
@@ -30,6 +30,11 @@ def module_of_name (env: Environment) (name: Name): Option Name := do
 
 @[export pantograph_constant_info_is_unsafe_or_partial]
 def constantInfoIsUnsafeOrPartial (info: ConstantInfo): Bool := info.isUnsafe || info.isPartial
+
+@[export pantograph_constant_info_type]
+def constantInfoType (info: ConstantInfo): CoreM Expr := unfoldAuxLemmas info.type
+@[export pantograph_constant_info_value]
+def constantInfoValue (info: ConstantInfo): CoreM (Option Expr) := info.value?.mapM unfoldAuxLemmas
 
 def toCompactSymbolName (n: Name) (info: ConstantInfo): String :=
   let pref := match info with
