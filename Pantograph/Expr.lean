@@ -23,7 +23,6 @@ def exprProjToApp (env: Environment) (e: Expr): ProjectionApplication :=
     inner,
   }
 
-
 def _root_.Lean.Name.isAuxLemma (n : Lean.Name) : Bool := n matches .num (.str _ "_auxLemma") _
 
 /-- Unfold all lemmas created by `Lean.Meta.mkAuxLemma`. These end in `_auxLemma.nn` where `nn` is a number. -/

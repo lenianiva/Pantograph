@@ -76,17 +76,6 @@ def createCoreState (imports: Array String): IO Core.State := do
     (trustLevel := 1)
   return { env := env }
 
-@[export pantograph_env_catalog_m]
-def envCatalog: CoreM Protocol.EnvCatalogResult :=
-  Environment.catalog ({}: Protocol.EnvCatalog)
-
-@[export pantograph_env_inspect_m]
-def envInspect (name: String) (value: Bool) (dependency: Bool) (options: @&Protocol.Options):
-    CoreM (Protocol.CR Protocol.EnvInspectResult) :=
-  Environment.inspect ({
-    name, value? := .some value, dependency?:= .some dependency
-  }: Protocol.EnvInspect) options
-
 @[export pantograph_env_add_m]
 def envAdd (name: String) (type: String) (value: String) (isTheorem: Bool):
     CoreM (Protocol.CR Protocol.EnvAddResult) :=

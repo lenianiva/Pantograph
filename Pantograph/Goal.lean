@@ -54,6 +54,8 @@ protected def GoalState.isConv (state: GoalState): Bool :=
   state.convMVar?.isSome
 protected def GoalState.goals (state: GoalState): List MVarId :=
   state.savedState.tactic.goals
+@[export pantograph_goal_state_goals]
+protected def GoalState.goalsArray (state: GoalState): Array MVarId := state.goals.toArray
 protected def GoalState.mctx (state: GoalState): MetavarContext :=
   state.savedState.term.meta.meta.mctx
 protected def GoalState.env (state: GoalState): Environment :=
