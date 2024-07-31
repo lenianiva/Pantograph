@@ -69,6 +69,11 @@ protected def GoalState.metaContextOfGoal (state: GoalState) (mvarId: MVarId): O
 protected def GoalState.metaState (state: GoalState): Meta.State :=
   state.savedState.term.meta.meta
 
+@[export pantograph_goal_state_fvar_names_of_goal]
+protected def GoalState.fvarNamesOfGoal (state: GoalState) (mvarId: MVarId): Option (Array FVarId) := do
+  let mvarDecl ← state.mctx.findDecl? mvarId
+  return mvarDecl.lctx.getFVarIds
+
 protected def GoalState.withContext (state: GoalState) (mvarId: MVarId) (m: MetaM α): MetaM α := do
   mvarId.withContext m |>.run' (← read) state.metaState
 
