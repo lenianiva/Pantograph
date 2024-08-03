@@ -69,15 +69,6 @@ protected def GoalState.metaContextOfGoal (state: GoalState) (mvarId: MVarId): O
 protected def GoalState.metaState (state: GoalState): Meta.State :=
   state.savedState.term.meta.meta
 
--- Get the list of visible free variables from a goal
-@[export pantograph_goal_state_visible_fvars]
-protected def GoalState.visibleFVars (state: GoalState) (mvarId: MVarId): Option (Array FVarId) := do
-  let mvarDecl ← state.mctx.findDecl? mvarId
-  let lctx := mvarDecl.lctx
-  return lctx.decls.foldl (init := #[]) fun r decl? => match decl? with
-    | some decl => if decl.isAuxDecl ∨ decl.isImplementationDetail then r else r.push decl.fvarId
-    | none      => r
-
 protected def GoalState.withContext (state: GoalState) (mvarId: MVarId) (m: MetaM α): MetaM α := do
   mvarId.withContext m |>.run' (← read) state.metaState
 
