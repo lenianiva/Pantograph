@@ -23,6 +23,8 @@ def isInaccessible (n: Name) : Bool := n.isInaccessibleUserName || n.hasMacroSco
 
 @[export pantograph_mk_app_m]
 def mkAppM (constName : Name) (xs : Array Expr) : MetaM Expr := Meta.mkAppM constName xs
+@[export pantograph_mk_app_m_expr]
+def mkAppM' (f: Expr) (xs : Array Expr) : MetaM Expr := Meta.mkAppM' f xs
 
 @[export pantograph_pp_expr_m]
 def ppExpr (e: Expr): MetaM String := toString <$> Meta.ppExpr e
