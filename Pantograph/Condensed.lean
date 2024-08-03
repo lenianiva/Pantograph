@@ -25,6 +25,14 @@ def isInaccessible (n: Name) : Bool := n.isInaccessibleUserName || n.hasMacroSco
 def mkAppM (constName : Name) (xs : Array Expr) : MetaM Expr := Meta.mkAppM constName xs
 @[export pantograph_mk_app_expr_m]
 def mkAppM' (f: Expr) (xs : Array Expr) : MetaM Expr := Meta.mkAppM' f xs
+-- Copies same function in `Meta/AppBuilder.lean`
+@[export pantograph_mk_fun_m]
+def mkFun (constName : Name) : MetaM (Expr × Expr) := do
+  let cinfo ← getConstInfo constName
+  let us ← cinfo.levelParams.mapM fun _ => Meta.mkFreshLevelMVar
+  let f := mkConst constName us
+  let fType ← Meta.instantiateTypeLevelParams cinfo us
+  return (f, fType)
 
 @[export pantograph_expr_to_string]
 def exprToString (e: Expr): String := toString e
