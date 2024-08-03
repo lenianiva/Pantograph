@@ -66,11 +66,19 @@ def elabState (levelNames: Array Name): Elab.Term.State := {
 
 end Condensed
 
+-- Get the list of visible (by default) free variables from a goal
+@[export pantograph_visible_fvars_of_mvar]
+protected def visibleFVarsOfMVar (mctx: MetavarContext) (mvarId: MVarId): Option (Array FVarId) := do
+  let mvarDecl ← mctx.findDecl? mvarId
+  let lctx := mvarDecl.lctx
+  return lctx.decls.foldl (init := #[]) fun r decl? => match decl? with
+    | some decl => if decl.isAuxDecl ∨ decl.isImplementationDetail then r else r.push decl.fvarId
+    | none      => r
+
 @[export pantograph_to_condensed_goal_m]
 def toCondensedGoal (mvarId: MVarId): MetaM Condensed.Goal := do
-  let options : Protocol.Options := {}
-  let ppAuxDecls       := options.printAuxDecls
-  let ppImplDetailHyps := options.printImplementationDetailHyps
+  let ppAuxDecls     := Meta.pp.auxDecls.get (← getOptions)
+  let ppImplDetailHyps := Meta.pp.implementationDetailHyps.get (← getOptions)
   let mvarDecl ← mvarId.getDecl
   let lctx     := mvarDecl.lctx
   let lctx     := lctx.sanitizeNames.run' { options := (← getOptions) }
