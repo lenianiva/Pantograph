@@ -63,10 +63,8 @@
       packages = {
         inherit (leanPkgs) lean lean-all;
         inherit (project) sharedLib executable;
-        default = project.executable;
-      };
-      dependencies = {
         inherit project leanPkgs;
+        default = project.executable;
       };
       checks = {
         test = pkgs.runCommand "test" {
