@@ -22,8 +22,6 @@ structure GoalState where
 
   -- The root hole which is the search target
   root: MVarId
-  -- New metavariables acquired in this state
-  newMVars: SSet MVarId
 
   -- Parent state metavariable source
   parentMVar?: Option MVarId
@@ -48,7 +46,6 @@ protected def GoalState.create (expr: Expr): Elab.TermElabM GoalState := do
   return {
     root,
     savedState,
-    newMVars := SSet.insert .empty root,
     parentMVar? := .none,
   }
 protected def GoalState.isConv (state: GoalState): Bool :=
@@ -88,15 +85,6 @@ private def GoalState.restoreTacticM (state: GoalState) (goal: MVarId): Elab.Tac
   state.savedState.restore
   Elab.Tactic.setGoals [goal]
 
-
-private def newMVarSet (mctxOld: @&MetavarContext) (mctxNew: @&MetavarContext): SSet MVarId :=
-  mctxNew.decls.foldl (fun acc mvarId mvarDecl =>
-    if let .some prevMVarDecl := mctxOld.decls.find? mvarId then
-      assert! prevMVarDecl.type == mvarDecl.type
-      acc
-    else
-      acc.insert mvarId
-    ) SSet.empty
 
 protected def GoalState.focus (state: GoalState) (goalId: Nat): Option GoalState := do
   let goal ← state.savedState.tactic.goals.get? goalId
@@ -166,6 +154,21 @@ protected def GoalState.getMVarEAssignment (goalState: GoalState) (mvar: MVarId)
 
 --- Tactic execution functions ---
 
+protected def GoalState.step (state: GoalState) (mvarId: MVarId) (tacticM: Elab.Tactic.TacticM Unit)
+  : Elab.TermElabM GoalState := do
+  state.restoreElabM
+  unless (← getMCtx).decls.contains mvarId do
+    throwError s!"MVarId is not in context: {mvarId.name}"
+  mvarId.checkNotAssigned `GoalState.step
+  let (_, newGoals) ← tacticM { elaborator := .anonymous } |>.run { goals := [mvarId] }
+  let nextElabState ← MonadBacktrack.saveState
+  return {
+    state with
+    savedState := { term := nextElabState, tactic := newGoals },
+    parentMVar? := .some mvarId,
+    calcPrevRhs? := .none,
+  }
+
 /-- Response for executing a tactic -/
 inductive TacticResult where
   -- Goes to next state
@@ -182,27 +185,12 @@ inductive TacticResult where
 /-- Executes a `TacticM` monads on this `GoalState`, collecting the errors as necessary -/
 protected def GoalState.tryTacticM (state: GoalState) (goalId: Nat) (tacticM: Elab.Tactic.TacticM Unit):
       Elab.TermElabM TacticResult := do
-  state.restoreElabM
-  let goal ← match state.savedState.tactic.goals.get? goalId with
+  let mvarId ← match state.savedState.tactic.goals.get? goalId with
     | .some goal => pure $ goal
     | .none => return .indexError goalId
-  goal.checkNotAssigned `GoalState.tryTacticM
   try
-    let (_, newGoals) ← tacticM { elaborator := .anonymous } |>.run { goals := [goal] }
-    if (← getThe Core.State).messages.hasErrors then
-      let messages := (← getThe Core.State).messages.toArray
-      let errors ← (messages.map (·.data)).mapM fun md => md.toString
-      return .failure errors
-    let nextElabState ← MonadBacktrack.saveState
-    let nextMCtx := nextElabState.meta.meta.mctx
-    let prevMCtx := state.mctx
-    return .success {
-      state with
-      savedState := { term := nextElabState, tactic := newGoals },
-      newMVars := newMVarSet prevMCtx nextMCtx,
-      parentMVar? := .some goal,
-      calcPrevRhs? := .none,
-    }
+    let nextState ← state.step mvarId tacticM
+    return .success nextState
   catch exception =>
     return .failure #[← exception.toMessageData.toString]
 
@@ -269,7 +257,6 @@ protected def GoalState.tryLet (state: GoalState) (goalId: Nat) (binderName: Str
         term := ← MonadBacktrack.saveState,
         tactic := { goals := nextGoals }
       },
-      newMVars := nextGoals.toSSet,
       parentMVar? := .some goal,
       calcPrevRhs? := .none
     }
@@ -296,12 +283,9 @@ protected def GoalState.conv (state: GoalState) (goalId: Nat):
     return (← MonadBacktrack.saveState, convMVar)
   try
     let (nextSavedState, convRhs) ← tacticM { elaborator := .anonymous } |>.run' state.savedState.tactic
-    let prevMCtx := state.mctx
-    let nextMCtx := nextSavedState.term.meta.meta.mctx
     return .success {
       root := state.root,
       savedState := nextSavedState
-      newMVars := newMVarSet prevMCtx nextMCtx,
       parentMVar? := .some goal,
       convMVar? := .some (convRhs, goal),
       calcPrevRhs? := .none
@@ -335,12 +319,9 @@ protected def GoalState.convExit (state: GoalState):
     MonadBacktrack.saveState
   try
     let nextSavedState ← tacticM { elaborator := .anonymous } |>.run' state.savedState.tactic
-    let nextMCtx := nextSavedState.term.meta.meta.mctx
-    let prevMCtx := state.savedState.term.meta.meta.mctx
     return .success {
       root := state.root,
       savedState := nextSavedState
-      newMVars := newMVarSet prevMCtx nextMCtx,
       parentMVar? := .some convGoal,
       convMVar? := .none
       calcPrevRhs? := .none
@@ -420,7 +401,6 @@ protected def GoalState.tryCalc (state: GoalState) (goalId: Nat) (pred: String):
         term := ← MonadBacktrack.saveState,
         tactic := { goals },
       },
-      newMVars := goals.toSSet,
       parentMVar? := .some goal,
       calcPrevRhs?
     }
