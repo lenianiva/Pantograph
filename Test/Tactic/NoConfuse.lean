@@ -20,7 +20,7 @@ def test_nat : TestT Elab.TermElabM Unit := do
       | .error error => throwError "Failed to parse: {error}"
     -- Apply the tactic
     let target ← Meta.mkFreshExprSyntheticOpaqueMVar body
-    let tactic := Tactic.noConfuse recursor
+    let tactic := Tactic.evalNoConfuse recursor
     let newGoals ← runTacticOnMVar tactic target.mvarId!
     addTest $ LSpec.check "goals" ((← newGoals.mapM (λ g => do exprToStr (← g.getType))) = [])
 
@@ -38,7 +38,7 @@ def test_nat_fail : TestT Elab.TermElabM Unit := do
     -- Apply the tactic
     let target ← Meta.mkFreshExprSyntheticOpaqueMVar body
     try
-      let tactic := Tactic.noConfuse recursor
+      let tactic := Tactic.evalNoConfuse recursor
       let _ ← runTacticOnMVar tactic target.mvarId!
       addTest $ assertUnreachable "Tactic should fail"
     catch _ =>
@@ -57,7 +57,7 @@ def test_list : TestT Elab.TermElabM Unit := do
       | .error error => throwError "Failed to parse: {error}"
     -- Apply the tactic
     let target ← Meta.mkFreshExprSyntheticOpaqueMVar body
-    let tactic := Tactic.noConfuse recursor
+    let tactic := Tactic.evalNoConfuse recursor
     let newGoals ← runTacticOnMVar tactic target.mvarId!
     addTest $ LSpec.check "goals"
       ((← newGoals.mapM (λ g => do exprToStr (← g.getType))) = [])

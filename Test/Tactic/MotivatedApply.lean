@@ -33,7 +33,7 @@ def test_nat_brec_on : TestT Elab.TermElabM Unit := do
       | .error error => throwError "Failed to parse: {error}"
     -- Apply the tactic
     let target ← Meta.mkFreshExprSyntheticOpaqueMVar body
-    let tactic := Tactic.motivatedApply recursor
+    let tactic := Tactic.evalMotivatedApply recursor
     let newGoals ← runTacticOnMVar tactic target.mvarId!
     let test :=  LSpec.check "goals" ((← newGoals.mapM (λ g => do exprToStr (← g.getType))) =
       [
@@ -57,7 +57,7 @@ def test_list_brec_on : TestT Elab.TermElabM Unit := do
       | .error error => throwError "Failed to parse: {error}"
     -- Apply the tactic
     let target ← Meta.mkFreshExprSyntheticOpaqueMVar body
-    let tactic := Tactic.motivatedApply recursor
+    let tactic := Tactic.evalMotivatedApply recursor
     let newGoals ← runTacticOnMVar tactic target.mvarId!
     addTest $ LSpec.check "goals" ((← newGoals.mapM (λ g => do exprToStr (← g.getType))) =
       [
@@ -81,7 +81,7 @@ def test_partial_motive_instantiation : TestT Elab.TermElabM Unit := do
   Meta.lambdaTelescope expr $ λ _ body => do
     -- Apply the tactic
     let target ← Meta.mkFreshExprSyntheticOpaqueMVar body
-    let tactic := Tactic.motivatedApply recursor
+    let tactic := Tactic.evalMotivatedApply recursor
     let newGoals ← runTacticOnMVar tactic target.mvarId!
     let majorId := 67
     addTest $ (LSpec.check "goals" ((← newGoals.mapM (λ g => do exprToStr (← g.getType))) =

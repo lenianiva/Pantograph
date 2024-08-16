@@ -192,11 +192,5 @@ def goalCalc (state: GoalState) (goalId: Nat) (pred: String): CoreM TacticResult
 @[export pantograph_goal_focus]
 def goalFocus (state: GoalState) (goalId: Nat): Option GoalState :=
   state.focus goalId
-@[export pantograph_goal_motivated_apply_m]
-def goalMotivatedApply (state: GoalState) (goalId: Nat) (recursor: String): CoreM TacticResult :=
-  runTermElabM <| state.tryMotivatedApply goalId recursor
-@[export pantograph_goal_no_confuse_m]
-def goalNoConfuse (state: GoalState) (goalId: Nat) (eq: String): CoreM TacticResult :=
-  runTermElabM <| state.tryNoConfuse goalId eq
 
 end Pantograph

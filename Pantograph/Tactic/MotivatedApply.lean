@@ -62,44 +62,44 @@ def collectMotiveArguments (forallBody: Expr): SSet Nat :=
   | _ => SSet.empty
 
 /-- Applies a symbol of the type `∀ (motive: α → Sort u) (a: α)..., (motive α)` -/
-def motivatedApply: Elab.Tactic.Tactic := λ stx => do
-  let goal ← Elab.Tactic.getMainGoal
-  let nextGoals: List MVarId ← goal.withContext do
-    let recursor ← Elab.Term.elabTerm (stx := stx) .none
-    let recursorType ← Meta.inferType recursor
+def motivatedApply (mvarId: MVarId) (recursor: Expr) : MetaM (List Meta.InductionSubgoal) := mvarId.withContext do
+  mvarId.checkNotAssigned `Pantograph.Tactic.motivatedApply
+  let recursorType ← Meta.inferType recursor
+  let resultant ← mvarId.getType
 
-    let resultant ← goal.getType
+  let info ← match getRecursorInformation recursorType with
+    | .some info => pure info
+    | .none => throwError "Recursor return type does not correspond with the invocation of a motive: {← Meta.ppExpr recursorType}"
 
-    let info ← match getRecursorInformation recursorType with
-      | .some info => pure info
-      | .none => throwError "Recursor return type does not correspond with the invocation of a motive: {← Meta.ppExpr recursorType}"
+  let rec go (i: Nat) (prev: Array Expr): MetaM (Array Expr) := do
+    if i ≥ info.nArgs then
+      return prev
+    else
+      let argType := info.args.get! i
+      -- If `argType` has motive references, its goal needs to be placed in it
+      let argType := argType.instantiateRev prev
+      let bvarIndex := info.nArgs - i - 1
+      let argGoal ← if bvarIndex = info.iMotive then
+          let surrogateMotiveType ← info.surrogateMotiveType prev resultant
+          Meta.mkFreshExprMVar surrogateMotiveType .syntheticOpaque (userName := `motive)
+        else
+          Meta.mkFreshExprMVar argType .syntheticOpaque (userName := .anonymous)
+      let prev :=  prev ++ [argGoal]
+      go (i + 1) prev
+    termination_by info.nArgs - i
+  let mut newMVars ← go 0 #[]
 
-    let rec go (i: Nat) (prev: Array Expr): MetaM (Array Expr) := do
-      if i ≥ info.nArgs then
-        return prev
-      else
-        let argType := info.args.get! i
-        -- If `argType` has motive references, its goal needs to be placed in it
-        let argType := argType.instantiateRev prev
-        let bvarIndex := info.nArgs - i - 1
-        let argGoal ← if bvarIndex = info.iMotive then
-            let surrogateMotiveType ← info.surrogateMotiveType prev resultant
-            Meta.mkFreshExprMVar surrogateMotiveType .syntheticOpaque (userName := `motive)
-          else
-            Meta.mkFreshExprMVar argType .syntheticOpaque (userName := .anonymous)
-        let prev :=  prev ++ [argGoal]
-        go (i + 1) prev
-      termination_by info.nArgs - i
-    let mut newMVars ← go 0 #[]
+  -- Create the conduit type which proves the result of the motive is equal to the goal
+  let conduitType ← info.conduitType newMVars resultant
+  let goalConduit ← Meta.mkFreshExprMVar conduitType .natural (userName := `conduit)
+  mvarId.assign $ ← Meta.mkEqMP goalConduit (mkAppN recursor newMVars)
+  newMVars := newMVars ++ [goalConduit]
 
-    -- Create the conduit type which proves the result of the motive is equal to the goal
-    let conduitType ← info.conduitType newMVars resultant
-    let goalConduit ← Meta.mkFreshExprMVar conduitType .natural (userName := `conduit)
-    goal.assign $ ← Meta.mkEqMP goalConduit (mkAppN recursor newMVars)
-    newMVars := newMVars ++ [goalConduit]
+  return newMVars.toList.map (λ mvar => { mvarId := mvar.mvarId!})
 
-    let nextGoals := newMVars.toList.map (·.mvarId!)
-    pure nextGoals
-  Elab.Tactic.setGoals nextGoals
+def evalMotivatedApply : Elab.Tactic.Tactic := fun stx => Elab.Tactic.withMainContext do
+  let recursor ← Elab.Term.elabTerm (stx := stx) .none
+  let nextGoals ← motivatedApply (← Elab.Tactic.getMainGoal) recursor
+  Elab.Tactic.setGoals $ nextGoals.map (·.mvarId)
 
 end Pantograph.Tactic

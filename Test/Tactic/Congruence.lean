@@ -12,7 +12,7 @@ def test_congr_arg_list : TestT Elab.TermElabM Unit := do
   let expr ← parseSentence expr
   Meta.lambdaTelescope expr $ λ _ body => do
     let target ← Meta.mkFreshExprSyntheticOpaqueMVar body
-    let newGoals ← runTacticOnMVar Tactic.congruenceArg target.mvarId!
+    let newGoals ← runTacticOnMVar Tactic.evalCongruenceArg target.mvarId!
     addTest $ LSpec.check "goals" ((← newGoals.mapM (λ x => mvarUserNameAndType x)) =
       [
         (`α, "Sort ?u.30"),
@@ -34,7 +34,7 @@ def test_congr_arg : TestT Elab.TermElabM Unit := do
   let expr ← parseSentence expr
   Meta.lambdaTelescope expr $ λ _ body => do
     let target ← Meta.mkFreshExprSyntheticOpaqueMVar body
-    let newGoals ← runTacticOnMVar Tactic.congruenceArg target.mvarId!
+    let newGoals ← runTacticOnMVar Tactic.evalCongruenceArg target.mvarId!
     addTest $  LSpec.check "goals" ((← newGoals.mapM (λ x => mvarUserNameAndType x)) =
       [
         (`α, "Sort ?u.70"),
@@ -49,7 +49,7 @@ def test_congr_fun : TestT Elab.TermElabM Unit := do
   let expr ← parseSentence expr
   Meta.lambdaTelescope expr $ λ _ body => do
     let target ← Meta.mkFreshExprSyntheticOpaqueMVar body
-    let newGoals ← runTacticOnMVar Tactic.congruenceFun target.mvarId!
+    let newGoals ← runTacticOnMVar Tactic.evalCongruenceFun target.mvarId!
     addTest $ LSpec.check "goals" ((← newGoals.mapM (λ x => mvarUserNameAndType x)) =
       [
         (`α, "Sort ?u.159"),
@@ -64,7 +64,7 @@ def test_congr : TestT Elab.TermElabM Unit := do
   let expr ← parseSentence expr
   Meta.lambdaTelescope expr $ λ _ body => do
     let target ← Meta.mkFreshExprSyntheticOpaqueMVar body
-    let newGoals ← runTacticOnMVar Tactic.congruence target.mvarId!
+    let newGoals ← runTacticOnMVar Tactic.evalCongruence target.mvarId!
     addTest $  LSpec.check "goals" ((← newGoals.mapM (λ x => mvarUserNameAndType x)) =
       [
         (`α, "Sort ?u.10"),

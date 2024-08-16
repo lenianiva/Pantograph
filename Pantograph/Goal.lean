@@ -383,13 +383,13 @@ protected def GoalState.tryMotivatedApply (state: GoalState) (goalId: Nat) (recu
   let recursor ← match (← Compile.parseTermM recursor) with
     | .ok syn => pure syn
     | .error error => return .parseError error
-  state.tryTacticM goalId (tacticM := Tactic.motivatedApply recursor)
+  state.tryTacticM goalId (tacticM := Tactic.evalMotivatedApply recursor)
 protected def GoalState.tryNoConfuse (state: GoalState) (goalId: Nat) (eq: String):
       Elab.TermElabM TacticResult := do
   state.restoreElabM
   let eq ← match (← Compile.parseTermM eq) with
     | .ok syn => pure syn
     | .error error => return .parseError error
-  state.tryTacticM goalId (tacticM := Tactic.noConfuse eq)
+  state.tryTacticM goalId (tacticM := Tactic.evalNoConfuse eq)
 
 end Pantograph
