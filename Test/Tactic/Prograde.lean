@@ -32,7 +32,7 @@ def test_eval : TestT Elab.TermElabM Unit := do
       ],
       target,
     })
-    let tactic := Tactic.evaluate `h2 e
+    let tactic := Tactic.evalDefine `h2 e
     let m := .mvar ⟨uniq 13⟩
     let [newGoal] ← runTacticOnMVar tactic goal.mvarId! | panic! "Incorrect goal number"
     addTest $ LSpec.test "goals after" ((← toCondensedGoal newGoal).devolatilize == {
@@ -73,7 +73,7 @@ def test_proof_eval : TestT Elab.TermElabM Unit := do
 
   let evalBind := "y"
   let evalExpr := "Or.inl h"
-  let state2 ← match ← state1.tryEvaluate (goalId := 0) (binderName := evalBind) (expr := evalExpr) with
+  let state2 ← match ← state1.tryDefine (goalId := 0) (binderName := evalBind) (expr := evalExpr) with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
