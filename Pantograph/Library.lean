@@ -154,9 +154,6 @@ def goalPrint (state: GoalState) (options: @&Protocol.Options): CoreM Protocol.G
         state.withParentContext do
           serializeExpression options (← instantiateAll expr)),
     }
-@[export pantograph_goal_diag_m]
-def goalDiag (state: GoalState) (diagOptions: Protocol.GoalDiag) : CoreM String :=
-  runMetaM $ state.diag diagOptions
 
 @[export pantograph_goal_tactic_m]
 def goalTactic (state: GoalState) (goalId: Nat) (tactic: String): CoreM TacticResult :=
@@ -188,21 +185,5 @@ def goalMotivatedApply (state: GoalState) (goalId: Nat) (recursor: String): Core
 @[export pantograph_goal_no_confuse_m]
 def goalNoConfuse (state: GoalState) (goalId: Nat) (eq: String): CoreM TacticResult :=
   runTermElabM <| state.tryNoConfuse goalId eq
-
-inductive SyntheticTactic where
-  | congruenceArg
-  | congruenceFun
-  | congruence
-/-- Executes a synthetic tactic which has no arguments -/
-@[export pantograph_goal_synthetic_tactic_m]
-def goalSyntheticTactic (state: GoalState) (goalId: Nat) (case: SyntheticTactic): CoreM TacticResult :=
-  runTermElabM do
-    state.restoreElabM
-    state.execute goalId $ match case with
-      | .congruenceArg => Tactic.congruenceArg
-      | .congruenceFun => Tactic.congruenceFun
-      | .congruence => Tactic.congruence
-
-
 
 end Pantograph

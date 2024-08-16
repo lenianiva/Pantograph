@@ -286,7 +286,8 @@ protected def GoalState.serializeGoals
     | .none => throwError s!"Metavariable does not exist in context {goal.name}"
 
 /-- Print the metavariables in a readable format -/
-protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag := {}): MetaM String := do
+@[export pantograph_goal_state_diag_m]
+protected def GoalState.diag (goalState: GoalState) (parent?: Option GoalState := .none) (options: Protocol.GoalDiag := {}): MetaM String := do
   goalState.restoreMetaM
   let savedState := goalState.savedState
   let goals := savedState.tactic.goals
@@ -305,7 +306,7 @@ protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag 
   let resultOthers ← mctx.decls.toList.filter (λ (mvarId, _) =>
       !(goals.contains mvarId || mvarId == root) && options.printAll)
       |>.mapM (fun (mvarId, decl) => do
-        let pref := if goalState.newMVars.contains mvarId then "~" else " "
+        let pref := if parentHasMVar mvarId then " " else "~"
         printMVar pref mvarId decl
       )
   pure $ result ++ "\n" ++ (resultGoals.map (· ++ "\n") |> String.join) ++ (resultOthers.map (· ++ "\n") |> String.join)
@@ -345,5 +346,6 @@ protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag 
     userNameToString : Name → String
       | .anonymous => ""
       | other => s!"[{other}]"
+    parentHasMVar (mvarId: MVarId): Bool := parent?.map (λ state => state.mctx.decls.contains mvarId) |>.getD true
 
 end Pantograph
