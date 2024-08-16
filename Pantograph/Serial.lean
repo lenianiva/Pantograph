@@ -4,10 +4,10 @@ This replicates the behaviour of `Scope`s in `Lean/Elab/Command.lean` without
 using `Scope`s.
 -/
 import Lean
+import Pantograph.Condensed
 import Pantograph.Expr
-
-import Pantograph.Protocol
 import Pantograph.Goal
+import Pantograph.Protocol
 
 open Lean
 
@@ -168,15 +168,12 @@ partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM
       -- NOTE: Equivalent to expr itself, but mdata influences the prettyprinter
       -- It may become necessary to incorporate the metadata.
       self inner
-    | .proj typeName idx inner => do
+    | .proj _ _ _ => do
       let env ← getEnv
-      let ctor := getStructureCtor env typeName
-      let fieldName := getStructureFields env typeName |>.get! idx
-      let projectorName := getProjFnForField? env typeName fieldName |>.get!
-
-      let autos := String.intercalate " " (List.replicate ctor.numParams "_")
-      let inner ← self inner
-      pure s!"((:c {projectorName}) {autos} {inner})"
+      let projApp := exprProjToApp env e
+      let autos := String.intercalate " " (List.replicate projApp.numParams "_")
+      let inner ← self projApp.inner
+      pure s!"((:c {projApp.projector}) {autos} {inner})"
   -- Elides all unhygenic names
   binderInfoSexp : Lean.BinderInfo → String
     | .default => ""
@@ -201,6 +198,7 @@ def serializeExpression (options: @&Protocol.Options) (e: Expr): MetaM Protocol.
     dependentMVars?,
   }
 
+
 /-- Adapted from ppGoal -/
 def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl)
       : MetaM Protocol.Goal := do
@@ -214,7 +212,6 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
     let ppVarNameOnly (localDecl: LocalDecl): MetaM Protocol.Variable := do
       match localDecl with
       | .cdecl _ fvarId userName _ _ _ =>
-        let userName := userName.simpMacroScopes
         return {
           name := ofName fvarId.name,
           userName:= ofName userName.simpMacroScopes,
@@ -289,7 +286,8 @@ protected def GoalState.serializeGoals
     | .none => throwError s!"Metavariable does not exist in context {goal.name}"
 
 /-- Print the metavariables in a readable format -/
-protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag := {}): MetaM String := do
+@[export pantograph_goal_state_diag_m]
+protected def GoalState.diag (goalState: GoalState) (parent?: Option GoalState := .none) (options: Protocol.GoalDiag := {}): MetaM String := do
   goalState.restoreMetaM
   let savedState := goalState.savedState
   let goals := savedState.tactic.goals
@@ -308,7 +306,7 @@ protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag 
   let resultOthers ← mctx.decls.toList.filter (λ (mvarId, _) =>
       !(goals.contains mvarId || mvarId == root) && options.printAll)
       |>.mapM (fun (mvarId, decl) => do
-        let pref := if goalState.newMVars.contains mvarId then "~" else " "
+        let pref := if parentHasMVar mvarId then " " else "~"
         printMVar pref mvarId decl
       )
   pure $ result ++ "\n" ++ (resultGoals.map (· ++ "\n") |> String.join) ++ (resultOthers.map (· ++ "\n") |> String.join)
@@ -348,5 +346,6 @@ protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag 
     userNameToString : Name → String
       | .anonymous => ""
       | other => s!"[{other}]"
+    parentHasMVar (mvarId: MVarId): Bool := parent?.map (λ state => state.mctx.decls.contains mvarId) |>.getD true
 
 end Pantograph

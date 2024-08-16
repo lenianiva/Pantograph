@@ -63,6 +63,7 @@
       packages = {
         inherit (leanPkgs) lean lean-all;
         inherit (project) sharedLib executable;
+        inherit project leanPkgs;
         default = project.executable;
       };
       checks = {

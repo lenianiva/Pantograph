@@ -67,7 +67,7 @@ def proofRunner (env: Lean.Environment) (tests: TestM Unit): IO LSpec.TestSeq :=
   let termElabM := tests.run LSpec.TestSeq.done |>.run {} -- with default options
 
   let coreContext: Lean.Core.Context ← createCoreContext #[]
-  let metaM := termElabM.run' (ctx := defaultTermElabMContext)
+  let metaM := termElabM.run' (ctx := Condensed.elabContext)
   let coreM := metaM.run'
   match ← (coreM.run' coreContext { env := env }).toBaseIO with
   | .error exception =>
@@ -198,10 +198,10 @@ def test_proposition_generation: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check ":= λ (x: Nat), _" ((← state2.serializeGoals (options := ← read)).map (·.target.pp?) =
-    #[.some "Nat → Prop", .some "∀ (x : Nat), ?m.29 x"])
+    #[.some "∀ (x : Nat), ?m.29 x"])
   addTest $ LSpec.test "(2 root)" state2.rootExpr?.isNone
 
-  let state3 ← match ← state2.tryAssign (goalId := 1) (expr := "fun x => Eq.refl x") with
+  let state3 ← match ← state2.tryAssign (goalId := 0) (expr := "fun x => Eq.refl x") with
     | .success state => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
