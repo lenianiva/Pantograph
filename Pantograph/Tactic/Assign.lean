@@ -4,14 +4,6 @@ open Lean
 
 namespace Pantograph.Tactic
 
-private def newMVarSet (mctxOld: @&MetavarContext) (mctxNew: @&MetavarContext): SSet MVarId :=
-  mctxNew.decls.foldl (fun acc mvarId mvarDecl =>
-    if let .some prevMVarDecl := mctxOld.decls.find? mvarId then
-      assert! prevMVarDecl.type == mvarDecl.type
-      acc
-    else
-      acc.insert mvarId
-    ) SSet.empty
 def assign (goal: MVarId) (expr: Expr): MetaM (List MVarId) := do
   goal.checkNotAssigned `Pantograph.Tactic.assign
 
@@ -21,7 +13,8 @@ def assign (goal: MVarId) (expr: Expr): MetaM (List MVarId) := do
   unless ← Meta.isDefEq goalType exprType do
     throwError s!"{← Meta.ppExpr expr} : {← Meta.ppExpr exprType} ≠ {← Meta.ppExpr goalType}"
 
-  let nextGoals ← Meta.getMVars expr
+  -- FIXME: Use `withCollectingNewGoalsFrom`. Think about how this interacts with elaboration ...
+  let nextGoals ← Meta.getMVarsNoDelayed expr
   goal.assign expr
   nextGoals.toList.filterM (not <$> ·.isAssigned)
 
