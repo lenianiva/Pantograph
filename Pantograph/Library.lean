@@ -168,7 +168,7 @@ protected def GoalState.tryHave (state: GoalState) (goalId: Nat) (binderName: St
     | .error error => return .parseError error
   runTermElabM do
     state.restoreElabM
-    state.tryTacticM goalId (Tactic.«have» binderName.toName type)
+    state.tryTacticM goalId $ Tactic.evalHave binderName.toName type
 @[export pantograph_goal_evaluate_m]
 protected def GoalState.tryEvaluate (state: GoalState) (goalId: Nat) (binderName: String) (expr: String): CoreM TacticResult := do
   let expr ← match (← Compile.parseTermM expr) with

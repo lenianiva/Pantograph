@@ -156,7 +156,6 @@ protected def GoalState.getMVarEAssignment (goalState: GoalState) (mvar: MVarId)
 
 protected def GoalState.step (state: GoalState) (mvarId: MVarId) (tacticM: Elab.Tactic.TacticM Unit)
   : Elab.TermElabM GoalState := do
-  state.restoreElabM
   unless (← getMCtx).decls.contains mvarId do
     throwError s!"MVarId is not in context: {mvarId.name}"
   mvarId.checkNotAssigned `GoalState.step
@@ -197,6 +196,7 @@ protected def GoalState.tryTacticM (state: GoalState) (goalId: Nat) (tacticM: El
 /-- Execute a string tactic on given state -/
 protected def GoalState.tryTactic (state: GoalState) (goalId: Nat) (tactic: String):
     Elab.TermElabM TacticResult := do
+  state.restoreElabM
   let tactic ← match Parser.runParserCategory
     (env := ← MonadEnv.getEnv)
     (catName := if state.isConv then `conv else `tactic)
@@ -223,45 +223,14 @@ protected def GoalState.tryAssign (state: GoalState) (goalId: Nat) (expr: String
 protected def GoalState.tryLet (state: GoalState) (goalId: Nat) (binderName: String) (type: String):
       Elab.TermElabM TacticResult := do
   state.restoreElabM
-  let goal ← match state.savedState.tactic.goals.get? goalId with
-    | .some goal => pure goal
-    | .none => return .indexError goalId
-  goal.checkNotAssigned `GoalState.tryLet
   let type ← match Parser.runParserCategory
-    (env := state.env)
+    (env := ← MonadEnv.getEnv)
     (catName := `term)
     (input := type)
     (fileName := filename) with
     | .ok syn => pure syn
     | .error error => return .parseError error
-  let binderName := binderName.toName
-  try
-    -- Implemented similarly to the intro tactic
-    let nextGoals: List MVarId ← goal.withContext do
-      let type ← Elab.Term.elabType (stx := type)
-      let lctx ← MonadLCtx.getLCtx
-
-      -- The branch goal inherits the same context, but with a different type
-      let mvarBranch ← Meta.mkFreshExprMVarAt lctx (← Meta.getLocalInstances) type
-
-      let upstreamType := .letE binderName type mvarBranch (← goal.getType) false
-      let mvarUpstream ← Meta.mkFreshExprMVarAt (← getLCtx) (← Meta.getLocalInstances)
-        upstreamType (kind := MetavarKind.synthetic) (userName := (← goal.getTag))
-
-      goal.assign mvarUpstream
-
-      pure [mvarBranch.mvarId!, mvarUpstream.mvarId!]
-    return .success {
-      root := state.root,
-      savedState := {
-        term := ← MonadBacktrack.saveState,
-        tactic := { goals := nextGoals }
-      },
-      parentMVar? := .some goal,
-      calcPrevRhs? := .none
-    }
-  catch exception =>
-    return .failure #[← exception.toMessageData.toString]
+  state.tryTacticM goalId $ Tactic.evalLet binderName.toName type
 
 /-- Enter conv tactic mode -/
 protected def GoalState.conv (state: GoalState) (goalId: Nat):
