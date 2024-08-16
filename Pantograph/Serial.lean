@@ -168,15 +168,12 @@ partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM
       -- NOTE: Equivalent to expr itself, but mdata influences the prettyprinter
       -- It may become necessary to incorporate the metadata.
       self inner
-    | .proj typeName idx inner => do
+    | .proj _ _ _ => do
       let env ← getEnv
-      let ctor := getStructureCtor env typeName
-      let fieldName := getStructureFields env typeName |>.get! idx
-      let projectorName := getProjFnForField? env typeName fieldName |>.get!
-
-      let autos := String.intercalate " " (List.replicate ctor.numParams "_")
-      let inner ← self inner
-      pure s!"((:c {projectorName}) {autos} {inner})"
+      let projApp := exprProjToApp env e
+      let autos := String.intercalate " " (List.replicate projApp.numParams "_")
+      let inner ← self projApp.inner
+      pure s!"((:c {projApp.projector}) {autos} {inner})"
   -- Elides all unhygenic names
   binderInfoSexp : Lean.BinderInfo → String
     | .default => ""
@@ -201,54 +198,6 @@ def serializeExpression (options: @&Protocol.Options) (e: Expr): MetaM Protocol.
     dependentMVars?,
   }
 
-@[export pantograph_to_condensed_goal]
-def toCondensedGoal (mvarId: MVarId): MetaM Condensed.Goal := do
-  let options: Protocol.Options := {}
-  let ppAuxDecls       := options.printAuxDecls
-  let ppImplDetailHyps := options.printImplementationDetailHyps
-  let mvarDecl ← mvarId.getDecl
-  let lctx     := mvarDecl.lctx
-  let lctx     := lctx.sanitizeNames.run' { options := (← getOptions) }
-  Meta.withLCtx lctx mvarDecl.localInstances do
-    let ppVar (localDecl : LocalDecl) : MetaM Condensed.LocalDecl := do
-      match localDecl with
-      | .cdecl _ fvarId userName type _ _ =>
-        let type ← instantiate type
-        return { fvarId, userName, type }
-      | .ldecl _ fvarId userName type value _ _ => do
-        let userName := userName.simpMacroScopes
-        let type ← instantiate type
-        let value ← instantiate value
-        return { fvarId, userName, type, value? := .some value }
-    let vars ← lctx.foldlM (init := []) fun acc (localDecl : LocalDecl) => do
-      let skip := !ppAuxDecls && localDecl.isAuxDecl ||
-        !ppImplDetailHyps && localDecl.isImplementationDetail
-      if skip then
-        return acc
-      else
-        let var ← ppVar localDecl
-        return var::acc
-    return {
-        mvarId,
-        userName := mvarDecl.userName,
-        context := vars.reverse.toArray,
-        target := ← instantiate mvarDecl.type
-    }
-  where
-  instantiate := instantiateAll
-
-@[export pantograph_goal_state_to_condensed]
-protected def GoalState.toCondensed (state: GoalState):
-    CoreM (Array Condensed.Goal):= do
-  let metaM := do
-    let goals := state.goals.toArray
-    goals.mapM fun goal => do
-      match state.mctx.findDecl? goal with
-      | .some _ =>
-        let serializedGoal ← toCondensedGoal goal
-        pure serializedGoal
-      | .none => throwError s!"Metavariable does not exist in context {goal.name}"
-  metaM.run' (s := state.savedState.term.meta.meta)
 
 /-- Adapted from ppGoal -/
 def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl := .none)
@@ -337,7 +286,8 @@ protected def GoalState.serializeGoals
     | .none => throwError s!"Metavariable does not exist in context {goal.name}"
 
 /-- Print the metavariables in a readable format -/
-protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag := {}): MetaM String := do
+@[export pantograph_goal_state_diag_m]
+protected def GoalState.diag (goalState: GoalState) (parent?: Option GoalState := .none) (options: Protocol.GoalDiag := {}): MetaM String := do
   goalState.restoreMetaM
   let savedState := goalState.savedState
   let goals := savedState.tactic.goals
@@ -356,7 +306,7 @@ protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag 
   let resultOthers ← mctx.decls.toList.filter (λ (mvarId, _) =>
       !(goals.contains mvarId || mvarId == root) && options.printAll)
       |>.mapM (fun (mvarId, decl) => do
-        let pref := if goalState.newMVars.contains mvarId then "~" else " "
+        let pref := if parentHasMVar mvarId then " " else "~"
         printMVar pref mvarId decl
       )
   pure $ result ++ "\n" ++ (resultGoals.map (· ++ "\n") |> String.join) ++ (resultOthers.map (· ++ "\n") |> String.join)
@@ -396,5 +346,6 @@ protected def GoalState.diag (goalState: GoalState) (options: Protocol.GoalDiag 
     userNameToString : Name → String
       | .anonymous => ""
       | other => s!"[{other}]"
+    parentHasMVar (mvarId: MVarId): Bool := parent?.map (λ state => state.mctx.decls.contains mvarId) |>.getD true
 
 end Pantograph

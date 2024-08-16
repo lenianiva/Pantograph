@@ -1,3 +1,4 @@
+import Pantograph.Condensed
 import Pantograph.Environment
 import Pantograph.Goal
 import Pantograph.Protocol
@@ -38,13 +39,10 @@ open Lean
 
 namespace Pantograph
 
-def defaultTermElabMContext: Elab.Term.Context := {
-    errToSorry := false
-  }
 def runMetaM { α } (metaM: MetaM α): CoreM α :=
   metaM.run'
 def runTermElabM { α } (termElabM: Elab.TermElabM α): CoreM α :=
-  termElabM.run' (ctx := defaultTermElabMContext) |>.run'
+  termElabM.run' (ctx := Condensed.elabContext) |>.run'
 
 def errorI (type desc: String): Protocol.InteractionError := { error := type, desc := desc }
 
@@ -78,26 +76,12 @@ def createCoreState (imports: Array String): IO Core.State := do
     (trustLevel := 1)
   return { env := env }
 
-@[export pantograph_create_meta_context]
-def createMetaContext: IO Lean.Meta.Context := do
-  return {}
-
-@[export pantograph_env_catalog_m]
-def envCatalog: CoreM Protocol.EnvCatalogResult :=
-  Environment.catalog ({}: Protocol.EnvCatalog)
-
-@[export pantograph_env_inspect_m]
-def envInspect (name: String) (value: Bool) (dependency: Bool) (options: @&Protocol.Options):
-    CoreM (Protocol.CR Protocol.EnvInspectResult) :=
-  Environment.inspect ({
-    name, value? := .some value, dependency?:= .some dependency
-  }: Protocol.EnvInspect) options
-
 @[export pantograph_env_add_m]
 def envAdd (name: String) (type: String) (value: String) (isTheorem: Bool):
     CoreM (Protocol.CR Protocol.EnvAddResult) :=
   Environment.addDecl { name, type, value, isTheorem }
 
+@[export pantograph_parse_elab_type_m]
 def parseElabType (type: String): Elab.TermElabM (Protocol.CR Expr) := do
   let env ← MonadEnv.getEnv
   let syn ← match parseTerm env type with
@@ -108,6 +92,7 @@ def parseElabType (type: String): Elab.TermElabM (Protocol.CR Expr) := do
   | .ok expr => return .ok (← instantiateMVars expr)
 
 /-- This must be a TermElabM since the parsed expr contains extra information -/
+@[export pantograph_parse_elab_expr_m]
 def parseElabExpr (expr: String) (expectedType?: Option String := .none): Elab.TermElabM (Protocol.CR Expr) := do
   let env ← MonadEnv.getEnv
   let expectedType? ← match ← expectedType?.mapM parseElabType with
@@ -169,9 +154,6 @@ def goalPrint (state: GoalState) (options: @&Protocol.Options): CoreM Protocol.G
         state.withParentContext do
           serializeExpression options (← instantiateAll expr)),
     }
-@[export pantograph_goal_diag_m]
-def goalDiag (state: GoalState) (diagOptions: Protocol.GoalDiag) : CoreM String :=
-  runMetaM $ state.diag diagOptions
 
 @[export pantograph_goal_tactic_m]
 def goalTactic (state: GoalState) (goalId: Nat) (tactic: String): CoreM TacticResult :=
@@ -186,7 +168,7 @@ protected def GoalState.tryHave (state: GoalState) (goalId: Nat) (binderName: St
     | .error error => return .parseError error
   runTermElabM do
     state.restoreElabM
-    state.execute goalId (Tactic.«have» binderName.toName type)
+    state.tryTacticM goalId (Tactic.«have» binderName.toName type)
 @[export pantograph_goal_evaluate_m]
 protected def GoalState.tryEvaluate (state: GoalState) (goalId: Nat) (binderName: String) (expr: String): CoreM TacticResult := do
   let expr ← match (← Compile.parseTermM expr) with
@@ -194,7 +176,7 @@ protected def GoalState.tryEvaluate (state: GoalState) (goalId: Nat) (binderName
     | .error error => return .parseError error
   runTermElabM do
     state.restoreElabM
-    state.execute goalId (Tactic.evaluate binderName.toName expr)
+    state.tryTacticM goalId (Tactic.evaluate binderName.toName expr)
 @[export pantograph_goal_let_m]
 def goalLet (state: GoalState) (goalId: Nat) (binderName: String) (type: String): CoreM TacticResult :=
   runTermElabM <| state.tryLet goalId binderName type
@@ -216,21 +198,5 @@ def goalMotivatedApply (state: GoalState) (goalId: Nat) (recursor: String): Core
 @[export pantograph_goal_no_confuse_m]
 def goalNoConfuse (state: GoalState) (goalId: Nat) (eq: String): CoreM TacticResult :=
   runTermElabM <| state.tryNoConfuse goalId eq
-
-inductive SyntheticTactic where
-  | congruenceArg
-  | congruenceFun
-  | congruence
-/-- Executes a synthetic tactic which has no arguments -/
-@[export pantograph_goal_synthetic_tactic_m]
-def goalSyntheticTactic (state: GoalState) (goalId: Nat) (case: SyntheticTactic): CoreM TacticResult :=
-  runTermElabM do
-    state.restoreElabM
-    state.execute goalId $ match case with
-      | .congruenceArg => Tactic.congruenceArg
-      | .congruenceFun => Tactic.congruenceFun
-      | .congruence => Tactic.congruence
-
-
 
 end Pantograph
