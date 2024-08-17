@@ -162,12 +162,105 @@ def test_proof_have : TestT Elab.TermElabM Unit := do
 
   addTest $ LSpec.check "(4 root)" state4.rootExpr?.isSome
 
+def test_let (specialized: Bool): TestT Elab.TermElabM Unit := do
+  let rootExpr ← parseSentence "∀ (p q: Prop), p → ((p ∨ q) ∨ (p ∨ q))"
+  let state0 ← GoalState.create rootExpr
+  let tactic := "intro a p h"
+  let state1 ← match ← state0.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check tactic ((← state1.serializeGoals).map (·.devolatilize) =
+    #[{
+      target := { pp? := .some mainTarget },
+      vars := interiorVars,
+    }])
+
+  let letType := "Nat"
+  let expr := s!"let b: {letType} := _; _"
+  let result2 ← match specialized with
+    | true => state1.tryLet (goalId := 0) (binderName := "b") (type := letType)
+    | false => state1.tryAssign (goalId := 0) (expr := expr)
+  let state2 ← match result2 with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  let serializedState2 ← state2.serializeGoals
+  let letBindName := if specialized then "b" else "_1"
+  addTest $ LSpec.check expr (serializedState2.map (·.devolatilize) =
+    #[{
+      target := { pp? := .some letType },
+      vars := interiorVars,
+      userName? := .some letBindName
+    },
+    {
+      target := { pp? := .some mainTarget },
+      vars := interiorVars ++ #[{
+        userName := "b",
+        type? := .some { pp? := .some letType },
+        value? := .some { pp? := .some s!"?{letBindName}" },
+      }],
+      userName? := if specialized then .none else .some "_2",
+    }
+    ])
+
+  let tactic := "exact 1"
+  let state3 ← match ← state2.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.check tactic ((← state3.serializeGoals).map (·.devolatilize) = #[])
+
+  let state3r ← match state3.continue state2 with
+    | .error msg => do
+      addTest $ assertUnreachable $ msg
+      return ()
+    | .ok state => pure state
+  addTest $ LSpec.check "(continue)" ((← state3r.serializeGoals).map (·.devolatilize) =
+    #[
+    {
+      target := { pp? := .some mainTarget },
+      vars := interiorVars ++ #[{
+        userName := "b",
+        type? := .some { pp? := .some "Nat" },
+        value? := .some { pp? := .some "1" },
+      }],
+      userName? := if specialized then .none else .some "_2",
+    }
+    ])
+
+  let tactic := "exact h"
+  match ← state3r.tryTactic (goalId := 0) (tactic := tactic) with
+  | .failure #[message] =>
+    addTest $ LSpec.check tactic  (message = s!"type mismatch\n  h\nhas type\n  a : Prop\nbut is expected to have type\n  {mainTarget} : Prop")
+  | other => do
+    addTest $ assertUnreachable $ other.toString
+
+  let tactic := "exact Or.inl (Or.inl h)"
+  let state4 ← match ← state3r.tryTactic (goalId := 0) (tactic := tactic) with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+  addTest $ LSpec.test "(4 root)" state4.rootExpr?.isSome
+  where
+    mainTarget := "(a ∨ p) ∨ a ∨ p"
+    interiorVars: Array Protocol.Variable := #[
+        { userName := "a", type? := .some { pp? := .some "Prop" }, },
+        { userName := "p", type? := .some { pp? := .some "Prop" }, },
+        { userName := "h", type? := .some { pp? := .some "a" }, }
+      ]
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   [
     ("eval", test_eval),
     ("Proof eval", test_proof_eval),
     ("Proof have", test_proof_have),
+    ("let via assign", test_let false),
+    ("let via tryLet", test_let true),
   ] |>.map (λ (name, t) => (name, runTestTermElabM env t))
 
 end Pantograph.Test.Tactic.Prograde

@@ -19,9 +19,12 @@ def assign (goal: MVarId) (expr: Expr): MetaM (List MVarId) := do
   nextGoals.toList.filterM (not <$> ·.isAssigned)
 
 def evalAssign : Elab.Tactic.Tactic := fun stx => Elab.Tactic.withMainContext do
-  let goalType ← Elab.Tactic.getMainTarget
-  let expr ← Elab.Term.elabTermAndSynthesize (stx := stx) (expectedType? := .some goalType)
-  let nextGoals ← assign (← Elab.Tactic.getMainGoal) expr
+  let target ← Elab.Tactic.getMainTarget
+  let (expr, nextGoals) ← Elab.Tactic.elabTermWithHoles stx
+    (expectedType? := .some target)
+    (tagSuffix := .anonymous )
+    (allowNaturalHoles := true)
+  (← Elab.Tactic.getMainGoal).assign expr
   Elab.Tactic.setGoals nextGoals
 
 

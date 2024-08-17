@@ -64,13 +64,14 @@ def «let» (mvarId: MVarId) (binderName: Name) (type: Expr): MetaM BranchResult
   let lctx ← MonadLCtx.getLCtx
 
   -- The branch goal inherits the same context, but with a different type
-  let mvarBranch ← Meta.mkFreshExprMVarAt lctx (← Meta.getLocalInstances) type
+  let mvarBranch ← Meta.mkFreshExprMVarAt lctx (← Meta.getLocalInstances) type (userName := binderName)
 
   assert! ¬ type.hasLooseBVars
-  let upstreamType := .letE binderName type mvarBranch (← mvarId.getType) false
-  let mvarUpstream ← Meta.mkFreshExprMVarAt (← getLCtx) (← Meta.getLocalInstances)
-    upstreamType (kind := MetavarKind.synthetic) (userName := ← mvarId.getTag)
-  mvarId.assign mvarUpstream
+  let mvarUpstream ← Meta.withLetDecl binderName type mvarBranch $ λ fvar => do
+    let mvarUpstream ← Meta.mkFreshExprMVarAt (← getLCtx) (← Meta.getLocalInstances)
+      (type := ← mvarId.getType) (kind := MetavarKind.synthetic) (userName := ← mvarId.getTag)
+    mvarId.assign $ .letE binderName type fvar mvarUpstream (nonDep := false)
+    pure mvarUpstream
 
   return {
     main := mvarUpstream.mvarId!,
