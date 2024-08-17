@@ -58,7 +58,6 @@ def buildNamedGoal (name: String) (nameType: List (String × String)) (target: S
     vars := (nameType.map fun x => ({
       userName := x.fst,
       type? := .some { pp? := .some x.snd },
-      isInaccessible? := .some false
     })).toArray
   }
 def buildGoal (nameType: List (String × String)) (target: String) (userName?: Option String := .none):
@@ -69,7 +68,6 @@ def buildGoal (nameType: List (String × String)) (target: String) (userName?: O
     vars := (nameType.map fun x => ({
       userName := x.fst,
       type? := .some { pp? := .some x.snd },
-      isInaccessible? := .some false
     })).toArray
   }
 def proofRunner (env: Lean.Environment) (tests: TestM Unit): IO LSpec.TestSeq := do
@@ -175,7 +173,6 @@ def test_delta_variable: TestM Unit := do
       vars := (nameType.map fun x => ({
         userName := x.fst,
         type? := x.snd.map (λ type => { pp? := type }),
-        isInaccessible? := .some false,
       })).toArray
     }
 
@@ -256,9 +253,9 @@ def test_or_comm: TestM Unit := do
       name := state1g0,
       target := { pp? := .some "q ∨ p" },
       vars := #[
-        { name := fvP, userName := "p", type? := .some { pp? := .some "Prop" }, isInaccessible? := .some false },
-        { name := fvQ, userName := "q", type? := .some { pp? := .some "Prop" }, isInaccessible? := .some false },
-        { name := fvH, userName := "h", type? := .some { pp? := .some "p ∨ q" }, isInaccessible? := .some false }
+        { name := fvP, userName := "p", type? := .some { pp? := .some "Prop" } },
+        { name := fvQ, userName := "q", type? := .some { pp? := .some "Prop" } },
+        { name := fvH, userName := "h", type? := .some { pp? := .some "p ∨ q" } }
       ]
     }])
   addTest $ LSpec.check "(1 parent)" state1.parentExpr?.isSome
@@ -351,9 +348,9 @@ def test_or_comm: TestM Unit := do
       userName? := .some caseName,
       target := { pp? := .some "q ∨ p" },
       vars := #[
-        { userName := "p", type? := .some typeProp, isInaccessible? := .some false },
-        { userName := "q", type? := .some typeProp, isInaccessible? := .some false },
-        { userName := "h✝", type? := .some { pp? := .some varName }, isInaccessible? := .some true }
+        { userName := "p", type? := .some typeProp },
+        { userName := "q", type? := .some typeProp },
+        { userName := "h✝", type? := .some { pp? := .some varName }, isInaccessible := true }
       ]
     }
 
@@ -703,7 +700,6 @@ def test_nat_zero_add_alt: TestM Unit := do
           name := fvN,
           userName := "n",
           type? := .some { pp? := .some "Nat", sexp? := .some "(:c Nat)" },
-          isInaccessible? := .some false
         }],
       }
     ])

@@ -82,13 +82,13 @@ def test_proof_eval : TestT Elab.TermElabM Unit := do
     #[{
       target := { pp? := .some  "(p ∨ q) ∨ p ∨ q"},
       vars := #[
-        { userName := "p", type? := .some { pp? := .some "Prop" }, isInaccessible? := .some false },
-        { userName := "q", type? := .some { pp? := .some "Prop" }, isInaccessible? := .some false },
-        { userName := "h", type? := .some { pp? := .some "p" }, isInaccessible? := .some false },
+        { userName := "p", type? := .some { pp? := .some "Prop" } },
+        { userName := "q", type? := .some { pp? := .some "Prop" } },
+        { userName := "h", type? := .some { pp? := .some "p" } },
         { userName := "y",
           type? := .some { pp? := .some "p ∨ ?m.25" },
           value? := .some { pp? := .some "Or.inl h" },
-          isInaccessible? := .some false }
+        }
       ]
   }])
 

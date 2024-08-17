@@ -138,7 +138,6 @@ def buildGoal (nameType: List (String × String)) (target: String) (userName?: O
     vars := (nameType.map fun x => ({
       userName := x.fst,
       type? := .some { pp? := .some x.snd },
-      isInaccessible? := .some false
     })).toArray
   }
 

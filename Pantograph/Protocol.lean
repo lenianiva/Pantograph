@@ -51,7 +51,7 @@ structure Variable where
   /-- The name displayed to the user -/
   userName: String
   /-- Does the name contain a dagger -/
-  isInaccessible?: Option Bool := .some false
+  isInaccessible: Bool := false
   type?: Option Expression  := .none
   value?: Option Expression := .none
   deriving Lean.ToJson

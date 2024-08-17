@@ -215,13 +215,13 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
         return {
           name := ofName fvarId.name,
           userName:= ofName userName.simpMacroScopes,
-          isInaccessible? := .some userName.isInaccessibleUserName
+          isInaccessible := userName.isInaccessibleUserName
         }
       | .ldecl _ fvarId userName _ _ _ _ => do
         return {
           name := ofName fvarId.name,
           userName := toString userName.simpMacroScopes,
-          isInaccessible? := .some userName.isInaccessibleUserName
+          isInaccessible := userName.isInaccessibleUserName
         }
     let ppVar (localDecl : LocalDecl) : MetaM Protocol.Variable := do
       match localDecl with
@@ -231,7 +231,7 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
         return {
           name := ofName fvarId.name,
           userName:= ofName userName,
-          isInaccessible? := .some userName.isInaccessibleUserName
+          isInaccessible := userName.isInaccessibleUserName
           type? := .some (← serializeExpression options type)
         }
       | .ldecl _ fvarId userName type val _ _ => do
@@ -245,7 +245,7 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
         return {
           name := ofName fvarId.name,
           userName:= ofName userName,
-          isInaccessible? := .some userName.isInaccessibleUserName
+          isInaccessible := userName.isInaccessibleUserName
           type? := .some (← serializeExpression options type)
           value? := value?
         }
