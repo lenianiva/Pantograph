@@ -24,8 +24,8 @@ def evalDefine (binderName: Name) (expr: Syntax): Elab.Tactic.TacticM Unit := do
 
 structure BranchResult where
   fvarId?: Option FVarId := .none
-  main: MVarId
   branch: MVarId
+  main: MVarId
 
 def «have» (mvarId: MVarId) (binderName: Name) (type: Expr): MetaM BranchResult := mvarId.withContext do
   mvarId.checkNotAssigned `Pantograph.Tactic.have
@@ -47,8 +47,8 @@ def «have» (mvarId: MVarId) (binderName: Name) (type: Expr): MetaM BranchResul
 
   return {
     fvarId? := .some fvarId,
-    main := mvarUpstream.mvarId!,
     branch := mvarBranch.mvarId!,
+    main := mvarUpstream.mvarId!,
   }
 
 def evalHave (binderName: Name) (type: Syntax): Elab.Tactic.TacticM Unit := do
@@ -74,8 +74,8 @@ def «let» (mvarId: MVarId) (binderName: Name) (type: Expr): MetaM BranchResult
     pure mvarUpstream
 
   return {
-    main := mvarUpstream.mvarId!,
     branch := mvarBranch.mvarId!,
+    main := mvarUpstream.mvarId!,
   }
 
 def evalLet (binderName: Name) (type: Syntax): Elab.Tactic.TacticM Unit := do

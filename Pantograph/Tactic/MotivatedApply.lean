@@ -62,7 +62,7 @@ def collectMotiveArguments (forallBody: Expr): SSet Nat :=
   | _ => SSet.empty
 
 /-- Applies a symbol of the type `∀ (motive: α → Sort u) (a: α)..., (motive α)` -/
-def motivatedApply (mvarId: MVarId) (recursor: Expr) : MetaM (List Meta.InductionSubgoal) := mvarId.withContext do
+def motivatedApply (mvarId: MVarId) (recursor: Expr) : MetaM (Array Meta.InductionSubgoal) := mvarId.withContext do
   mvarId.checkNotAssigned `Pantograph.Tactic.motivatedApply
   let recursorType ← Meta.inferType recursor
   let resultant ← mvarId.getType
@@ -95,11 +95,11 @@ def motivatedApply (mvarId: MVarId) (recursor: Expr) : MetaM (List Meta.Inductio
   mvarId.assign $ ← Meta.mkEqMP goalConduit (mkAppN recursor newMVars)
   newMVars := newMVars ++ [goalConduit]
 
-  return newMVars.toList.map (λ mvar => { mvarId := mvar.mvarId!})
+  return newMVars.map (λ mvar => { mvarId := mvar.mvarId!})
 
 def evalMotivatedApply : Elab.Tactic.Tactic := fun stx => Elab.Tactic.withMainContext do
   let recursor ← Elab.Term.elabTerm (stx := stx) .none
   let nextGoals ← motivatedApply (← Elab.Tactic.getMainGoal) recursor
-  Elab.Tactic.setGoals $ nextGoals.map (·.mvarId)
+  Elab.Tactic.setGoals $ nextGoals.toList.map (·.mvarId)
 
 end Pantograph.Tactic
