@@ -11,9 +11,9 @@ examine the symbol list of a Lean project for machine learning.
 
 For Nix based workflow, see below.
 
-Install `elan` and `lake`. Execute
+Install `elan` and `lake`, and run
 ``` sh
-make
+lake build
 ```
 This builds the executable in `.lake/build/bin/pantograph`.
 
@@ -146,7 +146,12 @@ A Lean development shell is provided in the Nix flake.
 
 The tests are based on `LSpec`. To run tests,
 ``` sh
-make test
+lake test
+```
+You can run an individual test by specifying a prefix
+
+``` sh
+lake test -- "Tactic/No Confuse"
 ```
 
 ## Nix based workflow
