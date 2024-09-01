@@ -162,8 +162,21 @@ def goalTactic (state: GoalState) (goalId: Nat) (tactic: String): CoreM TacticRe
 def goalAssign (state: GoalState) (goalId: Nat) (expr: String): CoreM TacticResult :=
   runTermElabM <| state.tryAssign goalId expr
 @[export pantograph_goal_have_m]
-def goalHave (state: GoalState) (goalId: Nat) (binderName: String) (type: String): CoreM TacticResult :=
-  runTermElabM <| state.tryHave goalId binderName type
+protected def GoalState.tryHave (state: GoalState) (goalId: Nat) (binderName: String) (type: String): CoreM TacticResult := do
+  let type ← match (← Compile.parseTermM type) with
+    | .ok syn => pure syn
+    | .error error => return .parseError error
+  runTermElabM do
+    state.restoreElabM
+    state.tryTacticM goalId $ Tactic.evalHave binderName.toName type
+@[export pantograph_goal_try_define_m]
+protected def GoalState.tryDefine (state: GoalState) (goalId: Nat) (binderName: String) (expr: String): CoreM TacticResult := do
+  let expr ← match (← Compile.parseTermM expr) with
+    | .ok syn => pure syn
+    | .error error => return .parseError error
+  runTermElabM do
+    state.restoreElabM
+    state.tryTacticM goalId (Tactic.evalDefine binderName.toName expr)
 @[export pantograph_goal_let_m]
 def goalLet (state: GoalState) (goalId: Nat) (binderName: String) (type: String): CoreM TacticResult :=
   runTermElabM <| state.tryLet goalId binderName type
@@ -179,11 +192,5 @@ def goalCalc (state: GoalState) (goalId: Nat) (pred: String): CoreM TacticResult
 @[export pantograph_goal_focus]
 def goalFocus (state: GoalState) (goalId: Nat): Option GoalState :=
   state.focus goalId
-@[export pantograph_goal_motivated_apply_m]
-def goalMotivatedApply (state: GoalState) (goalId: Nat) (recursor: String): CoreM TacticResult :=
-  runTermElabM <| state.tryMotivatedApply goalId recursor
-@[export pantograph_goal_no_confuse_m]
-def goalNoConfuse (state: GoalState) (goalId: Nat) (eq: String): CoreM TacticResult :=
-  runTermElabM <| state.tryNoConfuse goalId eq
 
 end Pantograph

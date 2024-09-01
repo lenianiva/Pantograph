@@ -91,16 +91,16 @@
     "lspec": {
       "flake": false,
       "locked": {
-        "lastModified": 1701971219,
-        "narHash": "sha256-HYDRzkT2UaLDrqKNWesh9C4LJNt0JpW0u68wYVj4Byw=",
+        "lastModified": 1722857503,
+        "narHash": "sha256-F9uaymiw1wTCLrJm4n1Bpk3J8jW6poedQzvnnQlZ6Kw=",
         "owner": "lurk-lab",
         "repo": "LSpec",
-        "rev": "3388be5a1d1390594a74ec469fd54a5d84ff6114",
+        "rev": "8a51034d049c6a229d88dd62f490778a377eec06",
         "type": "github"
       },
       "original": {
         "owner": "lurk-lab",
-        "ref": "3388be5a1d1390594a74ec469fd54a5d84ff6114",
+        "ref": "8a51034d049c6a229d88dd62f490778a377eec06",
         "repo": "LSpec",
         "type": "github"
       }

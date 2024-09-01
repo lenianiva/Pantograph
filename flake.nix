@@ -9,7 +9,7 @@
       url = "github:leanprover/lean4?ref=v4.10.0-rc1";
     };
     lspec = {
-      url = "github:lurk-lab/LSpec?ref=3388be5a1d1390594a74ec469fd54a5d84ff6114";
+      url = "github:lurk-lab/LSpec?ref=8a51034d049c6a229d88dd62f490778a377eec06";
       flake = false;
     };
   };
@@ -63,8 +63,10 @@
       packages = {
         inherit (leanPkgs) lean lean-all;
         inherit (project) sharedLib executable;
-        inherit project leanPkgs;
         default = project.executable;
+      };
+      legacyPackages = {
+        inherit project leanPkgs;
       };
       checks = {
         test = pkgs.runCommand "test" {

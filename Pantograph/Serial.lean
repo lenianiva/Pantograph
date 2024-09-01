@@ -200,7 +200,7 @@ def serializeExpression (options: @&Protocol.Options) (e: Expr): MetaM Protocol.
 
 
 /-- Adapted from ppGoal -/
-def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl)
+def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl := .none)
       : MetaM Protocol.Goal := do
   -- Options for printing; See Meta.ppGoal for details
   let showLetValues  := true
@@ -215,11 +215,13 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
         return {
           name := ofName fvarId.name,
           userName:= ofName userName.simpMacroScopes,
+          isInaccessible := userName.isInaccessibleUserName
         }
       | .ldecl _ fvarId userName _ _ _ _ => do
         return {
           name := ofName fvarId.name,
           userName := toString userName.simpMacroScopes,
+          isInaccessible := userName.isInaccessibleUserName
         }
     let ppVar (localDecl : LocalDecl) : MetaM Protocol.Variable := do
       match localDecl with
@@ -229,7 +231,7 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
         return {
           name := ofName fvarId.name,
           userName:= ofName userName,
-          isInaccessible? := .some userName.isInaccessibleUserName
+          isInaccessible := userName.isInaccessibleUserName
           type? := .some (← serializeExpression options type)
         }
       | .ldecl _ fvarId userName type val _ _ => do
@@ -243,7 +245,7 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
         return {
           name := ofName fvarId.name,
           userName:= ofName userName,
-          isInaccessible? := .some userName.isInaccessibleUserName
+          isInaccessible := userName.isInaccessibleUserName
           type? := .some (← serializeExpression options type)
           value? := value?
         }
@@ -287,29 +289,31 @@ protected def GoalState.serializeGoals
 
 /-- Print the metavariables in a readable format -/
 @[export pantograph_goal_state_diag_m]
-protected def GoalState.diag (goalState: GoalState) (parent?: Option GoalState := .none) (options: Protocol.GoalDiag := {}): MetaM String := do
-  goalState.restoreMetaM
-  let savedState := goalState.savedState
-  let goals := savedState.tactic.goals
-  let mctx ← getMCtx
-  let root := goalState.root
-  -- Print the root
-  let result: String ← match mctx.decls.find? root with
-    | .some decl => printMVar ">" root decl
-    | .none => pure s!">{root.name}: ??"
-  let resultGoals ← goals.filter (· != root) |>.mapM (fun mvarId =>
-    match mctx.decls.find? mvarId with
-    | .some decl => printMVar "⊢" mvarId decl
-    | .none => pure s!"⊢{mvarId.name}: ??"
-  )
-  let goals := goals.toSSet
-  let resultOthers ← mctx.decls.toList.filter (λ (mvarId, _) =>
-      !(goals.contains mvarId || mvarId == root) && options.printAll)
-      |>.mapM (fun (mvarId, decl) => do
-        let pref := if parentHasMVar mvarId then " " else "~"
-        printMVar pref mvarId decl
-      )
-  pure $ result ++ "\n" ++ (resultGoals.map (· ++ "\n") |> String.join) ++ (resultOthers.map (· ++ "\n") |> String.join)
+protected def GoalState.diag (goalState: GoalState) (parent?: Option GoalState := .none) (options: Protocol.GoalDiag := {}): CoreM String := do
+  let metaM: MetaM String := do
+    goalState.restoreMetaM
+    let savedState := goalState.savedState
+    let goals := savedState.tactic.goals
+    let mctx ← getMCtx
+    let root := goalState.root
+    -- Print the root
+    let result: String ← match mctx.decls.find? root with
+      | .some decl => printMVar ">" root decl
+      | .none => pure s!">{root.name}: ??"
+    let resultGoals ← goals.filter (· != root) |>.mapM (fun mvarId =>
+      match mctx.decls.find? mvarId with
+      | .some decl => printMVar "⊢" mvarId decl
+      | .none => pure s!"⊢{mvarId.name}: ??"
+    )
+    let goals := goals.toSSet
+    let resultOthers ← mctx.decls.toList.filter (λ (mvarId, _) =>
+        !(goals.contains mvarId || mvarId == root) && options.printAll)
+        |>.mapM (fun (mvarId, decl) => do
+          let pref := if parentHasMVar mvarId then " " else "~"
+          printMVar pref mvarId decl
+        )
+    pure $ result ++ "\n" ++ (resultGoals.map (· ++ "\n") |> String.join) ++ (resultOthers.map (· ++ "\n") |> String.join)
+  metaM.run' {}
   where
     printMVar (pref: String) (mvarId: MVarId) (decl: MetavarDecl): MetaM String := mvarId.withContext do
       let resultFVars: List String ←

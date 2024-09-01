@@ -4,15 +4,8 @@ open Lean
 
 namespace Pantograph.Tactic
 
-private def newMVarSet (mctxOld: @&MetavarContext) (mctxNew: @&MetavarContext): SSet MVarId :=
-  mctxNew.decls.foldl (fun acc mvarId mvarDecl =>
-    if let .some prevMVarDecl := mctxOld.decls.find? mvarId then
-      assert! prevMVarDecl.type == mvarDecl.type
-      acc
-    else
-      acc.insert mvarId
-    ) SSet.empty
-def assign (goal: MVarId) (expr: Expr): MetaM (List MVarId) := do
+/-- WARNING: This should be used with a function like `elabTermWithHoles` that properly collects the mvar information from `expr`. -/
+def assign (goal: MVarId) (expr: Expr) (nextGoals: List MVarId): MetaM (List MVarId) := do
   goal.checkNotAssigned `Pantograph.Tactic.assign
 
   -- This run of the unifier is critical in resolving mvars in passing
@@ -20,15 +13,18 @@ def assign (goal: MVarId) (expr: Expr): MetaM (List MVarId) := do
   let goalType ← goal.getType
   unless ← Meta.isDefEq goalType exprType do
     throwError s!"{← Meta.ppExpr expr} : {← Meta.ppExpr exprType} ≠ {← Meta.ppExpr goalType}"
-
-  let nextGoals ← Meta.getMVars expr
   goal.assign expr
-  nextGoals.toList.filterM (not <$> ·.isAssigned)
+  nextGoals.filterM (not <$> ·.isAssigned)
 
 def evalAssign : Elab.Tactic.Tactic := fun stx => Elab.Tactic.withMainContext do
-  let goalType ← Elab.Tactic.getMainTarget
-  let expr ← Elab.Term.elabTermAndSynthesize (stx := stx) (expectedType? := .some goalType)
-  let nextGoals ← assign (← Elab.Tactic.getMainGoal) expr
+  let target ← Elab.Tactic.getMainTarget
+  let goal ← Elab.Tactic.getMainGoal
+  goal.checkNotAssigned `Pantograph.Tactic.evalAssign
+  let (expr, nextGoals) ← Elab.Tactic.elabTermWithHoles stx
+    (expectedType? := .some target)
+    (tagSuffix := .anonymous )
+    (allowNaturalHoles := true)
+  goal.assign expr
   Elab.Tactic.setGoals nextGoals
 
 

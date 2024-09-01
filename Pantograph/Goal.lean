@@ -5,6 +5,7 @@ All the functions starting with `try` resume their inner monadic state.
 -/
 import Pantograph.Protocol
 import Pantograph.Tactic
+import Pantograph.Compile.Parse
 import Lean
 
 
@@ -21,8 +22,6 @@ structure GoalState where
 
   -- The root hole which is the search target
   root: MVarId
-  -- New metavariables acquired in this state
-  newMVars: SSet MVarId
 
   -- Parent state metavariable source
   parentMVar?: Option MVarId
@@ -47,7 +46,6 @@ protected def GoalState.create (expr: Expr): Elab.TermElabM GoalState := do
   return {
     root,
     savedState,
-    newMVars := SSet.insert .empty root,
     parentMVar? := .none,
   }
 protected def GoalState.isConv (state: GoalState): Bool :=
@@ -87,15 +85,6 @@ private def GoalState.restoreTacticM (state: GoalState) (goal: MVarId): Elab.Tac
   state.savedState.restore
   Elab.Tactic.setGoals [goal]
 
-
-private def newMVarSet (mctxOld: @&MetavarContext) (mctxNew: @&MetavarContext): SSet MVarId :=
-  mctxNew.decls.foldl (fun acc mvarId mvarDecl =>
-    if let .some prevMVarDecl := mctxOld.decls.find? mvarId then
-      assert! prevMVarDecl.type == mvarDecl.type
-      acc
-    else
-      acc.insert mvarId
-    ) SSet.empty
 
 protected def GoalState.focus (state: GoalState) (goalId: Nat): Option GoalState := do
   let goal ← state.savedState.tactic.goals.get? goalId
@@ -165,6 +154,20 @@ protected def GoalState.getMVarEAssignment (goalState: GoalState) (mvar: MVarId)
 
 --- Tactic execution functions ---
 
+protected def GoalState.step (state: GoalState) (mvarId: MVarId) (tacticM: Elab.Tactic.TacticM Unit)
+  : Elab.TermElabM GoalState := do
+  unless (← getMCtx).decls.contains mvarId do
+    throwError s!"MVarId is not in context: {mvarId.name}"
+  mvarId.checkNotAssigned `GoalState.step
+  let (_, newGoals) ← tacticM { elaborator := .anonymous } |>.run { goals := [mvarId] }
+  let nextElabState ← MonadBacktrack.saveState
+  return {
+    state with
+    savedState := { term := nextElabState, tactic := newGoals },
+    parentMVar? := .some mvarId,
+    calcPrevRhs? := .none,
+  }
+
 /-- Response for executing a tactic -/
 inductive TacticResult where
   -- Goes to next state
@@ -179,35 +182,21 @@ inductive TacticResult where
   | invalidAction (message: String)
 
 /-- Executes a `TacticM` monads on this `GoalState`, collecting the errors as necessary -/
-protected def GoalState.executeTactic (state: GoalState) (goalId: Nat) (tacticM: Elab.Tactic.TacticM Unit):
+protected def GoalState.tryTacticM (state: GoalState) (goalId: Nat) (tacticM: Elab.Tactic.TacticM Unit):
       Elab.TermElabM TacticResult := do
-  state.restoreElabM
-  let goal ← match state.savedState.tactic.goals.get? goalId with
+  let mvarId ← match state.savedState.tactic.goals.get? goalId with
     | .some goal => pure $ goal
     | .none => return .indexError goalId
-  goal.checkNotAssigned `GoalState.executeTactic
   try
-    let (_, newGoals) ← tacticM { elaborator := .anonymous } |>.run { goals := [goal] }
-    if (← getThe Core.State).messages.hasErrors then
-      let messages := (← getThe Core.State).messages.toArray
-      let errors ← (messages.map (·.data)).mapM fun md => md.toString
-      return .failure errors
-    let nextElabState ← MonadBacktrack.saveState
-    let nextMCtx := nextElabState.meta.meta.mctx
-    let prevMCtx := state.mctx
-    return .success {
-      state with
-      savedState := { term := nextElabState, tactic := newGoals },
-      newMVars := newMVarSet prevMCtx nextMCtx,
-      parentMVar? := .some goal,
-      calcPrevRhs? := .none,
-    }
+    let nextState ← state.step mvarId tacticM
+    return .success nextState
   catch exception =>
     return .failure #[← exception.toMessageData.toString]
 
 /-- Execute a string tactic on given state -/
 protected def GoalState.tryTactic (state: GoalState) (goalId: Nat) (tactic: String):
     Elab.TermElabM TacticResult := do
+  state.restoreElabM
   let tactic ← match Parser.runParserCategory
     (env := ← MonadEnv.getEnv)
     (catName := if state.isConv then `conv else `tactic)
@@ -215,7 +204,7 @@ protected def GoalState.tryTactic (state: GoalState) (goalId: Nat) (tactic: Stri
     (fileName := filename) with
     | .ok stx => pure $ stx
     | .error error => return .parseError error
-  state.executeTactic goalId $ Elab.Tactic.evalTactic tactic
+  state.tryTacticM goalId $ Elab.Tactic.evalTactic tactic
 
 protected def GoalState.tryAssign (state: GoalState) (goalId: Nat) (expr: String):
       Elab.TermElabM TacticResult := do
@@ -227,103 +216,21 @@ protected def GoalState.tryAssign (state: GoalState) (goalId: Nat) (expr: String
     (fileName := filename) with
     | .ok syn => pure syn
     | .error error => return .parseError error
-  state.executeTactic goalId $ Tactic.evalAssign expr
+  state.tryTacticM goalId $ Tactic.evalAssign expr
 
 -- Specialized Tactics
 
-protected def GoalState.tryHave (state: GoalState) (goalId: Nat) (binderName: String) (type: String):
-      Elab.TermElabM TacticResult := do
-  state.restoreElabM
-  let goal ← match state.savedState.tactic.goals.get? goalId with
-    | .some goal => pure goal
-    | .none => return .indexError goalId
-  goal.checkNotAssigned `GoalState.tryHave
-  let type ← match Parser.runParserCategory
-    (env := state.env)
-    (catName := `term)
-    (input := type)
-    (fileName := filename) with
-    | .ok syn => pure syn
-    | .error error => return .parseError error
-  let binderName := binderName.toName
-  try
-    -- Implemented similarly to the intro tactic
-    let nextGoals: List MVarId ← goal.withContext do
-      let type ← Elab.Term.elabType (stx := type)
-      let lctx ← MonadLCtx.getLCtx
-
-      -- The branch goal inherits the same context, but with a different type
-      let mvarBranch ← Meta.mkFreshExprMVarAt lctx (← Meta.getLocalInstances) type
-
-      -- Create the context for the `upstream` goal
-      let fvarId ← mkFreshFVarId
-      let lctxUpstream := lctx.mkLocalDecl fvarId binderName type
-      let fvar   := mkFVar fvarId
-      let mvarUpstream ←
-        withTheReader Meta.Context (fun ctx => { ctx with lctx := lctxUpstream }) do
-          Meta.withNewLocalInstances #[fvar] 0 do
-            let mvarUpstream ← Meta.mkFreshExprMVarAt (← getLCtx) (← Meta.getLocalInstances)
-              (← goal.getType) (kind := MetavarKind.synthetic) (userName := .anonymous)
-            let expr: Expr := .app (.lam binderName type mvarBranch .default) mvarUpstream
-            goal.assign expr
-            pure mvarUpstream
-
-      pure [mvarBranch.mvarId!, mvarUpstream.mvarId!]
-    return .success {
-      root := state.root,
-      savedState := {
-        term := ← MonadBacktrack.saveState,
-        tactic := { goals := nextGoals }
-      },
-      newMVars := nextGoals.toSSet,
-      parentMVar? := .some goal,
-      calcPrevRhs? := .none
-    }
-  catch exception =>
-    return .failure #[← exception.toMessageData.toString]
 protected def GoalState.tryLet (state: GoalState) (goalId: Nat) (binderName: String) (type: String):
       Elab.TermElabM TacticResult := do
   state.restoreElabM
-  let goal ← match state.savedState.tactic.goals.get? goalId with
-    | .some goal => pure goal
-    | .none => return .indexError goalId
-  goal.checkNotAssigned `GoalState.tryLet
   let type ← match Parser.runParserCategory
-    (env := state.env)
+    (env := ← MonadEnv.getEnv)
     (catName := `term)
     (input := type)
     (fileName := filename) with
     | .ok syn => pure syn
     | .error error => return .parseError error
-  let binderName := binderName.toName
-  try
-    -- Implemented similarly to the intro tactic
-    let nextGoals: List MVarId ← goal.withContext do
-      let type ← Elab.Term.elabType (stx := type)
-      let lctx ← MonadLCtx.getLCtx
-
-      -- The branch goal inherits the same context, but with a different type
-      let mvarBranch ← Meta.mkFreshExprMVarAt lctx (← Meta.getLocalInstances) type
-
-      let upstreamType := .letE binderName type mvarBranch (← goal.getType) false
-      let mvarUpstream ← Meta.mkFreshExprMVarAt (← getLCtx) (← Meta.getLocalInstances)
-        upstreamType (kind := MetavarKind.synthetic) (userName := (← goal.getTag))
-
-      goal.assign mvarUpstream
-
-      pure [mvarBranch.mvarId!, mvarUpstream.mvarId!]
-    return .success {
-      root := state.root,
-      savedState := {
-        term := ← MonadBacktrack.saveState,
-        tactic := { goals := nextGoals }
-      },
-      newMVars := nextGoals.toSSet,
-      parentMVar? := .some goal,
-      calcPrevRhs? := .none
-    }
-  catch exception =>
-    return .failure #[← exception.toMessageData.toString]
+  state.tryTacticM goalId $ Tactic.evalLet binderName.toName type
 
 /-- Enter conv tactic mode -/
 protected def GoalState.conv (state: GoalState) (goalId: Nat):
@@ -345,12 +252,9 @@ protected def GoalState.conv (state: GoalState) (goalId: Nat):
     return (← MonadBacktrack.saveState, convMVar)
   try
     let (nextSavedState, convRhs) ← tacticM { elaborator := .anonymous } |>.run' state.savedState.tactic
-    let prevMCtx := state.mctx
-    let nextMCtx := nextSavedState.term.meta.meta.mctx
     return .success {
       root := state.root,
       savedState := nextSavedState
-      newMVars := newMVarSet prevMCtx nextMCtx,
       parentMVar? := .some goal,
       convMVar? := .some (convRhs, goal),
       calcPrevRhs? := .none
@@ -384,12 +288,9 @@ protected def GoalState.convExit (state: GoalState):
     MonadBacktrack.saveState
   try
     let nextSavedState ← tacticM { elaborator := .anonymous } |>.run' state.savedState.tactic
-    let nextMCtx := nextSavedState.term.meta.meta.mctx
-    let prevMCtx := state.savedState.term.meta.meta.mctx
     return .success {
       root := state.root,
       savedState := nextSavedState
-      newMVars := newMVarSet prevMCtx nextMCtx,
       parentMVar? := .some convGoal,
       convMVar? := .none
       calcPrevRhs? := .none
@@ -469,7 +370,6 @@ protected def GoalState.tryCalc (state: GoalState) (goalId: Nat) (pred: String):
         term := ← MonadBacktrack.saveState,
         tactic := { goals },
       },
-      newMVars := goals.toSSet,
       parentMVar? := .some goal,
       calcPrevRhs?
     }
@@ -480,24 +380,16 @@ protected def GoalState.tryCalc (state: GoalState) (goalId: Nat) (pred: String):
 protected def GoalState.tryMotivatedApply (state: GoalState) (goalId: Nat) (recursor: String):
       Elab.TermElabM TacticResult := do
   state.restoreElabM
-  let recursor ← match Parser.runParserCategory
-    (env := state.env)
-    (catName := `term)
-    (input := recursor)
-    (fileName := filename) with
+  let recursor ← match (← Compile.parseTermM recursor) with
     | .ok syn => pure syn
     | .error error => return .parseError error
-  state.executeTactic goalId (tacticM := Tactic.motivatedApply recursor)
+  state.tryTacticM goalId (tacticM := Tactic.evalMotivatedApply recursor)
 protected def GoalState.tryNoConfuse (state: GoalState) (goalId: Nat) (eq: String):
       Elab.TermElabM TacticResult := do
   state.restoreElabM
-  let recursor ← match Parser.runParserCategory
-    (env := state.env)
-    (catName := `term)
-    (input := eq)
-    (fileName := filename) with
+  let eq ← match (← Compile.parseTermM eq) with
     | .ok syn => pure syn
     | .error error => return .parseError error
-  state.executeTactic goalId (tacticM := Tactic.noConfuse recursor)
+  state.tryTacticM goalId (tacticM := Tactic.evalNoConfuse eq)
 
 end Pantograph
