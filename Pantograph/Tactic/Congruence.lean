@@ -31,7 +31,7 @@ def congruenceArg (mvarId: MVarId): MetaM (List MVarId) := mvarId.withContext do
 def evalCongruenceArg: Elab.Tactic.TacticM Unit := do
   let goal ← Elab.Tactic.getMainGoal
   let nextGoals ← congruenceArg goal
-  Elab.Tactic.setGoals nextGoals
+  Elab.Tactic.replaceMainGoal nextGoals
 
 def congruenceFun (mvarId: MVarId): MetaM (List MVarId) := mvarId.withContext do
   mvarId.checkNotAssigned `Pantograph.Tactic.congruenceFun
@@ -60,7 +60,7 @@ def congruenceFun (mvarId: MVarId): MetaM (List MVarId) := mvarId.withContext do
 def evalCongruenceFun: Elab.Tactic.TacticM Unit := do
   let goal ← Elab.Tactic.getMainGoal
   let nextGoals ← congruenceFun goal
-  Elab.Tactic.setGoals nextGoals
+  Elab.Tactic.replaceMainGoal nextGoals
 
 def congruence (mvarId: MVarId): MetaM (List MVarId) := mvarId.withContext do
   mvarId.checkNotAssigned `Pantograph.Tactic.congruence
@@ -93,6 +93,6 @@ def congruence (mvarId: MVarId): MetaM (List MVarId) := mvarId.withContext do
 def evalCongruence: Elab.Tactic.TacticM Unit := do
   let goal ← Elab.Tactic.getMainGoal
   let nextGoals ← congruence goal
-  Elab.Tactic.setGoals nextGoals
+  Elab.Tactic.replaceMainGoal nextGoals
 
 end Pantograph.Tactic

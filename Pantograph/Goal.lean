@@ -247,7 +247,7 @@ protected def GoalState.conv (state: GoalState) (goalId: Nat):
     -- See Lean.Elab.Tactic.Conv.convTarget
     let convMVar ← Elab.Tactic.withMainContext do
       let (rhs, newGoal) ← Elab.Tactic.Conv.mkConvGoalFor (← Elab.Tactic.getMainTarget)
-      Elab.Tactic.setGoals [newGoal.mvarId!]
+      Elab.Tactic.replaceMainGoal [newGoal.mvarId!]
       pure rhs.mvarId!
     return (← MonadBacktrack.saveState, convMVar)
   try

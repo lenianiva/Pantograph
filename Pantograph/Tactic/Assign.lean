@@ -25,7 +25,7 @@ def evalAssign : Elab.Tactic.Tactic := fun stx => Elab.Tactic.withMainContext do
     (tagSuffix := .anonymous )
     (allowNaturalHoles := true)
   goal.assign expr
-  Elab.Tactic.setGoals nextGoals
+  Elab.Tactic.replaceMainGoal nextGoals
 
 
 end Pantograph.Tactic

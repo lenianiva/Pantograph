@@ -100,6 +100,6 @@ def motivatedApply (mvarId: MVarId) (recursor: Expr) : MetaM (Array Meta.Inducti
 def evalMotivatedApply : Elab.Tactic.Tactic := fun stx => Elab.Tactic.withMainContext do
   let recursor ← Elab.Term.elabTerm (stx := stx) .none
   let nextGoals ← motivatedApply (← Elab.Tactic.getMainGoal) recursor
-  Elab.Tactic.setGoals $ nextGoals.toList.map (·.mvarId)
+  Elab.Tactic.replaceMainGoal $ nextGoals.toList.map (·.mvarId)
 
 end Pantograph.Tactic

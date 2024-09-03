@@ -17,6 +17,6 @@ def evalNoConfuse: Elab.Tactic.Tactic := λ stx => do
   let goal ← Elab.Tactic.getMainGoal
   let h ← goal.withContext $ Elab.Term.elabTerm (stx := stx) .none
   noConfuse goal h
-  Elab.Tactic.setGoals []
+  Elab.Tactic.replaceMainGoal []
 
 end Pantograph.Tactic
