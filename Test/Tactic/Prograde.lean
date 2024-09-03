@@ -7,7 +7,7 @@ open Pantograph
 
 namespace Pantograph.Test.Tactic.Prograde
 
-def test_eval : TestT Elab.TermElabM Unit := do
+def test_define : TestT Elab.TermElabM Unit := do
   let expr := "forall (p q : Prop) (h: p), And (Or p q) (Or p q)"
   let expr ← parseSentence expr
   Meta.forallTelescope expr $ λ _ body => do
@@ -48,9 +48,10 @@ def test_eval : TestT Elab.TermElabM Unit := do
       ],
       target,
     })
-    addTest $ LSpec.test "assign" ((← getExprMVarAssignment? goal.mvarId!) == .some (.mvar newGoal))
+    let .some e ← getExprMVarAssignment? goal.mvarId! | panic! "Tactic must assign"
+    addTest $ LSpec.test "assign" e.isLet
 
-def test_proof_eval : TestT Elab.TermElabM Unit := do
+def test_define_proof : TestT Elab.TermElabM Unit := do
   let rootExpr ← parseSentence "∀ (p q: Prop), p → ((p ∨ q) ∨ (p ∨ q))"
   let state0 ← GoalState.create rootExpr
   let tactic := "intro p q h"
@@ -103,7 +104,38 @@ def test_proof_eval : TestT Elab.TermElabM Unit := do
 
   addTest $ LSpec.check "(3 root)" state3.rootExpr?.isSome
 
-def test_proof_have : TestT Elab.TermElabM Unit := do
+def fun_define_root_expr: ∀ (p: Prop), PProd (Nat → p) Unit → p := by
+  intro p x
+  apply x.fst
+  exact 5
+
+def test_define_root_expr : TestT Elab.TermElabM Unit := do
+  --let rootExpr ← parseSentence "Nat"
+  --let state0 ← GoalState.create rootExpr
+  --let .success state1 ← state0.tryTactic (goalId := 0) "exact 5" | addTest $ assertUnreachable "exact 5"
+  --let .some rootExpr := state1.rootExpr? | addTest $ assertUnreachable "Root expr"
+  --addTest $ LSpec.check "root" ((toString $ ← Meta.ppExpr rootExpr) = "5")
+  let rootExpr ← parseSentence "∀ (p: Prop), PProd (Nat → p) Unit → p"
+  let state0 ← GoalState.create rootExpr
+  let tactic := "intro p x"
+  let .success state1 ← state0.tryTactic (goalId := 0) tactic | addTest $ assertUnreachable tactic
+  let binderName := `binder
+  let value := "x.fst"
+  let expr ← state1.goals[0]!.withContext $ strToTermSyntax value
+  let tacticM := Tactic.evalDefine binderName expr
+  let .success state2 ← state1.tryTacticM (goalId := 0) tacticM | addTest $ assertUnreachable s!"define {binderName} := {value}"
+  let tactic := s!"apply {binderName}"
+  let .success state3 ← state2.tryTactic (goalId := 0) tactic | addTest $ assertUnreachable tactic
+  let tactic := s!"exact 5"
+  let .success state4 ← state3.tryTactic (goalId := 0) tactic | addTest $ assertUnreachable tactic
+  let .some rootExpr := state4.rootExpr? | addTest $ assertUnreachable "Root expr"
+  addTest $ LSpec.check "root" ((toString $ ← Meta.ppExpr rootExpr) = "fun p x =>\n  let binder := x.fst;\n  binder 5")
+
+--set_option pp.all true
+--#check @PSigma (α := Prop) (β := λ (p: Prop) => p)
+--def test_define_root_expr : TestT Elab.TermElabM Unit := do
+
+def test_have_proof : TestT Elab.TermElabM Unit := do
   let rootExpr ← parseSentence "∀ (p q: Prop), p → ((p ∨ q) ∨ (p ∨ q))"
   let state0 ← GoalState.create rootExpr
   let tactic := "intro p q h"
@@ -160,7 +192,8 @@ def test_proof_have : TestT Elab.TermElabM Unit := do
   addTest $ LSpec.check s!":= {expr}" ((← state4.serializeGoals).map (·.devolatilize) =
     #[])
 
-  addTest $ LSpec.check "(4 root)" state4.rootExpr?.isSome
+  let .some rootExpr := state4.rootExpr? | addTest $ assertUnreachable "Root expr"
+  addTest $ LSpec.check "root" ((toString $ ← Meta.ppExpr rootExpr) = "fun p q h y => Or.inl y")
 
 def test_let (specialized: Bool): TestT Elab.TermElabM Unit := do
   let rootExpr ← parseSentence "∀ (p q: Prop), p → ((p ∨ q) ∨ (p ∨ q))"
@@ -256,9 +289,10 @@ def test_let (specialized: Bool): TestT Elab.TermElabM Unit := do
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   [
-    ("eval", test_eval),
-    ("Proof eval", test_proof_eval),
-    ("Proof have", test_proof_have),
+    ("define", test_define),
+    ("define proof", test_define_proof),
+    ("define root expr", test_define_root_expr),
+    ("have proof", test_have_proof),
     ("let via assign", test_let false),
     ("let via tryLet", test_let true),
   ] |>.map (λ (name, t) => (name, runTestTermElabM env t))

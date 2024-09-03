@@ -94,15 +94,22 @@ def runTermElabMSeq (env: Environment) (termElabM: Elab.TermElabM LSpec.TestSeq)
 
 def exprToStr (e: Expr): Lean.MetaM String := toString <$> Meta.ppExpr e
 
+def strToTermSyntax [Monad m] [MonadEnv m] (s: String): m Syntax := do
+  let .ok stx := Parser.runParserCategory
+    (env := ← MonadEnv.getEnv)
+    (catName := `term)
+    (input := s)
+    (fileName := filename) | panic! s!"Failed to parse {s}"
+  return stx
 def parseSentence (s: String): Elab.TermElabM Expr := do
-  let recursor ← match Parser.runParserCategory
+  let stx ← match Parser.runParserCategory
     (env := ← MonadEnv.getEnv)
     (catName := `term)
     (input := s)
     (fileName := filename) with
     | .ok syn => pure syn
     | .error error => throwError "Failed to parse: {error}"
-  Elab.Term.elabTerm (stx := recursor) .none
+  Elab.Term.elabTerm (stx := stx) .none
 
 def runTacticOnMVar (tacticM: Elab.Tactic.TacticM Unit) (goal: MVarId): Elab.TermElabM (List MVarId) := do
     let (_, newGoals) ← tacticM { elaborator := .anonymous } |>.run { goals := [goal] }

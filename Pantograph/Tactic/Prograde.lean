@@ -5,22 +5,25 @@ open Lean
 
 namespace Pantograph.Tactic
 
+private def mkUpstreamMVar (goal: MVarId) : MetaM Expr := do
+  Meta.mkFreshExprSyntheticOpaqueMVar (← goal.getType) (tag := ← goal.getTag)
+
+
 /-- Introduces a fvar to the current mvar -/
 def define (mvarId: MVarId) (binderName: Name) (expr: Expr): MetaM (FVarId × MVarId) := mvarId.withContext do
   mvarId.checkNotAssigned `Pantograph.Tactic.define
   let type ← Meta.inferType expr
 
   Meta.withLetDecl binderName type expr λ fvar => do
-    let mvarUpstream ← Meta.mkFreshExprMVarAt (← getLCtx) (← Meta.getLocalInstances)
-      (← mvarId.getType) (kind := MetavarKind.synthetic) (userName := .anonymous)
-    mvarId.assign mvarUpstream
+    let mvarUpstream ← mkUpstreamMVar mvarId
+    mvarId.assign $ ← Meta.mkLetFVars #[fvar] mvarUpstream
     pure (fvar.fvarId!, mvarUpstream.mvarId!)
 
 def evalDefine (binderName: Name) (expr: Syntax): Elab.Tactic.TacticM Unit := do
   let goal ← Elab.Tactic.getMainGoal
   let expr ← goal.withContext $ Elab.Term.elabTerm (stx := expr) (expectedType? := .none)
   let (_, mvarId) ← define goal binderName expr
-  Elab.Tactic.setGoals [mvarId]
+  Elab.Tactic.replaceMainGoal [mvarId]
 
 structure BranchResult where
   fvarId?: Option FVarId := .none
@@ -39,10 +42,9 @@ def «have» (mvarId: MVarId) (binderName: Name) (type: Expr): MetaM BranchResul
   let mvarUpstream ←
     withTheReader Meta.Context (fun ctx => { ctx with lctx := lctxUpstream }) do
       Meta.withNewLocalInstances #[.fvar fvarId] 0 do
-        let mvarUpstream ← Meta.mkFreshExprMVarAt (← getLCtx) (← Meta.getLocalInstances)
-          (← mvarId.getType) (kind := MetavarKind.synthetic) (userName := ← mvarId.getTag)
+        let mvarUpstream ← mkUpstreamMVar mvarId
         --let expr: Expr := .app (.lam binderName type mvarBranch .default) mvarUpstream
-        mvarId.assign mvarUpstream
+        mvarId.assign $ ← Meta.mkLambdaFVars #[.fvar fvarId] mvarUpstream
         pure mvarUpstream
 
   return {
@@ -57,7 +59,7 @@ def evalHave (binderName: Name) (type: Syntax): Elab.Tactic.TacticM Unit := do
     let type ← Elab.Term.elabType (stx := type)
     let result ← «have» goal binderName type
     pure [result.branch, result.main]
-  Elab.Tactic.setGoals nextGoals
+  Elab.Tactic.replaceMainGoal nextGoals
 
 def «let» (mvarId: MVarId) (binderName: Name) (type: Expr): MetaM BranchResult := mvarId.withContext do
   mvarId.checkNotAssigned `Pantograph.Tactic.let
@@ -68,9 +70,8 @@ def «let» (mvarId: MVarId) (binderName: Name) (type: Expr): MetaM BranchResult
 
   assert! ¬ type.hasLooseBVars
   let mvarUpstream ← Meta.withLetDecl binderName type mvarBranch $ λ fvar => do
-    let mvarUpstream ← Meta.mkFreshExprMVarAt (← getLCtx) (← Meta.getLocalInstances)
-      (type := ← mvarId.getType) (kind := MetavarKind.synthetic) (userName := ← mvarId.getTag)
-    mvarId.assign $ .letE binderName type fvar mvarUpstream (nonDep := false)
+    let mvarUpstream ← mkUpstreamMVar mvarId
+    mvarId.assign $ ← Meta.mkLetFVars #[fvar] mvarUpstream
     pure mvarUpstream
 
   return {
@@ -82,6 +83,6 @@ def evalLet (binderName: Name) (type: Syntax): Elab.Tactic.TacticM Unit := do
   let goal ← Elab.Tactic.getMainGoal
   let type ← goal.withContext $ Elab.Term.elabType (stx := type)
   let result ← «let» goal binderName type
-  Elab.Tactic.setGoals [result.branch, result.main]
+  Elab.Tactic.replaceMainGoal [result.branch, result.main]
 
 end Pantograph.Tactic
