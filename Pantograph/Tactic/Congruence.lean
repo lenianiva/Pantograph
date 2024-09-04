@@ -7,7 +7,7 @@ namespace Pantograph.Tactic
 def congruenceArg (mvarId: MVarId): MetaM (List MVarId) := mvarId.withContext do
   mvarId.checkNotAssigned `Pantograph.Tactic.congruenceArg
   let target ← mvarId.getType
-  let .some (β, _, _) := target.eq? | throwError "Goal is not an Eq"
+  let .some (β, _, _) := (← instantiateMVars target).eq? | throwError "Goal is not an Eq"
   let userName := (← mvarId.getDecl).userName
 
   let u ← Meta.mkFreshLevelMVar
@@ -36,7 +36,7 @@ def evalCongruenceArg: Elab.Tactic.TacticM Unit := do
 def congruenceFun (mvarId: MVarId): MetaM (List MVarId) := mvarId.withContext do
   mvarId.checkNotAssigned `Pantograph.Tactic.congruenceFun
   let target ← mvarId.getType
-  let .some (β, _, _) := target.eq? | throwError "Goal is not an Eq"
+  let .some (β, _, _) := (← instantiateMVars target).eq? | throwError "Goal is not an Eq"
   let userName := (← mvarId.getDecl).userName
   let u ← Meta.mkFreshLevelMVar
   let α ← Meta.mkFreshExprMVar (.some $ mkSort u)
@@ -65,7 +65,7 @@ def evalCongruenceFun: Elab.Tactic.TacticM Unit := do
 def congruence (mvarId: MVarId): MetaM (List MVarId) := mvarId.withContext do
   mvarId.checkNotAssigned `Pantograph.Tactic.congruence
   let target ← mvarId.getType
-  let .some (β, _, _) := target.eq? | throwError "Goal is not an Eq"
+  let .some (β, _, _) := (← instantiateMVars target).eq? | throwError "Goal is not an Eq"
   let userName := (← mvarId.getDecl).userName
   let u ← Meta.mkFreshLevelMVar
   let α ← Meta.mkFreshExprMVar (.some $ mkSort u)
