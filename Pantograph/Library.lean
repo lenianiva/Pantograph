@@ -134,10 +134,6 @@ def goalStartExpr (expr: String) (levels: Array String): CoreM (Protocol.CR Goal
 def goalResume (target: GoalState) (goals: Array String): Except String GoalState :=
   target.resume (goals.map (λ n => { name := n.toName }) |>.toList)
 
-@[export pantograph_goal_continue]
-def goalContinue (target: GoalState) (branch: GoalState): Except String GoalState :=
-  target.continue branch
-
 @[export pantograph_goal_serialize_m]
 def goalSerialize (state: GoalState) (options: @&Protocol.Options): CoreM (Array Protocol.Goal) :=
   runMetaM <| state.serializeGoals (parent := .none) options
@@ -189,8 +185,5 @@ def goalConvExit (state: GoalState): CoreM TacticResult :=
 @[export pantograph_goal_calc_m]
 def goalCalc (state: GoalState) (goalId: Nat) (pred: String): CoreM TacticResult :=
   runTermElabM <| state.tryCalc goalId pred
-@[export pantograph_goal_focus]
-def goalFocus (state: GoalState) (goalId: Nat): Option GoalState :=
-  state.focus goalId
 
 end Pantograph

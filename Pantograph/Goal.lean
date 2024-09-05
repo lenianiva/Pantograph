@@ -39,15 +39,15 @@ protected def GoalState.create (expr: Expr): Elab.TermElabM GoalState := do
 
   --Elab.Term.synthesizeSyntheticMVarsNoPostponing
   --let expr ← instantiateMVars expr
-  let goal ← Meta.mkFreshExprMVar expr (kind := MetavarKind.synthetic) (userName := .anonymous)
+  let root ← Meta.mkFreshExprMVar expr (kind := MetavarKind.synthetic) (userName := .anonymous)
   let savedStateMonad: Elab.Tactic.TacticM Elab.Tactic.SavedState := MonadBacktrack.saveState
-  let root := goal.mvarId!
-  let savedState ← savedStateMonad { elaborator := .anonymous } |>.run' { goals := [root]}
+  let savedState ← savedStateMonad { elaborator := .anonymous } |>.run' { goals := [root.mvarId!]}
   return {
-    root,
+    root := root.mvarId!,
     savedState,
     parentMVar? := .none,
   }
+@[export pantograph_goal_state_is_conv]
 protected def GoalState.isConv (state: GoalState): Bool :=
   state.convMVar?.isSome
 protected def GoalState.goals (state: GoalState): List MVarId :=
@@ -56,6 +56,7 @@ protected def GoalState.goals (state: GoalState): List MVarId :=
 protected def GoalState.goalsArray (state: GoalState): Array MVarId := state.goals.toArray
 protected def GoalState.mctx (state: GoalState): MetavarContext :=
   state.savedState.term.meta.meta.mctx
+@[export pantograph_goal_state_env]
 protected def GoalState.env (state: GoalState): Environment :=
   state.savedState.term.meta.core.env
 
@@ -85,7 +86,7 @@ private def GoalState.restoreTacticM (state: GoalState) (goal: MVarId): Elab.Tac
   state.savedState.restore
   Elab.Tactic.setGoals [goal]
 
-
+@[export pantograph_goal_state_focus]
 protected def GoalState.focus (state: GoalState) (goalId: Nat): Option GoalState := do
   let goal ← state.savedState.tactic.goals.get? goalId
   return {
@@ -121,6 +122,7 @@ protected def GoalState.resume (state: GoalState) (goals: List MVarId): Except S
 /--
 Brings into scope all goals from `branch`
 -/
+@[export pantograph_goal_state_continue]
 protected def GoalState.continue (target: GoalState) (branch: GoalState): Except String GoalState :=
   if !target.goals.isEmpty then
     .error s!"Target state has unresolved goals"
