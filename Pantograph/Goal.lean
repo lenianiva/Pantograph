@@ -71,10 +71,10 @@ protected def GoalState.metaState (state: GoalState): Meta.State :=
 protected def GoalState.withContext (state: GoalState) (mvarId: MVarId) (m: MetaM α): MetaM α := do
   mvarId.withContext m |>.run' (← read) state.metaState
 
-protected def GoalState.withParentContext (state: GoalState) (m: MetaM α): MetaM α := do
-  state.withContext state.parentMVar?.get! m
-protected def GoalState.withRootContext (state: GoalState) (m: MetaM α): MetaM α := do
-  state.withContext state.root m
+protected def GoalState.withParentContext { n } [MonadControlT MetaM n] [Monad n] (state: GoalState): n α → n α :=
+  Meta.mapMetaM <| state.withContext state.parentMVar?.get!
+protected def GoalState.withRootContext { n } [MonadControlT MetaM n] [Monad n] (state: GoalState): n α → n α :=
+  Meta.mapMetaM <| state.withContext state.root
 
 private def GoalState.mvars (state: GoalState): SSet MVarId :=
   state.mctx.decls.foldl (init := .empty) fun acc k _ => acc.insert k
