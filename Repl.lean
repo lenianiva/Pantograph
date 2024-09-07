@@ -143,12 +143,12 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     | .ok (.success nextGoalState) => do
       let nextGoalState ← match state.options.automaticMode, args.conv? with
         | true, .none => do
-          let .ok result := nextGoalState.resume goalState.goals | throwError "Resuming known goals"
+          let .ok result := nextGoalState.resume (nextGoalState.goals ++ goalState.goals) | throwError "Resuming known goals"
           pure result
         | true, .some true => pure nextGoalState
         | true, .some false => do
           let .some (_, _, dormantGoals) := goalState.convMVar? | throwError "If conv exit succeeded this should not fail"
-          let .ok result := nextGoalState.resume dormantGoals | throwError "Resuming known goals"
+          let .ok result := nextGoalState.resume (nextGoalState.goals ++ dormantGoals) | throwError "Resuming known goals"
           pure result
         | false, _ => pure nextGoalState
       let nextStateId := state.nextId
