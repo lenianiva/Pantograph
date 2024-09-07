@@ -235,6 +235,7 @@ protected def GoalState.tryLet (state: GoalState) (goalId: Nat) (binderName: Str
   state.tryTacticM goalId $ Tactic.evalLet binderName.toName type
 
 /-- Enter conv tactic mode -/
+@[export pantograph_goal_state_conv_m]
 protected def GoalState.conv (state: GoalState) (goalId: Nat):
       Elab.TermElabM TacticResult := do
   if state.convMVar?.isSome then
@@ -265,6 +266,7 @@ protected def GoalState.conv (state: GoalState) (goalId: Nat):
     return .failure #[← exception.toMessageData.toString]
 
 /-- Exit from `conv` mode. Resumes all goals before the mode starts and applys the conv -/
+@[export pantograph_goal_state_conv_exit_m]
 protected def GoalState.convExit (state: GoalState):
       Elab.TermElabM TacticResult := do
   let (convRhs, convGoal) ← match state.convMVar? with
@@ -305,6 +307,8 @@ protected def GoalState.calcPrevRhsOf? (state: GoalState) (goalId: Nat) :=
     state.calcPrevRhs?
   else
     .none
+
+@[export pantograph_goal_state_try_calc_m]
 protected def GoalState.tryCalc (state: GoalState) (goalId: Nat) (pred: String):
       Elab.TermElabM TacticResult := do
   state.restoreElabM
