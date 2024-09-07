@@ -307,7 +307,7 @@ protected def GoalState.convExit (state: GoalState):
     return .failure #[← exception.toMessageData.toString]
 
 protected def GoalState.calcPrevRhsOf? (state: GoalState) (goal: MVarId): Option Expr := do
-  let (mvarId, rhs ) ← state.calcPrevRhs?
+  let (mvarId, rhs) ← state.calcPrevRhs?
   if mvarId == goal then
     .some rhs
   else
@@ -352,9 +352,8 @@ protected def GoalState.tryCalc (state: GoalState) (goal: MVarId) (pred: String)
       (userName := tag ++ `calc)
     let mvarBranch := proof.mvarId!
 
-    let calcPrevRhs? := Option.some (goal, rhs)
     let mut proofType ← Meta.inferType proof
-    let mut remainder := Option.none
+    let mut remainder? := Option.none
 
     -- The calc tactic either solves the main goal or leaves another relation.
     -- Replace the main goal, and save the new goal if necessary
@@ -367,10 +366,11 @@ protected def GoalState.tryCalc (state: GoalState) (goal: MVarId) (pred: String)
       let lastStepGoal ← Meta.mkFreshExprSyntheticOpaqueMVar lastStep tag
       (proof, proofType) ← Elab.Term.mkCalcTrans proof proofType lastStepGoal lastStep
       unless ← Meta.isDefEq proofType target do throwFailed
-      remainder := .some lastStepGoal.mvarId!
+      remainder? := .some lastStepGoal.mvarId!
     goal.assign proof
 
-    let goals := [ mvarBranch ] ++ remainder.toList
+    let goals := [ mvarBranch ] ++ remainder?.toList
+    let calcPrevRhs? := remainder?.map $ λ g => (g, rhs)
     return .success {
       root := state.root,
       savedState := {

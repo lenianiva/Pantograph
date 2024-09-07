@@ -2,6 +2,8 @@
  -/
 import LSpec
 import Pantograph
+import Repl
+
 namespace Pantograph.Test.Integration
 open Pantograph
 

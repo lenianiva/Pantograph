@@ -4,11 +4,14 @@ open Lake DSL
 package pantograph
 
 lean_lib Pantograph {
+  roots := #[`Pantograph]
   defaultFacets := #[LeanLib.sharedFacet]
 }
 
+lean_lib Repl {
+}
 @[default_target]
-lean_exe pantograph {
+lean_exe repl {
   root := `Main
   -- Solves the native symbol not found problem
   supportInterpreter := true
