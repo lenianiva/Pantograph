@@ -90,6 +90,10 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
   only the values of definitions are printed.
 * `options.set { key: value, ... }`: Set one or more options (not Lean options; those
   have to be set via command line arguments.), for options, see `Pantograph/Protocol.lean`
+  
+  One particular option for interest for machine learning researchers is the automatic mode.
+  `options.set { "automaticMode": true }`. This makes Pantograph act like
+  LeanDojo, with no resumption necessary to manage your goals.
 * `options.print`: Display the current set of options
 * `goal.start {["name": <name>], ["expr": <expr>], ["levels": [<levels>]], ["copyFrom": <symbol>]}`:
   Start a new proof from a given expression or symbol
