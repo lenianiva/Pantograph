@@ -27,7 +27,8 @@ structure GoalState where
   parentMVar?: Option MVarId
 
   -- Existence of this field shows that we are currently in `conv` mode.
-  convMVar?: Option (MVarId × MVarId) := .none
+  -- (convRhs, goal, dormant)
+  convMVar?: Option (MVarId × MVarId × List MVarId) := .none
   -- Previous RHS for calc, so we don't have to repeat it every time
   -- WARNING: If using `state with` outside of `calc`, this must be set to `.none`
   calcPrevRhs?: Option (MVarId × Expr) := .none
@@ -97,6 +98,20 @@ protected def GoalState.focus (state: GoalState) (goalId: Nat): Option GoalState
     calcPrevRhs? := .none,
   }
 
+/-- Immediately bring all parent goals back into scope. Used in automatic mode -/
+@[export pantograph_goal_state_immediate_resume_parent]
+protected def GoalState.immediateResume (state: GoalState) (parent: GoalState): GoalState :=
+  -- Prune parents solved goals
+  let mctx := state.mctx
+  let parentGoals := parent.goals.filter $ λ goal => mctx.eAssignment.contains goal
+  {
+    state with
+    savedState := {
+      state.savedState with
+      tactic := { goals := state.goals ++ parentGoals },
+    },
+  }
+
 /--
 Brings into scope a list of goals
 -/
@@ -116,7 +131,6 @@ protected def GoalState.resume (state: GoalState) (goals: List MVarId): Except S
         term := state.savedState.term,
         tactic := { goals := unassigned },
       },
-      calcPrevRhs? := .none,
     }
 /--
 Brings into scope all goals from `branch`
@@ -244,11 +258,13 @@ protected def GoalState.conv (state: GoalState) (goal: MVarId):
     return (← MonadBacktrack.saveState, convMVar)
   try
     let (nextSavedState, convRhs) ← tacticM { elaborator := .anonymous } |>.run' state.savedState.tactic
+    -- Other goals are now dormant
+    let otherGoals := state.goals.filter $ λ g => g != goal
     return .success {
       root := state.root,
       savedState := nextSavedState
       parentMVar? := .some goal,
-      convMVar? := .some (convRhs, goal),
+      convMVar? := .some (convRhs, goal, otherGoals),
       calcPrevRhs? := .none
     }
   catch exception =>
@@ -257,7 +273,7 @@ protected def GoalState.conv (state: GoalState) (goal: MVarId):
 /-- Exit from `conv` mode. Resumes all goals before the mode starts and applys the conv -/
 protected def GoalState.convExit (state: GoalState):
       Elab.TermElabM TacticResult := do
-  let (convRhs, convGoal) ← match state.convMVar? with
+  let (convRhs, convGoal, _) ← match state.convMVar? with
     | .some mvar => pure mvar
     | .none => return .invalidAction "Not in conv state"
   let tacticM :  Elab.Tactic.TacticM Elab.Tactic.SavedState:= do

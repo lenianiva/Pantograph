@@ -20,6 +20,7 @@ structure State where
 
 /-- Main state monad for executing commands -/
 abbrev MainM := ReaderT Context (StateT State Lean.CoreM)
+
 -- HACK: For some reason writing `CommandM α := MainM (Except ... α)` disables
 -- certain monadic features in `MainM`
 abbrev CR α := Except Protocol.InteractionError α
@@ -145,7 +146,17 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
         pure $ Except.error $ error
     match nextGoalState? with
     | .error error => return .error error
-    | .ok (.success nextGoalState) =>
+    | .ok (.success nextGoalState) => do
+      let nextGoalState ← match state.options.automaticMode, args.conv? with
+        | true, .none => do
+          let .ok result := nextGoalState.resume goalState.goals | throwError "Resuming known goals"
+          pure result
+        | true, .some true => pure nextGoalState
+        | true, .some false => do
+          let .some (_, _, dormantGoals) := goalState.convMVar? | throwError "If conv exit succeeded this should not fail"
+          let .ok result := nextGoalState.resume dormantGoals | throwError "Resuming known goals"
+          pure result
+        | false, _ => pure nextGoalState
       let nextStateId := state.nextId
       set { state with
         goalStates := state.goalStates.insert state.nextId nextGoalState,
