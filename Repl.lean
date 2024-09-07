@@ -169,30 +169,28 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
       return .ok { tacticErrors? := .some messages }
   goal_continue (args: Protocol.GoalContinue): MainM (CR Protocol.GoalContinueResult) := do
     let state ← get
-    match state.goalStates.find? args.target with
-    | .none => return .error $ errorIndex s!"Invalid state index {args.target}"
-    | .some target => do
-      let nextState? ← match args.branch?, args.goals? with
-        | .some branchId, .none => do
-          match state.goalStates.find? branchId with
-          | .none => return .error $ errorIndex s!"Invalid state index {branchId}"
-          | .some branch => pure $ goalContinue target branch
-        | .none, .some goals =>
-          pure $ goalResume target goals
-        | _, _ => return .error <| errorI "arguments" "Exactly one of {branch, goals} must be supplied"
-      match nextState? with
-      | .error error => return .error <| errorI "structure" error
-      | .ok nextGoalState =>
-        let nextStateId := state.nextId
-        set { state with
-          goalStates := state.goalStates.insert nextStateId nextGoalState,
-          nextId := state.nextId + 1
-        }
-        let goals ← goalSerialize nextGoalState (options := state.options)
-        return .ok {
-          nextStateId,
-          goals,
-        }
+    let .some target := state.goalStates.find? args.target | return .error $ errorIndex s!"Invalid state index {args.target}"
+    let nextState? ← match args.branch?, args.goals? with
+      | .some branchId, .none => do
+        match state.goalStates.find? branchId with
+        | .none => return .error $ errorIndex s!"Invalid state index {branchId}"
+        | .some branch => pure $ goalContinue target branch
+      | .none, .some goals =>
+        pure $ goalResume target goals
+      | _, _ => return .error <| errorI "arguments" "Exactly one of {branch, goals} must be supplied"
+    match nextState? with
+    | .error error => return .error <| errorI "structure" error
+    | .ok nextGoalState =>
+      let nextStateId := state.nextId
+      set { state with
+        goalStates := state.goalStates.insert nextStateId nextGoalState,
+        nextId := state.nextId + 1
+      }
+      let goals ← goalSerialize nextGoalState (options := state.options)
+      return .ok {
+        nextStateId,
+        goals,
+      }
   goal_delete (args: Protocol.GoalDelete): MainM (CR Protocol.GoalDeleteResult) := do
     let state ← get
     let goalStates := args.stateIds.foldl (λ map id => map.erase id) state.goalStates
@@ -200,10 +198,9 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     return .ok {}
   goal_print (args: Protocol.GoalPrint): MainM (CR Protocol.GoalPrintResult) := do
     let state ← get
-    match state.goalStates.find? args.stateId with
-    | .none => return .error $ errorIndex s!"Invalid state index {args.stateId}"
-    | .some goalState => runMetaM <| do
-      return .ok (← goalPrint goalState state.options)
+    let .some goalState := state.goalStates.find? args.stateId | return .error $ errorIndex s!"Invalid state index {args.stateId}"
+    let result ← runMetaInMainM <| goalPrint goalState state.options
+    return .ok result
   compile_unit (args: Protocol.CompileUnit): MainM (CR Protocol.CompileUnitResult) := do
     let module := args.module.toName
     try
