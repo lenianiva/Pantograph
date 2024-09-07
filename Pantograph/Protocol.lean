@@ -27,6 +27,8 @@ structure Options where
   printAuxDecls: Bool      := false
   -- See `pp.implementationDetailHyps`
   printImplementationDetailHyps: Bool := false
+  -- If this is set to `true`, goals will never go dormant, so you don't have to manage resumption
+  automaticMode: Bool := false
   deriving Lean.ToJson
 
 abbrev OptionsT := ReaderT Options
@@ -190,6 +192,7 @@ structure OptionsSet where
   noRepeat?: Option Bool
   printAuxDecls?: Option Bool
   printImplementationDetailHyps?: Option Bool
+  automaticMode?: Option Bool
   deriving Lean.FromJson
 structure OptionsSetResult where
   deriving Lean.ToJson

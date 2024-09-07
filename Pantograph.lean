@@ -1,5 +1,6 @@
 import Lean.Data.HashMap
 import Pantograph.Compile
+import Pantograph.Condensed
 import Pantograph.Environment
 import Pantograph.Goal
 import Pantograph.Library
@@ -22,6 +23,11 @@ abbrev MainM := ReaderT Context (StateT State Lean.CoreM)
 -- HACK: For some reason writing `CommandM α := MainM (Except ... α)` disables
 -- certain monadic features in `MainM`
 abbrev CR α := Except Protocol.InteractionError α
+
+def runMetaInMainM { α } (metaM: Lean.MetaM α): MainM α :=
+  metaM.run'
+def runTermElabInMainM { α } (termElabM: Lean.Elab.TermElabM α) : MainM α :=
+  termElabM.run' (ctx := Condensed.elabContext) |>.run'
 
 def execute (command: Protocol.Command): MainM Lean.Json := do
   let run { α β: Type } [Lean.FromJson α] [Lean.ToJson β] (comm: α → MainM (CR β)): MainM Lean.Json :=
@@ -87,6 +93,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
         noRepeat := args.noRepeat?.getD options.noRepeat,
         printAuxDecls := args.printAuxDecls?.getD options.printAuxDecls,
         printImplementationDetailHyps := args.printImplementationDetailHyps?.getD options.printImplementationDetailHyps
+        automaticMode := args.automaticMode?.getD options.automaticMode,
       }
     }
     return .ok {  }
@@ -95,7 +102,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   goal_start (args: Protocol.GoalStart): MainM (CR Protocol.GoalStartResult) := do
     let state ← get
     let env ← Lean.MonadEnv.getEnv
-    let expr?: Except _ GoalState ← runTermElabM (match args.expr, args.copyFrom with
+    let expr?: Except _ GoalState ← runTermElabInMainM (match args.expr, args.copyFrom with
       | .some expr, .none => goalStartExpr expr (args.levels.getD #[])
       | .none, .some copyFrom =>
         (match env.find? <| copyFrom.toName with
@@ -114,47 +121,47 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
       return .ok { stateId, root := goalState.root.name.toString }
   goal_tactic (args: Protocol.GoalTactic): MainM (CR Protocol.GoalTacticResult) := do
     let state ← get
-    match state.goalStates.find? args.stateId with
-    | .none => return .error $ errorIndex s!"Invalid state index {args.stateId}"
-    | .some goalState => do
-      let nextGoalState?: Except _ GoalState ←
-        match args.tactic?, args.expr?, args.have?, args.calc?, args.conv?  with
-        | .some tactic, .none, .none, .none, .none => do
-          pure ( Except.ok (← goalTactic goalState args.goalId tactic))
-        | .none, .some expr, .none, .none, .none => do
-          pure ( Except.ok (← goalAssign goalState args.goalId expr))
-        | .none, .none, .some type, .none, .none => do
-          let binderName := args.binderName?.getD ""
-          pure ( Except.ok (← goalState.tryHave args.goalId binderName type))
-        | .none, .none, .none, .some pred, .none => do
-          pure ( Except.ok (← goalCalc goalState args.goalId pred))
-        | .none, .none, .none, .none, .some true => do
-          pure ( Except.ok (← goalConv goalState args.goalId))
-        | .none, .none, .none, .none, .some false => do
-          pure ( Except.ok (← goalConvExit goalState))
-        | _, _, _, _, _ => pure (Except.error <|
-          errorI "arguments" "Exactly one of {tactic, expr, have, calc, conv} must be supplied")
-      match nextGoalState? with
-      | .error error => return .error error
-      | .ok (.success nextGoalState) =>
-        let nextStateId := state.nextId
-        set { state with
-          goalStates := state.goalStates.insert state.nextId nextGoalState,
-          nextId := state.nextId + 1,
-        }
-        let goals ← nextGoalState.serializeGoals (parent := .some goalState) (options := state.options) |>.run'
-        return .ok {
-          nextStateId? := .some nextStateId,
-          goals? := .some goals,
-        }
-      | .ok (.parseError message) =>
-        return .ok { parseError? := .some message }
-      | .ok (.indexError goalId) =>
-        return .error $ errorIndex s!"Invalid goal id index {goalId}"
-      | .ok (.invalidAction message) =>
-        return .error $ errorI "invalid" message
-      | .ok (.failure messages) =>
-        return .ok { tacticErrors? := .some messages }
+    let .some goalState := state.goalStates.find? args.stateId |
+      return .error $ errorIndex s!"Invalid state index {args.stateId}"
+    let .some goal := goalState.goals.get? args.goalId |
+      return .error $ errorIndex s!"Invalid goal index {args.goalId}"
+    let nextGoalState?: Except _ TacticResult ← runTermElabInMainM do
+      match args.tactic?, args.expr?, args.have?, args.calc?, args.conv?  with
+      | .some tactic, .none, .none, .none, .none => do
+        pure <| Except.ok <| ← goalState.tryTactic goal tactic
+      | .none, .some expr, .none, .none, .none => do
+        pure <| Except.ok <| ← goalState.tryAssign goal expr
+      | .none, .none, .some type, .none, .none => do
+        let binderName := args.binderName?.getD ""
+        pure <| Except.ok <| ← goalState.tryHave goal binderName type
+      | .none, .none, .none, .some pred, .none => do
+        pure <| Except.ok <| ← goalState.tryCalc goal pred
+      | .none, .none, .none, .none, .some true => do
+        pure <| Except.ok <| ← goalState.conv goal
+      | .none, .none, .none, .none, .some false => do
+        pure <| Except.ok <| ← goalState.convExit
+      | _, _, _, _, _ =>
+        let error := errorI "arguments" "Exactly one of {tactic, expr, have, calc, conv} must be supplied"
+        pure $ Except.error $ error
+    match nextGoalState? with
+    | .error error => return .error error
+    | .ok (.success nextGoalState) =>
+      let nextStateId := state.nextId
+      set { state with
+        goalStates := state.goalStates.insert state.nextId nextGoalState,
+        nextId := state.nextId + 1,
+      }
+      let goals ← nextGoalState.serializeGoals (parent := .some goalState) (options := state.options) |>.run'
+      return .ok {
+        nextStateId? := .some nextStateId,
+        goals? := .some goals,
+      }
+    | .ok (.parseError message) =>
+      return .ok { parseError? := .some message }
+    | .ok (.invalidAction message) =>
+      return .error $ errorI "invalid" message
+    | .ok (.failure messages) =>
+      return .ok { tacticErrors? := .some messages }
   goal_continue (args: Protocol.GoalContinue): MainM (CR Protocol.GoalContinueResult) := do
     let state ← get
     match state.goalStates.find? args.target with

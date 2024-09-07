@@ -62,13 +62,15 @@ protected def Goal.devolatilize (goal: Goal): Goal :=
 
 end Condensed
 
+def GoalState.get! (state: GoalState) (i: Nat): MVarId := state.goals.get! i
+def GoalState.tacticOn (state: GoalState) (goalId: Nat) (tactic: String) := state.tryTactic (state.goals.get! goalId) tactic
+
 def TacticResult.toString : TacticResult → String
   | .success state => s!".success ({state.goals.length} goals)"
   | .failure messages =>
     let messages := "\n".intercalate messages.toList
     s!".failure {messages}"
   | .parseError error => s!".parseError {error}"
-  | .indexError index => s!".indexError {index}"
   | .invalidAction error => s!".invalidAction {error}"
 
 namespace Test
