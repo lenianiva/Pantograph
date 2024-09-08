@@ -56,7 +56,6 @@ protected def GoalState.goals (state: GoalState): List MVarId :=
 protected def GoalState.goalsArray (state: GoalState): Array MVarId := state.goals.toArray
 protected def GoalState.mctx (state: GoalState): MetavarContext :=
   state.savedState.term.meta.meta.mctx
-@[export pantograph_goal_state_env]
 protected def GoalState.env (state: GoalState): Environment :=
   state.savedState.term.meta.core.env
 
@@ -64,7 +63,6 @@ protected def GoalState.env (state: GoalState): Environment :=
 protected def GoalState.metaContextOfGoal (state: GoalState) (mvarId: MVarId): Option Meta.Context := do
   let mvarDecl ← state.mctx.findDecl? mvarId
   return { lctx := mvarDecl.lctx, localInstances := mvarDecl.localInstances }
-@[export pantograph_goal_state_meta_state]
 protected def GoalState.metaState (state: GoalState): Meta.State :=
   state.savedState.term.meta.meta
 
