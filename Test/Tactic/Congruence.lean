@@ -25,7 +25,7 @@ def test_congr_arg_list : TestT Elab.TermElabM Unit := do
     let f := newGoals.get! 3
     let h := newGoals.get! 4
     let c := newGoals.get! 5
-    let results ← f.apply (← parseSentence "List.reverse")
+    let results ← Meta.withAssignableSyntheticOpaque do f.apply (← parseSentence "List.reverse")
     addTest $ LSpec.check "apply" (results.length = 0)
     addTest $ LSpec.check "h" ((← exprToStr $ ← h.getType) = "?a₁ = ?a₂")
     addTest $ LSpec.check "conduit" ((← exprToStr $ ← c.getType) = "(?a₁.reverse = ?a₂.reverse) = (l1.reverse = l2.reverse)")
