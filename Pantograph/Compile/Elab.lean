@@ -1,4 +1,4 @@
-
+/- Adapted from https://github.com/semorrison/lean-training-data -/
 import Lean.Elab.Import
 import Lean.Elab.Command
 import Lean.Elab.InfoTree

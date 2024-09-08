@@ -29,6 +29,9 @@ end Lean.PersistentArray
 
 namespace Pantograph.Compile
 
+
+abbrev FrontendM := Elab.Frontend.FrontendM
+
 structure CompilationStep where
   fileName : String
   fileMap : FileMap
@@ -44,7 +47,7 @@ structure CompilationStep where
 Process one command, returning a `CompilationStep` and
 `done : Bool`, indicating whether this was the last command.
 -/
-def processOneCommand: Elab.Frontend.FrontendM (CompilationStep × Bool) := do
+def processOneCommand: FrontendM (CompilationStep × Bool) := do
   let s := (← get).commandState
   let before := s.env
   let done ← Elab.Frontend.processCommand
@@ -57,30 +60,33 @@ def processOneCommand: Elab.Frontend.FrontendM (CompilationStep × Bool) := do
   let ⟨_, fileName, fileMap⟩  := (← read).inputCtx
   return ({ fileName, fileMap, src, stx, before, after, msgs, trees }, done)
 
-partial def processFile : Elab.Frontend.FrontendM (List CompilationStep) := do
+partial def collectCompilationSteps : FrontendM (List CompilationStep) := do
   let (cmd, done) ← processOneCommand
   if done then
     return [cmd]
   else
-    return cmd :: (← processFile)
+    return cmd :: (← collectCompilationSteps)
 
 
 def findSourcePath (module : Name) : IO System.FilePath := do
   return System.FilePath.mk ((← findOLean module).toString.replace ".lake/build/lib/" "") |>.withExtension "lean"
 
-def processSource (module : Name) (opts : Options := {}) : IO (List CompilationStep) := unsafe do
+def runFrontendMInFile { α } (module : Name) (opts : Options := {}) (m : FrontendM α): IO α := unsafe do
   let file ← IO.FS.readFile (← findSourcePath module)
   let inputCtx := Parser.mkInputContext file module.toString
 
   let (header, parserState, messages) ← Parser.parseHeader inputCtx
   let (env, messages) ← Elab.processHeader header opts messages inputCtx
   let commandState := Elab.Command.mkState env messages opts
-  processFile.run { inputCtx }
+  m.run { inputCtx }
     |>.run' {
     commandState := { commandState with infoState.enabled := true },
     parserState,
     cmdPos := parserState.pos
   }
+
+def processSource (module : Name) (opts : Options := {}) : IO (List CompilationStep) :=
+  runFrontendMInFile module opts collectCompilationSteps
 
 
 end Pantograph.Compile
