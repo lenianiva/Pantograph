@@ -164,7 +164,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
         | .some branchId, .none => do
           match state.goalStates.find? branchId with
           | .none => return .error $ errorIndex s!"Invalid state index {branchId}"
-          | .some branch => pure $ goalContinue target branch
+          | .some branch => pure $ target.continue branch
         | .none, .some goals =>
           pure $ goalResume target goals
         | _, _ => return .error <| errorI "arguments" "Exactly one of {branch, goals} must be supplied"

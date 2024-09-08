@@ -39,15 +39,15 @@ protected def GoalState.create (expr: Expr): Elab.TermElabM GoalState := do
 
   --Elab.Term.synthesizeSyntheticMVarsNoPostponing
   --let expr ← instantiateMVars expr
-  let goal ← Meta.mkFreshExprMVar expr (kind := MetavarKind.synthetic) (userName := .anonymous)
+  let root ← Meta.mkFreshExprMVar expr (kind := MetavarKind.synthetic) (userName := .anonymous)
   let savedStateMonad: Elab.Tactic.TacticM Elab.Tactic.SavedState := MonadBacktrack.saveState
-  let root := goal.mvarId!
-  let savedState ← savedStateMonad { elaborator := .anonymous } |>.run' { goals := [root]}
+  let savedState ← savedStateMonad { elaborator := .anonymous } |>.run' { goals := [root.mvarId!]}
   return {
-    root,
+    root := root.mvarId!,
     savedState,
     parentMVar? := .none,
   }
+@[export pantograph_goal_state_is_conv]
 protected def GoalState.isConv (state: GoalState): Bool :=
   state.convMVar?.isSome
 protected def GoalState.goals (state: GoalState): List MVarId :=
@@ -63,17 +63,16 @@ protected def GoalState.env (state: GoalState): Environment :=
 protected def GoalState.metaContextOfGoal (state: GoalState) (mvarId: MVarId): Option Meta.Context := do
   let mvarDecl ← state.mctx.findDecl? mvarId
   return { lctx := mvarDecl.lctx, localInstances := mvarDecl.localInstances }
-@[export pantograph_goal_state_meta_state]
 protected def GoalState.metaState (state: GoalState): Meta.State :=
   state.savedState.term.meta.meta
 
 protected def GoalState.withContext (state: GoalState) (mvarId: MVarId) (m: MetaM α): MetaM α := do
   mvarId.withContext m |>.run' (← read) state.metaState
 
-protected def GoalState.withParentContext (state: GoalState) (m: MetaM α): MetaM α := do
-  state.withContext state.parentMVar?.get! m
-protected def GoalState.withRootContext (state: GoalState) (m: MetaM α): MetaM α := do
-  state.withContext state.root m
+protected def GoalState.withParentContext { n } [MonadControlT MetaM n] [Monad n] (state: GoalState): n α → n α :=
+  Meta.mapMetaM <| state.withContext state.parentMVar?.get!
+protected def GoalState.withRootContext { n } [MonadControlT MetaM n] [Monad n] (state: GoalState): n α → n α :=
+  Meta.mapMetaM <| state.withContext state.root
 
 private def GoalState.mvars (state: GoalState): SSet MVarId :=
   state.mctx.decls.foldl (init := .empty) fun acc k _ => acc.insert k
@@ -85,7 +84,7 @@ private def GoalState.restoreTacticM (state: GoalState) (goal: MVarId): Elab.Tac
   state.savedState.restore
   Elab.Tactic.setGoals [goal]
 
-
+@[export pantograph_goal_state_focus]
 protected def GoalState.focus (state: GoalState) (goalId: Nat): Option GoalState := do
   let goal ← state.savedState.tactic.goals.get? goalId
   return {
@@ -121,6 +120,7 @@ protected def GoalState.resume (state: GoalState) (goals: List MVarId): Except S
 /--
 Brings into scope all goals from `branch`
 -/
+@[export pantograph_goal_state_continue]
 protected def GoalState.continue (target: GoalState) (branch: GoalState): Except String GoalState :=
   if !target.goals.isEmpty then
     .error s!"Target state has unresolved goals"
@@ -233,6 +233,7 @@ protected def GoalState.tryLet (state: GoalState) (goalId: Nat) (binderName: Str
   state.tryTacticM goalId $ Tactic.evalLet binderName.toName type
 
 /-- Enter conv tactic mode -/
+@[export pantograph_goal_state_conv_m]
 protected def GoalState.conv (state: GoalState) (goalId: Nat):
       Elab.TermElabM TacticResult := do
   if state.convMVar?.isSome then
@@ -263,6 +264,7 @@ protected def GoalState.conv (state: GoalState) (goalId: Nat):
     return .failure #[← exception.toMessageData.toString]
 
 /-- Exit from `conv` mode. Resumes all goals before the mode starts and applys the conv -/
+@[export pantograph_goal_state_conv_exit_m]
 protected def GoalState.convExit (state: GoalState):
       Elab.TermElabM TacticResult := do
   let (convRhs, convGoal) ← match state.convMVar? with
@@ -303,6 +305,8 @@ protected def GoalState.calcPrevRhsOf? (state: GoalState) (goalId: Nat) :=
     state.calcPrevRhs?
   else
     .none
+
+@[export pantograph_goal_state_try_calc_m]
 protected def GoalState.tryCalc (state: GoalState) (goalId: Nat) (pred: String):
       Elab.TermElabM TacticResult := do
   state.restoreElabM
