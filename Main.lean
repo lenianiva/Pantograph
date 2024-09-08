@@ -7,7 +7,7 @@ import Pantograph
 import Repl
 
 -- Main IO functions
-open Pantograph
+open Pantograph.Repl
 
 /-- Parse a command either in `{ "cmd": ..., "payload": ... }` form or `cmd { ... }` form. -/
 def parseCommand (s: String): Except String Protocol.Command := do

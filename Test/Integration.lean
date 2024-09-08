@@ -6,13 +6,13 @@ import Repl
 import Test.Common
 
 namespace Pantograph.Test.Integration
-open Pantograph
+open Pantograph.Repl
 
 def step { α } [Lean.ToJson α] (cmd: String) (payload: List (String × Lean.Json))
     (expected: α) (name? : Option String := .none): MainM LSpec.TestSeq := do
   let payload := Lean.Json.mkObj payload
   let name := name?.getD s!"{cmd} {payload.compress}"
-  let result ← execute { cmd, payload }
+  let result ← Repl.execute { cmd, payload }
   return LSpec.test name (toString result = toString (Lean.toJson expected))
 
 abbrev Test := List (MainM LSpec.TestSeq)

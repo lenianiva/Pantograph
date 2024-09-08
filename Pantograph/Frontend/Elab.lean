@@ -3,7 +3,8 @@ import Lean.Elab.Import
 import Lean.Elab.Command
 import Lean.Elab.InfoTree
 
-import Pantograph.Compile.Frontend
+import Pantograph.Protocol
+import Pantograph.Frontend.Basic
 
 open Lean
 
@@ -75,7 +76,7 @@ partial def filter (p : Info → Bool) (m : MVarId → Bool := fun _ => false) :
 end Lean.Elab.InfoTree
 
 
-namespace Pantograph.Compile
+namespace Pantograph.Frontend
 
 -- Info tree filtering functions
 
@@ -142,5 +143,18 @@ def collectTacticNodes (t : Elab.InfoTree) : List TacticInvocation :=
 def collectTactics (t : Elab.InfoTree) : List TacticInvocation :=
   collectTacticNodes t |>.filter fun i => i.info.isSubstantive
 
+@[export pantograph_frontend_collect_tactics_from_compilation_step_m]
+def collectTacticsFromCompilationStep (step : CompilationStep) : IO (List Protocol.InvokedTactic) := do
+  let tacticInfoTrees := step.trees.bind λ tree => tree.filter λ
+    | info@(.ofTacticInfo _) => info.isOriginal
+    | _ => false
+  let tactics := tacticInfoTrees.bind collectTactics
+  tactics.mapM λ invocation => do
+    let goalBefore := (Format.joinSep (← invocation.goalState) "\n").pretty
+    let goalAfter := (Format.joinSep (← invocation.goalStateAfter) "\n").pretty
+    let tactic ← invocation.ctx.runMetaM {} do
+      let t ← Lean.PrettyPrinter.ppTactic ⟨invocation.info.stx⟩
+      return t.pretty
+    return { goalBefore, goalAfter, tactic }
 
-end Pantograph.Compile
+end Pantograph.Frontend

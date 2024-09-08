@@ -27,8 +27,7 @@ protected def drop [Inhabited α] (t : PersistentArray α) (n : Nat) : List α :
 end Lean.PersistentArray
 
 
-namespace Pantograph.Compile
-
+namespace Pantograph.Frontend
 
 abbrev FrontendM := Elab.Frontend.FrontendM
 
@@ -47,6 +46,7 @@ structure CompilationStep where
 Process one command, returning a `CompilationStep` and
 `done : Bool`, indicating whether this was the last command.
 -/
+@[export pantograph_frontend_process_one_command_m]
 def processOneCommand: FrontendM (CompilationStep × Bool) := do
   let s := (← get).commandState
   let before := s.env
@@ -67,26 +67,38 @@ partial def collectCompilationSteps : FrontendM (List CompilationStep) := do
   else
     return cmd :: (← collectCompilationSteps)
 
-
 def findSourcePath (module : Name) : IO System.FilePath := do
   return System.FilePath.mk ((← findOLean module).toString.replace ".lake/build/lib/" "") |>.withExtension "lean"
 
-def runFrontendMInFile { α } (module : Name) (opts : Options := {}) (m : FrontendM α): IO α := unsafe do
+@[export pantograph_create_frontend_context_state_from_file_m]
+unsafe def createFrontendContextStateFromFile (module : Name) (opts : Options := {})
+  : IO (Elab.Frontend.Context × Elab.Frontend.State) := do
   let file ← IO.FS.readFile (← findSourcePath module)
   let inputCtx := Parser.mkInputContext file module.toString
 
   let (header, parserState, messages) ← Parser.parseHeader inputCtx
   let (env, messages) ← Elab.processHeader header opts messages inputCtx
   let commandState := Elab.Command.mkState env messages opts
-  m.run { inputCtx }
-    |>.run' {
+  let context: Elab.Frontend.Context := { inputCtx }
+  let state: Elab.Frontend.State := {
     commandState := { commandState with infoState.enabled := true },
     parserState,
     cmdPos := parserState.pos
   }
+  return (context, state)
 
-def processSource (module : Name) (opts : Options := {}) : IO (List CompilationStep) :=
-  runFrontendMInFile module opts collectCompilationSteps
+partial def mapCompilationSteps { α } (f: CompilationStep → IO α) : FrontendM (List α) := do
+  let (cmd, done) ← processOneCommand
+  let result ← f cmd
+  if done then
+    return [result]
+  else
+    return result :: (← mapCompilationSteps f)
+
+def runFrontendMInFile { α } (module : Name) (opts : Options := {}) (m : FrontendM α): IO α := unsafe do
+  let (context, state) ← createFrontendContextStateFromFile module opts
+  m.run context |>.run' state
 
 
-end Pantograph.Compile
+
+end Pantograph.Frontend

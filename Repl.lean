@@ -1,7 +1,7 @@
 import Lean.Data.HashMap
 import Pantograph
 
-namespace Pantograph
+namespace Pantograph.Repl
 
 structure Context where
   imports: List String
@@ -204,17 +204,20 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   compile_unit (args: Protocol.CompileUnit): MainM (CR Protocol.CompileUnitResult) := do
     let module := args.module.toName
     try
-      let steps ← Compile.processSource module
-      let units? := if args.compilationUnits then
-          .some $ steps.map λ step => (step.src.startPos.byteIdx, step.src.stopPos.byteIdx)
+      let li ← Frontend.runFrontendMInFile module {} <| Frontend.mapCompilationSteps λ step => do
+        let unitBoundary := (step.src.startPos.byteIdx, step.src.stopPos.byteIdx)
+        let tacticInvocations ← if args.invocations then
+            Frontend.collectTacticsFromCompilationStep step
+          else
+            pure []
+        return (unitBoundary, tacticInvocations)
+      let units := li.map λ (unit, _) => unit
+      let invocations? := if args.invocations then
+          .some $ li.bind λ (_, invocations) => invocations
         else
           .none
-      let invocations? ← if args.invocations then
-          pure $ .some (← Compile.collectTacticsFromCompilation steps)
-        else
-          pure .none
-      return .ok { units?, invocations? }
+      return .ok { units, invocations? }
     catch e =>
       return .error $ errorI "compile" (← e.toMessageData.toString)
 
-end Pantograph
+end Pantograph.Repl

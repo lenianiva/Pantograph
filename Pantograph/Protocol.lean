@@ -286,8 +286,6 @@ structure GoalDiag where
 /-- Executes the Lean compiler on a single file -/
 structure CompileUnit where
   module: String
-  -- If set to true, query the string boundaries of compilation units
-  compilationUnits: Bool := false
   -- If set to true, collect tactic invocations
   invocations: Bool := false
   deriving Lean.FromJson
@@ -297,7 +295,8 @@ structure InvokedTactic where
   tactic: String
   deriving Lean.ToJson
 structure CompileUnitResult where
-  units?: Option $ List (Nat × Nat)
+  -- String boundaries of compilation units
+  units: List (Nat × Nat)
   invocations?: Option $ List InvokedTactic
   deriving Lean.ToJson
 

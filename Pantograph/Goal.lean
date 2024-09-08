@@ -3,9 +3,7 @@ Functions for handling metavariables
 
 All the functions starting with `try` resume their inner monadic state.
 -/
-import Pantograph.Protocol
 import Pantograph.Tactic
-import Pantograph.Compile.Parse
 import Lean
 
 
@@ -384,21 +382,5 @@ protected def GoalState.tryCalc (state: GoalState) (goal: MVarId) (pred: String)
     }
   catch exception =>
     return .failure #[← exception.toMessageData.toString]
-
-
-protected def GoalState.tryMotivatedApply (state: GoalState) (goal: MVarId) (recursor: String):
-      Elab.TermElabM TacticResult := do
-  state.restoreElabM
-  let recursor ← match (← Compile.parseTermM recursor) with
-    | .ok syn => pure syn
-    | .error error => return .parseError error
-  state.tryTacticM goal (tacticM := Tactic.evalMotivatedApply recursor)
-protected def GoalState.tryNoConfuse (state: GoalState) (goal: MVarId) (eq: String):
-      Elab.TermElabM TacticResult := do
-  state.restoreElabM
-  let eq ← match (← Compile.parseTermM eq) with
-    | .ok syn => pure syn
-    | .error error => return .parseError error
-  state.tryTacticM goal (tacticM := Tactic.evalNoConfuse eq)
 
 end Pantograph
