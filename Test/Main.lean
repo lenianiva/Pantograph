@@ -44,7 +44,7 @@ def main (args: List String) := do
 
   let suites: List (String × List (String × IO LSpec.TestSeq)) := [
     ("Environment", Environment.suite),
-    ("Integration", Integration.suite),
+    ("Integration", Integration.suite env_default),
     ("Library", Library.suite env_default),
     ("Metavar", Metavar.suite env_default),
     ("Proofs", Proofs.suite env_default),

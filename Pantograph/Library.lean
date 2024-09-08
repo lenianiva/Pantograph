@@ -152,38 +152,38 @@ def goalPrint (state: GoalState) (options: @&Protocol.Options): CoreM Protocol.G
     }
 
 @[export pantograph_goal_tactic_m]
-def goalTactic (state: GoalState) (goalId: Nat) (tactic: String): CoreM TacticResult :=
-  runTermElabM <| state.tryTactic goalId tactic
+def goalTactic (state: GoalState) (goal:  MVarId) (tactic: String): CoreM TacticResult :=
+  runTermElabM <| state.tryTactic goal tactic
 @[export pantograph_goal_assign_m]
-def goalAssign (state: GoalState) (goalId: Nat) (expr: String): CoreM TacticResult :=
-  runTermElabM <| state.tryAssign goalId expr
+def goalAssign (state: GoalState) (goal: MVarId) (expr: String): CoreM TacticResult :=
+  runTermElabM <| state.tryAssign goal expr
 @[export pantograph_goal_have_m]
-protected def GoalState.tryHave (state: GoalState) (goalId: Nat) (binderName: String) (type: String): CoreM TacticResult := do
+protected def GoalState.tryHave (state: GoalState) (goal: MVarId) (binderName: String) (type: String): CoreM TacticResult := do
   let type ← match (← Compile.parseTermM type) with
     | .ok syn => pure syn
     | .error error => return .parseError error
   runTermElabM do
     state.restoreElabM
-    state.tryTacticM goalId $ Tactic.evalHave binderName.toName type
+    state.tryTacticM goal $ Tactic.evalHave binderName.toName type
 @[export pantograph_goal_try_define_m]
-protected def GoalState.tryDefine (state: GoalState) (goalId: Nat) (binderName: String) (expr: String): CoreM TacticResult := do
+protected def GoalState.tryDefine (state: GoalState) (goal: MVarId) (binderName: String) (expr: String): CoreM TacticResult := do
   let expr ← match (← Compile.parseTermM expr) with
     | .ok syn => pure syn
     | .error error => return .parseError error
   runTermElabM do
     state.restoreElabM
-    state.tryTacticM goalId (Tactic.evalDefine binderName.toName expr)
+    state.tryTacticM goal (Tactic.evalDefine binderName.toName expr)
 @[export pantograph_goal_let_m]
-def goalLet (state: GoalState) (goalId: Nat) (binderName: String) (type: String): CoreM TacticResult :=
-  runTermElabM <| state.tryLet goalId binderName type
+def goalLet (state: GoalState) (goal: MVarId) (binderName: String) (type: String): CoreM TacticResult :=
+  runTermElabM <| state.tryLet goal binderName type
 @[export pantograph_goal_conv_m]
-def goalConv (state: GoalState) (goalId: Nat): CoreM TacticResult :=
-  runTermElabM <| state.conv goalId
+def goalConv (state: GoalState) (goal: MVarId): CoreM TacticResult :=
+  runTermElabM <| state.conv goal
 @[export pantograph_goal_conv_exit_m]
 def goalConvExit (state: GoalState): CoreM TacticResult :=
   runTermElabM <| state.convExit
 @[export pantograph_goal_calc_m]
-def goalCalc (state: GoalState) (goalId: Nat) (pred: String): CoreM TacticResult :=
-  runTermElabM <| state.tryCalc goalId pred
+def goalCalc (state: GoalState) (goal: MVarId) (pred: String): CoreM TacticResult :=
+  runTermElabM <| state.tryCalc goal pred
 
 end Pantograph

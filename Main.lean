@@ -4,6 +4,7 @@ import Lean.Environment
 import Pantograph.Version
 import Pantograph.Library
 import Pantograph
+import Repl
 
 -- Main IO functions
 open Pantograph

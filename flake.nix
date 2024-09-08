@@ -37,14 +37,25 @@
       };
       project = leanPkgs.buildLeanPackage {
         name = "Pantograph";
-        roots = [ "Main" "Pantograph" ];
-        src = pkgs.lib.cleanSourceWith {
+        roots = [ "Pantograph" ];
+        src = pkgs.lib.cleanSource (pkgs.lib.cleanSourceWith {
           src = ./.;
           filter = path: type:
             !(pkgs.lib.hasInfix "/Test/" path) &&
             !(pkgs.lib.hasSuffix ".md" path) &&
-            !(pkgs.lib.hasSuffix "Makefile" path);
-        };
+            !(pkgs.lib.hasSuffix "Repl.lean" path);
+        });
+      };
+      repl = leanPkgs.buildLeanPackage {
+        name = "Repl";
+        roots = [ "Main" "Repl" ];
+        deps = [ project ];
+        src = pkgs.lib.cleanSource (pkgs.lib.cleanSourceWith {
+          src = ./.;
+          filter = path: type:
+            !(pkgs.lib.hasInfix "/Test/" path) &&
+            !(pkgs.lib.hasSuffix ".md" path);
+        });
       };
       test = leanPkgs.buildLeanPackage {
         name = "Test";
@@ -52,18 +63,19 @@
         # root begins (e.g. `import Test.Environment` and not `import
         # Environment`) and thats where `lakefile.lean` resides.
         roots = [ "Test.Main" ];
-        deps = [ lspecLib project ];
-        src = pkgs.lib.cleanSourceWith {
+        deps = [ lspecLib repl ];
+        src = pkgs.lib.cleanSource (pkgs.lib.cleanSourceWith {
           src = ./.;
           filter = path: type:
             !(pkgs.lib.hasInfix "Pantograph" path);
-        };
+        });
       };
     in rec {
       packages = {
         inherit (leanPkgs) lean lean-all;
-        inherit (project) sharedLib executable;
-        default = project.executable;
+        inherit (project) sharedLib;
+        inherit (repl) executable;
+        default = repl.executable;
       };
       legacyPackages = {
         inherit project leanPkgs;
