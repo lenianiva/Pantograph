@@ -60,24 +60,45 @@ def processOneCommand: FrontendM (CompilationStep × Bool) := do
   let ⟨_, fileName, fileMap⟩  := (← read).inputCtx
   return ({ fileName, fileMap, src, stx, before, after, msgs, trees }, done)
 
-partial def collectCompilationSteps : FrontendM (List CompilationStep) := do
+partial def mapCompilationSteps { α } (f: CompilationStep → IO α) : FrontendM (List α) := do
   let (cmd, done) ← processOneCommand
   if done then
-    return [cmd]
+    if cmd.src.isEmpty then
+      return []
+    else
+      return [← f cmd]
   else
-    return cmd :: (← collectCompilationSteps)
+    return (← f cmd) :: (← mapCompilationSteps f)
 
+
+@[export pantograph_frontend_find_source_path_m]
 def findSourcePath (module : Name) : IO System.FilePath := do
   return System.FilePath.mk ((← findOLean module).toString.replace ".lake/build/lib/" "") |>.withExtension "lean"
 
-@[export pantograph_create_frontend_context_state_from_file_m]
-unsafe def createFrontendContextStateFromFile (module : Name) (opts : Options := {})
-  : IO (Elab.Frontend.Context × Elab.Frontend.State) := do
-  let file ← IO.FS.readFile (← findSourcePath module)
-  let inputCtx := Parser.mkInputContext file module.toString
+/--
+Use with
+```lean
+let m: FrontendM α := ...
+let (context, state) ← createContextStateFromFile ...
+m.run context |>.run' state
+```
+-/
+@[export pantograph_frontend_create_context_state_from_file_m]
+def createContextStateFromFile
+    (file : String) -- Content of the file
+    (fileName : String := "<anonymous>")
+    (env? : Option Lean.Environment := .none) -- If set to true, assume there's no header.
+    (opts : Options := {})
+    : IO (Elab.Frontend.Context × Elab.Frontend.State) := unsafe do
+  --let file ← IO.FS.readFile (← findSourcePath module)
+  let inputCtx := Parser.mkInputContext file fileName
 
-  let (header, parserState, messages) ← Parser.parseHeader inputCtx
-  let (env, messages) ← Elab.processHeader header opts messages inputCtx
+  let (env, parserState, messages) ← match env? with
+    | .some env => pure (env, {}, .empty)
+    | .none =>
+      let (header, parserState, messages) ← Parser.parseHeader inputCtx
+      let (env, messages) ← Elab.processHeader header opts messages inputCtx
+      pure (env, parserState, messages)
   let commandState := Elab.Command.mkState env messages opts
   let context: Elab.Frontend.Context := { inputCtx }
   let state: Elab.Frontend.State := {
@@ -86,19 +107,5 @@ unsafe def createFrontendContextStateFromFile (module : Name) (opts : Options :=
     cmdPos := parserState.pos
   }
   return (context, state)
-
-partial def mapCompilationSteps { α } (f: CompilationStep → IO α) : FrontendM (List α) := do
-  let (cmd, done) ← processOneCommand
-  let result ← f cmd
-  if done then
-    return [result]
-  else
-    return result :: (← mapCompilationSteps f)
-
-def runFrontendMInFile { α } (module : Name) (opts : Options := {}) (m : FrontendM α): IO α := unsafe do
-  let (context, state) ← createFrontendContextStateFromFile module opts
-  m.run context |>.run' state
-
-
 
 end Pantograph.Frontend

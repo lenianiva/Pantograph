@@ -161,6 +161,38 @@ def test_env_add_inspect : Test :=
       Protocol.EnvInspectResult)
   ]
 
+example : ∀ (p: Prop), p → p := by
+  intro p h
+  exact h
+
+def test_frontend_process : Test :=
+  [
+    let file := "example : ∀ (p: Prop), p → p := by\n  intro p h\n  exact h"
+    let goal1 := "p : Prop\nh : p\n⊢ p"
+    step "frontend.process"
+      [
+        ("file", .str file),
+        ("invocations", .bool true),
+        ("sorrys", .bool false),
+      ]
+     ({
+       units := [(0, file.utf8ByteSize)],
+       invocations? := .some [
+         {
+           goalBefore := "⊢ ∀ (p : Prop), p → p",
+           goalAfter := goal1,
+           tactic := "intro p h",
+         },
+         {
+           goalBefore := goal1 ,
+           goalAfter := "",
+           tactic := "exact h",
+         },
+       ]
+    }: Protocol.FrontendProcessResult),
+  ]
+
+
 def runTest (env: Lean.Environment) (steps: Test): IO LSpec.TestSeq := do
   -- Setup the environment for execution
   let context: Context := {
@@ -182,6 +214,7 @@ def suite (env : Lean.Environment): List (String × IO LSpec.TestSeq) :=
     ("Manual Mode", test_automatic_mode false),
     ("Automatic Mode", test_automatic_mode true),
     ("env.add env.inspect", test_env_add_inspect),
+    ("frontend.process", test_frontend_process),
   ]
   tests.map (fun (name, test) => (name, runTest env test))
 

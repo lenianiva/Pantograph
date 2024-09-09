@@ -46,7 +46,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   | "goal.continue" => run goal_continue
   | "goal.delete"   => run goal_delete
   | "goal.print"    => run goal_print
-  | "compile.unit"  => run compile_unit
+  | "frontend.process"  => run frontend_process
   | cmd =>
     let error: Protocol.InteractionError :=
       errorCommand s!"Unknown command {cmd}"
@@ -201,16 +201,29 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     let .some goalState := state.goalStates.find? args.stateId | return .error $ errorIndex s!"Invalid state index {args.stateId}"
     let result ← runMetaInMainM <| goalPrint goalState state.options
     return .ok result
-  compile_unit (args: Protocol.CompileUnit): MainM (CR Protocol.CompileUnitResult) := do
-    let module := args.module.toName
+  frontend_process (args: Protocol.FrontendProcess): MainM (CR Protocol.FrontendProcessResult) := do
     try
-      let li ← Frontend.runFrontendMInFile module {} <| Frontend.mapCompilationSteps λ step => do
+      let (fileName, file) ← match args.fileName?, args.file? with
+        | .some fileName, .none => do
+          let file ← IO.FS.readFile fileName
+          pure (fileName, file)
+        | .none, .some file =>
+          pure ("<anonymous>", file)
+        | _, _ => return .error <| errorI "arguments" "Exactly one of {fileName, file} must be supplied"
+      let env?: Option Lean.Environment ← if args.fileName?.isSome then
+          pure .none
+        else do
+          let env ← Lean.MonadEnv.getEnv
+          pure <| .some env
+      let (context, state) ← do Frontend.createContextStateFromFile file fileName env? {}
+      let m := Frontend.mapCompilationSteps λ step => do
         let unitBoundary := (step.src.startPos.byteIdx, step.src.stopPos.byteIdx)
         let tacticInvocations ← if args.invocations then
             Frontend.collectTacticsFromCompilationStep step
           else
             pure []
         return (unitBoundary, tacticInvocations)
+      let li ← m.run context |>.run' state
       let units := li.map λ (unit, _) => unit
       let invocations? := if args.invocations then
           .some $ li.bind λ (_, invocations) => invocations
@@ -218,6 +231,6 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           .none
       return .ok { units, invocations? }
     catch e =>
-      return .error $ errorI "compile" (← e.toMessageData.toString)
+      return .error $ errorI "frontend" (← e.toMessageData.toString)
 
 end Pantograph.Repl
