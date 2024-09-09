@@ -9,30 +9,17 @@ examine the symbol list of a Lean project for machine learning.
 
 ## Installation
 
-For Nix based workflow, see below.
+For Nix users, run
+``` sh
+nix build .#{sharedLib,executable}
+```
+to build either the shared library or executable.
 
 Install `elan` and `lake`, and run
 ``` sh
 lake build
 ```
-This builds the executable in `.lake/build/bin/pantograph`.
-
-To use Pantograph in a project environment, setup the `LEAN_PATH` environment
-variable so it contains the library path of lean libraries. The libraries must
-be built in advance. For example, if `mathlib4` is stored at `../lib/mathlib4`,
-the environment might be setup like this:
-
-``` sh
-LIB="../lib"
-LIB_MATHLIB="$LIB/mathlib4/lake-packages"
-export LEAN_PATH="$LIB/mathlib4/build/lib:$LIB_MATHLIB/aesop/build/lib:$LIB_MATHLIB/Qq/build/lib:$LIB_MATHLIB/std/build/lib"
-
-LEAN_PATH=$LEAN_PATH build/bin/pantograph $@
-```
-The `$LEAN_PATH` executable of any project can be extracted by
-``` sh
-lake env printenv LEAN_PATH
-```
+This builds the executable in `.lake/build/bin/pantograph-repl`.
 
 ## Executable Usage
 
@@ -90,10 +77,10 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
   only the values of definitions are printed.
 * `options.set { key: value, ... }`: Set one or more options (not Lean options; those
   have to be set via command line arguments.), for options, see `Pantograph/Protocol.lean`
-  
+
   One particular option for interest for machine learning researchers is the automatic mode.
   `options.set { "automaticMode": true }`. This makes Pantograph act like
-  LeanDojo, with no resumption necessary to manage your goals.
+  gym, with no resumption necessary to manage your goals.
 * `options.print`: Display the current set of options
 * `goal.start {["name": <name>], ["expr": <expr>], ["levels": [<levels>]], ["copyFrom": <symbol>]}`:
   Start a new proof from a given expression or symbol
@@ -113,6 +100,10 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
   - `{ "goals": <names> }`: Resume the given goals
 * `goal.remove {"stateIds": [<id>]}"`: Drop the goal states specified in the list
 * `goal.print {"stateId": <id>}"`: Print a goal state
+* `frontend.process { ["fileName": <fileName>",] ["file": <str>], invocations:
+  <bool>, sorrys: <bool> }`: Executes the Lean frontend on a file, collecting
+  either the tactic invocations (`"invocations": true`) or the sorrys into goal
+  states (`"sorrys": true`)
 
 ### Errors
 
@@ -129,6 +120,25 @@ Common error forms:
   input of another is broken. For example, attempting to query a symbol not
   existing in the library or indexing into a non-existent proof state.
 
+### Project Environment
+
+To use Pantograph in a project environment, setup the `LEAN_PATH` environment
+variable so it contains the library path of lean libraries. The libraries must
+be built in advance. For example, if `mathlib4` is stored at `../lib/mathlib4`,
+the environment might be setup like this:
+
+``` sh
+LIB="../lib"
+LIB_MATHLIB="$LIB/mathlib4/lake-packages"
+export LEAN_PATH="$LIB/mathlib4/build/lib:$LIB_MATHLIB/aesop/build/lib:$LIB_MATHLIB/Qq/build/lib:$LIB_MATHLIB/std/build/lib"
+
+LEAN_PATH=$LEAN_PATH build/bin/pantograph $@
+```
+The `$LEAN_PATH` executable of any project can be extracted by
+``` sh
+lake env printenv LEAN_PATH
+```
+
 ### Troubleshooting
 
 If lean encounters stack overflow problems when printing catalog, execute this before running lean:
@@ -142,13 +152,22 @@ ulimit -s unlimited
 with `Pantograph` which mirrors the REPL commands above. It is recommended to
 call Pantograph via this FFI since it provides a tremendous speed up.
 
+The executable can be used as-is, but linking against the shared library
+requires the presence of `lean-all`.
+
+Inject any project path via the `pantograph_init_search` function.
+
 ## Developing
 
 A Lean development shell is provided in the Nix flake.
 
 ### Testing
 
-The tests are based on `LSpec`. To run tests,
+The tests are based on `LSpec`. To run tests, use either
+``` sh
+nix flake check
+```
+or
 ``` sh
 lake test
 ```
@@ -156,15 +175,4 @@ You can run an individual test by specifying a prefix
 
 ``` sh
 lake test -- "Tactic/No Confuse"
-```
-
-## Nix based workflow
-
-The included Nix flake provides build targets for `sharedLib` and `executable`.
-The executable can be used as-is, but linking against the shared library
-requires the presence of `lean-all`.
-
-To run tests:
-``` sh
-nix flake check
 ```
