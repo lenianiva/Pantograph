@@ -88,6 +88,7 @@ structure TacticInvocation where
 namespace TacticInvocation
 
 /-- Return the range of the tactic, as a pair of file positions. -/
+@[export pantograph_frontend_tactic_invocation_range]
 protected def range (t : TacticInvocation) : Position × Position := t.ctx.fileMap.stxRange t.info.stx
 
 /-- Pretty print a tactic. -/

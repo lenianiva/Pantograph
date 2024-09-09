@@ -8,6 +8,7 @@ namespace Lean.FileMap
 /-- Extract the range of a `Syntax` expressed as lines and columns. -/
 -- Extracted from the private declaration `Lean.Elab.formatStxRange`,
 -- in `Lean.Elab.InfoTree.Main`.
+@[export pantograph_frontend_stx_range]
 protected def stxRange (fileMap : FileMap) (stx : Syntax) : Position × Position :=
   let pos    := stx.getPos?.getD 0
   let endPos := stx.getTailPos?.getD pos
