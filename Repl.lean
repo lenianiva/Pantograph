@@ -54,6 +54,14 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   where
   errorCommand := errorI "command"
   errorIndex := errorI "index"
+  newGoalState (goalState: GoalState) : MainM Nat := do
+    let state ← get
+    let stateId := state.nextId
+    set { state with
+      goalStates := state.goalStates.insert stateId goalState,
+      nextId := state.nextId + 1
+    }
+    return stateId
   -- Command Functions
   reset (_: Protocol.Reset): MainM (CR Protocol.StatResult) := do
     let state ← get
@@ -95,7 +103,6 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   options_print (_: Protocol.OptionsPrint): MainM (CR Protocol.Options) := do
     return .ok (← get).options
   goal_start (args: Protocol.GoalStart): MainM (CR Protocol.GoalStartResult) := do
-    let state ← get
     let env ← Lean.MonadEnv.getEnv
     let expr?: Except _ GoalState ← runTermElabInMainM (match args.expr, args.copyFrom with
       | .some expr, .none => goalStartExpr expr (args.levels.getD #[])
@@ -108,11 +115,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     match expr? with
     | .error error => return .error error
     | .ok goalState =>
-      let stateId := state.nextId
-      set { state with
-        goalStates := state.goalStates.insert stateId goalState,
-        nextId := state.nextId + 1
-      }
+      let stateId ← newGoalState goalState
       return .ok { stateId, root := goalState.root.name.toString }
   goal_tactic (args: Protocol.GoalTactic): MainM (CR Protocol.GoalTacticResult) := do
     let state ← get
@@ -151,11 +154,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           let .ok result := nextGoalState.resume (nextGoalState.goals ++ dormantGoals) | throwError "Resuming known goals"
           pure result
         | false, _ => pure nextGoalState
-      let nextStateId := state.nextId
-      set { state with
-        goalStates := state.goalStates.insert state.nextId nextGoalState,
-        nextId := state.nextId + 1,
-      }
+      let nextStateId ← newGoalState nextGoalState
       let goals ← nextGoalState.serializeGoals (parent := .some goalState) (options := state.options) |>.run'
       return .ok {
         nextStateId? := .some nextStateId,
@@ -202,6 +201,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     let result ← runMetaInMainM <| goalPrint goalState state.options
     return .ok result
   frontend_process (args: Protocol.FrontendProcess): MainM (CR Protocol.FrontendProcessResult) := do
+    let options := (← get).options
     try
       let (fileName, file) ← match args.fileName?, args.file? with
         | .some fileName, .none => do
@@ -222,14 +222,29 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
             Frontend.collectTacticsFromCompilationStep step
           else
             pure []
-        return (unitBoundary, tacticInvocations)
+        let sorrys := if args.sorrys then
+            Frontend.collectSorrys step
+          else
+            []
+        return (unitBoundary, tacticInvocations, sorrys)
       let li ← m.run context |>.run' state
-      let units := li.map λ (unit, _) => unit
+      let units := li.map λ (unit, _, _) => unit
       let invocations? := if args.invocations then
-          .some $ li.bind λ (_, invocations) => invocations
+          .some $ li.bind λ (_, invocations, _) => invocations
         else
           .none
-      return .ok { units, invocations? }
+      let goalStates? ← if args.sorrys then do
+          let stateIds ← li.filterMapM λ (_, _, sorrys) => do
+            if sorrys.isEmpty then
+              return .none
+            let goalState ← runMetaInMainM $ Frontend.sorrysToGoalState sorrys
+            let stateId ← newGoalState goalState
+            let goals ← goalSerialize goalState options
+            return .some (stateId, goals)
+          pure $ .some stateIds
+        else
+          pure .none
+      return .ok { units, invocations?, goalStates? }
     catch e =>
       return .error $ errorI "frontend" (← e.toMessageData.toString)
 

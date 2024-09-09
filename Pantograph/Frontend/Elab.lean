@@ -5,6 +5,7 @@ import Lean.Elab.InfoTree
 
 import Pantograph.Protocol
 import Pantograph.Frontend.Basic
+import Pantograph.Goal
 
 open Lean
 
@@ -132,7 +133,7 @@ partial def findAllInfo (t : Elab.InfoTree) (ctx : Option Elab.ContextInfo) (pre
 
 /-- Return all `TacticInfo` nodes in an `InfoTree` corresponding to tactics,
 each equipped with its relevant `ContextInfo`, and any children info trees. -/
-def collectTacticNodes (t : Elab.InfoTree) : List TacticInvocation :=
+private def collectTacticNodes (t : Elab.InfoTree) : List TacticInvocation :=
   let infos := findAllInfo t none fun i => match i with
     | .ofTacticInfo _ => true
     | _ => false
@@ -153,8 +154,32 @@ def collectTacticsFromCompilationStep (step : CompilationStep) : IO (List Protoc
     let goalBefore := (Format.joinSep (← invocation.goalState) "\n").pretty
     let goalAfter := (Format.joinSep (← invocation.goalStateAfter) "\n").pretty
     let tactic ← invocation.ctx.runMetaM {} do
-      let t ← Lean.PrettyPrinter.ppTactic ⟨invocation.info.stx⟩
+      let t ← PrettyPrinter.ppTactic ⟨invocation.info.stx⟩
       return t.pretty
     return { goalBefore, goalAfter, tactic }
+
+private def collectSorrysInTree (t : Elab.InfoTree) : List Elab.TermInfo :=
+  let infos := findAllInfo t none fun i => match i with
+    | .ofTermInfo { expectedType?, expr, stx, .. } =>
+        expr.isSorry ∧ expectedType?.isSome ∧ stx.isOfKind `Lean.Parser.Term.sorry
+    | _ => false
+  infos.filterMap fun p => match p with
+    | (.ofTermInfo i, _, _) => .some i
+    | _ => none
+
+@[export pantograph_frontend_collect_sorrys_m]
+def collectSorrys (step: CompilationStep) : List Elab.TermInfo :=
+  step.trees.bind collectSorrysInTree
+
+@[export pantograph_frontend_sorrys_to_goal_state]
+def sorrysToGoalState (sorrys : List Elab.TermInfo) : MetaM GoalState := do
+  assert! !sorrys.isEmpty
+  let goals ← sorrys.mapM λ termInfo => Meta.withLCtx termInfo.lctx #[] do
+    let type := termInfo.expectedType?.get!
+    let mvar ← Meta.mkFreshExprSyntheticOpaqueMVar type
+    return mvar.mvarId!
+  GoalState.createFromMVars goals (root := { name := .anonymous })
+
+
 
 end Pantograph.Frontend

@@ -192,6 +192,36 @@ def test_frontend_process : Test :=
     }: Protocol.FrontendProcessResult),
   ]
 
+example : 1 + 2 = 3 := rfl
+example (p: Prop): p → p := by simp
+
+def test_frontend_process_sorry : Test :=
+  let solved := "example : 1 + 2 = 3 := rfl\n"
+  let withSorry := "example (p: Prop): p → p := sorry"
+  [
+    let file := s!"{solved}{withSorry}"
+    let goal1: Protocol.Goal := {
+      name := "_uniq.1",
+      target := { pp? := .some "p → p" },
+      vars := #[{ name := "_uniq.168", userName := "p", type? := .some { pp? := .some "Prop" }}],
+    }
+    step "frontend.process"
+      [
+        ("file", .str file),
+        ("invocations", .bool false),
+        ("sorrys", .bool true),
+      ]
+     ({
+       units := [
+         (0, solved.utf8ByteSize),
+         (solved.utf8ByteSize, solved.utf8ByteSize + withSorry.utf8ByteSize),
+       ],
+       goalStates? := [
+         (0, #[goal1]),
+       ]
+    }: Protocol.FrontendProcessResult),
+  ]
+
 
 def runTest (env: Lean.Environment) (steps: Test): IO LSpec.TestSeq := do
   -- Setup the environment for execution
@@ -214,7 +244,8 @@ def suite (env : Lean.Environment): List (String × IO LSpec.TestSeq) :=
     ("Manual Mode", test_automatic_mode false),
     ("Automatic Mode", test_automatic_mode true),
     ("env.add env.inspect", test_env_add_inspect),
-    ("frontend.process", test_frontend_process),
+    ("frontend.process invocation", test_frontend_process),
+    ("frontend.process sorry", test_frontend_process_sorry),
   ]
   tests.map (fun (name, test) => (name, runTest env test))
 

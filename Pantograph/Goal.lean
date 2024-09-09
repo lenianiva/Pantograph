@@ -46,6 +46,15 @@ protected def GoalState.create (expr: Expr): Elab.TermElabM GoalState := do
     savedState,
     parentMVar? := .none,
   }
+@[export pantograph_goal_state_create_from_mvars_m]
+protected def GoalState.createFromMVars (goals: List MVarId) (root: MVarId): MetaM GoalState := do
+  let savedStateMonad: Elab.Tactic.TacticM Elab.Tactic.SavedState := MonadBacktrack.saveState
+  let savedState ← savedStateMonad { elaborator := .anonymous } |>.run' { goals } |>.run' {}
+  return {
+    root,
+    savedState,
+    parentMVar? := .none,
+  }
 @[export pantograph_goal_state_is_conv]
 protected def GoalState.isConv (state: GoalState): Bool :=
   state.convMVar?.isSome
@@ -143,6 +152,8 @@ protected def GoalState.continue (target: GoalState) (branch: GoalState): Except
 
 @[export pantograph_goal_state_root_expr]
 protected def GoalState.rootExpr? (goalState: GoalState): Option Expr := do
+  if goalState.root.name == .anonymous then
+    .none
   let expr ← goalState.mctx.eAssignment.find? goalState.root
   let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
   if expr.hasExprMVar then

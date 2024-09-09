@@ -302,6 +302,7 @@ structure FrontendProcessResult where
   -- String boundaries of compilation units
   units: List (Nat × Nat)
   invocations?: Option (List InvokedTactic) := .none
+  goalStates?: Option (List (Nat × Array Goal)) := .none
   deriving Lean.ToJson
 
 abbrev CR α := Except InteractionError α
