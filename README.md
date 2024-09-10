@@ -78,9 +78,10 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
 * `options.set { key: value, ... }`: Set one or more options (not Lean options; those
   have to be set via command line arguments.), for options, see `Pantograph/Protocol.lean`
 
-  One particular option for interest for machine learning researchers is the automatic mode.
-  `options.set { "automaticMode": true }`. This makes Pantograph act like
-  gym, with no resumption necessary to manage your goals.
+  One particular option for interest for machine learning researchers is the
+  automatic mode (flag: `"automaticMode"`).  By default it is turned on, with
+  all goals automatically resuming. This makes Pantograph act like a gym,
+  with no resumption necessary to manage your goals.
 * `options.print`: Display the current set of options
 * `goal.start {["name": <name>], ["expr": <expr>], ["levels": [<levels>]], ["copyFrom": <symbol>]}`:
   Start a new proof from a given expression or symbol
@@ -153,7 +154,8 @@ with `Pantograph` which mirrors the REPL commands above. It is recommended to
 call Pantograph via this FFI since it provides a tremendous speed up.
 
 The executable can be used as-is, but linking against the shared library
-requires the presence of `lean-all`.
+requires the presence of `lean-all`. Note that there isn't a 1-1 correspondence
+between executable (REPL) commands and library functions.
 
 Inject any project path via the `pantograph_init_search` function.
 

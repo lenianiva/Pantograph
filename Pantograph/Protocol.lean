@@ -28,7 +28,7 @@ structure Options where
   -- See `pp.implementationDetailHyps`
   printImplementationDetailHyps: Bool := false
   -- If this is set to `true`, goals will never go dormant, so you don't have to manage resumption
-  automaticMode: Bool := false
+  automaticMode: Bool := true
   deriving Lean.ToJson
 
 abbrev OptionsT := ReaderT Options
