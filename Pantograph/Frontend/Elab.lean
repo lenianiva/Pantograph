@@ -179,7 +179,11 @@ def sorrysToGoalState (sorrys : List Elab.TermInfo) : MetaM GoalState := do
     let type := termInfo.expectedType?.get!
     let mvar ← Meta.mkFreshExprSyntheticOpaqueMVar type
     return mvar.mvarId!
-  GoalState.createFromMVars goals (root := { name := .anonymous })
+  let root := match goals with
+    | [] => panic! "This function cannot be called on an empty list"
+    | [g] => g
+    | _ => { name := .anonymous }
+  GoalState.createFromMVars goals root
 
 
 
