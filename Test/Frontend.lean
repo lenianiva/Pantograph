@@ -26,8 +26,8 @@ theorem plus_n_Sm_proved_formal_sketch : ∀ n m : Nat, n + (m + 1) = (n + m) + 
    sorry
   "
   let goalStates ← (collectSorrysFromSource sketch).run' {}
-  let [goalState] := goalStates | panic! "Illegal number of states"
-  addTest $ LSpec.check "plus_n_Sm" ((← goalState.serializeGoals (options := {})).map (·.devolatilize) = #[
+  let [goalState] := goalStates | panic! "Incorrect number of states"
+  addTest $ LSpec.check "goals" ((← goalState.serializeGoals (options := {})).map (·.devolatilize) = #[
     {
       target := { pp? := "∀ (n m : Nat), n = m" },
       vars := #[
@@ -49,8 +49,8 @@ example : ∀ (n m: Nat), n + m = m + n := by
   sorry
   "
   let goalStates ← (collectSorrysFromSource sketch).run' {}
-  let [goalState] := goalStates | panic! s!"Illegal number of states: {goalStates.length}"
-  addTest $ LSpec.check "plus_n_Sm" ((← goalState.serializeGoals (options := {})).map (·.devolatilize) = #[
+  let [goalState] := goalStates | panic! s!"Incorrect number of states: {goalStates.length}"
+  addTest $ LSpec.check "goals" ((← goalState.serializeGoals (options := {})).map (·.devolatilize) = #[
     {
       target := { pp? := "n + m = m + n" },
       vars := #[{
@@ -77,8 +77,8 @@ example : ∀ (n m: Nat), n + m = m + n := by
     sorry
   "
   let goalStates ← (collectSorrysFromSource sketch).run' {}
-  let [goalState] := goalStates | panic! s!"Illegal number of states: {goalStates.length}"
-  addTest $ LSpec.check "plus_n_Sm" ((← goalState.serializeGoals (options := {})).map (·.devolatilize) = #[
+  let [goalState] := goalStates | panic! s!"Incorrect number of states: {goalStates.length}"
+  addTest $ LSpec.check "goals" ((← goalState.serializeGoals (options := {})).map (·.devolatilize) = #[
     {
       target := { pp? := "0 + m = m" },
       vars := #[{
@@ -87,6 +87,7 @@ example : ∀ (n m: Nat), n + m = m + n := by
       }]
     },
     {
+      userName? := .some "zero",
       target := { pp? := "0 + m = m + 0" },
       vars := #[{
         userName := "m",
@@ -110,6 +111,7 @@ example : ∀ (n m: Nat), n + m = m + n := by
       }]
     },
     {
+      userName? := .some "succ",
       target := { pp? := "n + 1 + m = m + (n + 1)" },
       vars := #[{
         userName := "m",
@@ -127,12 +129,47 @@ example : ∀ (n m: Nat), n + m = m + n := by
     }
   ])
 
+def test_sorry_in_coupled: TestT MetaM Unit := do
+  let sketch := "
+example : ∀ (y: Nat), ∃ (x: Nat), y + 1 = x := by
+  intro y
+  apply Exists.intro
+  case h => sorry
+  case w => sorry
+  "
+  let goalStates ← (collectSorrysFromSource sketch).run' {}
+  let [goalState] := goalStates | panic! s!"Incorrect number of states: {goalStates.length}"
+  addTest $ LSpec.check "goals" ((← goalState.serializeGoals (options := {})).map (·.devolatilize) = #[
+    {
+      target := { pp? := "y + 1 = ?w" },
+      vars := #[{
+           userName := "y",
+           type? := .some { pp? := "Nat" },
+        }
+      ],
+    },
+    {
+      userName? := .some "w",
+      target := { pp? := "Nat" },
+      vars := #[{
+           userName := "y✝",
+           isInaccessible := true,
+           type? := .some { pp? := "Nat" },
+        }, {
+           userName := "y",
+           type? := .some { pp? := "Nat" },
+        }
+      ],
+    }
+  ])
+
 
 def suite (env : Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
     ("multiple_sorrys_in_proof", test_multiple_sorrys_in_proof),
     ("sorry_in_middle", test_sorry_in_middle),
     ("sorry_in_induction", test_sorry_in_induction),
+    ("sorry_in_coupled", test_sorry_in_coupled),
   ]
   tests.map (fun (name, test) => (name, runMetaMSeq env $ runTest test))
 
