@@ -201,9 +201,9 @@ def test_frontend_process_sorry : Test :=
   [
     let file := s!"{solved}{withSorry}"
     let goal1: Protocol.Goal := {
-      name := "_uniq.1",
+      name := "_uniq.6",
       target := { pp? := .some "p → p" },
-      vars := #[{ name := "_uniq.168", userName := "p", type? := .some { pp? := .some "Prop" }}],
+      vars := #[{ name := "_uniq.4", userName := "p", type? := .some { pp? := .some "Prop" }}],
     }
     step "frontend.process"
       [

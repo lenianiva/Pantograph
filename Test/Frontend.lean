@@ -19,7 +19,7 @@ def collectSorrysFromSource (source: String) : MetaM (List GoalState) := do
     return .some goalState
   return goalStates
 
-def test_multiple_sorries_in_proof : TestT MetaM Unit := do
+def test_multiple_sorrys_in_proof : TestT MetaM Unit := do
   let sketch := "
 theorem plus_n_Sm_proved_formal_sketch : ∀ n m : Nat, n + (m + 1) = (n + m) + 1 := by
    have h_nat_add_succ: ∀ n m : Nat, n = m := sorry
@@ -27,28 +27,112 @@ theorem plus_n_Sm_proved_formal_sketch : ∀ n m : Nat, n + (m + 1) = (n + m) + 
   "
   let goalStates ← (collectSorrysFromSource sketch).run' {}
   let [goalState] := goalStates | panic! "Illegal number of states"
-  addTest $ LSpec.check "plus_n_Sm" ((← goalState.serializeGoals (options := {})) = #[
+  addTest $ LSpec.check "plus_n_Sm" ((← goalState.serializeGoals (options := {})).map (·.devolatilize) = #[
     {
-      name := "_uniq.1",
       target := { pp? := "∀ (n m : Nat), n = m" },
       vars := #[
       ]
     },
     {
-      name := "_uniq.4",
       target := { pp? := "∀ (n m : Nat), n + (m + 1) = n + m + 1" },
       vars := #[{
-        name := "_uniq.3",
         userName := "h_nat_add_succ",
         type? := .some { pp? := "∀ (n m : Nat), n = m" },
       }],
     }
   ])
 
+def test_sorry_in_middle: TestT MetaM Unit := do
+  let sketch := "
+example : ∀ (n m: Nat), n + m = m + n := by
+  intros n m
+  sorry
+  "
+  let goalStates ← (collectSorrysFromSource sketch).run' {}
+  let [goalState] := goalStates | panic! s!"Illegal number of states: {goalStates.length}"
+  addTest $ LSpec.check "plus_n_Sm" ((← goalState.serializeGoals (options := {})).map (·.devolatilize) = #[
+    {
+      target := { pp? := "n + m = m + n" },
+      vars := #[{
+           userName := "n",
+           type? := .some { pp? := "Nat" },
+        }, {
+           userName := "m",
+           type? := .some { pp? := "Nat" },
+        }
+      ],
+    }
+  ])
+
+def test_sorry_in_induction : TestT MetaM Unit := do
+  let sketch := "
+example : ∀ (n m: Nat), n + m = m + n := by
+  intros n m
+  induction n with
+  | zero =>
+    have h1 : 0 + m = m := sorry
+    sorry
+  | succ n ih =>
+    have h2 : n + m = m := sorry
+    sorry
+  "
+  let goalStates ← (collectSorrysFromSource sketch).run' {}
+  let [goalState] := goalStates | panic! s!"Illegal number of states: {goalStates.length}"
+  addTest $ LSpec.check "plus_n_Sm" ((← goalState.serializeGoals (options := {})).map (·.devolatilize) = #[
+    {
+      target := { pp? := "0 + m = m" },
+      vars := #[{
+        userName := "m",
+        type? := .some { pp? := "Nat" },
+      }]
+    },
+    {
+      target := { pp? := "0 + m = m + 0" },
+      vars := #[{
+        userName := "m",
+        type? := .some { pp? := "Nat" },
+      }, {
+        userName := "h1",
+        type? := .some { pp? := "0 + m = m" },
+      }]
+    },
+    {
+      target := { pp? := "n + m = m" },
+      vars := #[{
+        userName := "m",
+        type? := .some { pp? := "Nat" },
+      }, {
+        userName := "n",
+        type? := .some { pp? := "Nat" },
+      }, {
+        userName := "ih",
+        type? := .some { pp? := "n + m = m + n" },
+      }]
+    },
+    {
+      target := { pp? := "n + 1 + m = m + (n + 1)" },
+      vars := #[{
+        userName := "m",
+        type? := .some { pp? := "Nat" },
+      }, {
+        userName := "n",
+        type? := .some { pp? := "Nat" },
+      }, {
+        userName := "ih",
+        type? := .some { pp? := "n + m = m + n" },
+      },  {
+        userName := "h2",
+        type? := .some { pp? := "n + m = m" },
+      }]
+    }
+  ])
+
 
 def suite (env : Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
-    ("multiple_sorrys_in_proof", test_multiple_sorries_in_proof),
+    ("multiple_sorrys_in_proof", test_multiple_sorrys_in_proof),
+    ("sorry_in_middle", test_sorry_in_middle),
+    ("sorry_in_induction", test_sorry_in_induction),
   ]
   tests.map (fun (name, test) => (name, runMetaMSeq env $ runTest test))
 
