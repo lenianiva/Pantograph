@@ -1,5 +1,6 @@
 import LSpec
 import Test.Environment
+import Test.Frontend
 import Test.Integration
 import Test.Library
 import Test.Metavar
@@ -44,6 +45,7 @@ def main (args: List String) := do
 
   let suites: List (String × List (String × IO LSpec.TestSeq)) := [
     ("Environment", Environment.suite),
+    ("Frontend", Frontend.suite env_default),
     ("Integration", Integration.suite env_default),
     ("Library", Library.suite env_default),
     ("Metavar", Metavar.suite env_default),

@@ -159,26 +159,100 @@ def collectTacticsFromCompilationStep (step : CompilationStep) : IO (List Protoc
       return t.pretty
     return { goalBefore, goalAfter, tactic }
 
-private def collectSorrysInTree (t : Elab.InfoTree) : List Elab.TermInfo :=
+private def collectSorrysInTree (t : Elab.InfoTree) : List Elab.Info :=
   let infos := findAllInfo t none fun i => match i with
     | .ofTermInfo { expectedType?, expr, stx, .. } =>
-        expr.isSorry ∧ expectedType?.isSome ∧ stx.isOfKind `Lean.Parser.Term.sorry
+      expr.isSorry ∧ expectedType?.isSome ∧ stx.isOfKind `Lean.Parser.Term.sorry
+    | .ofTacticInfo { stx, .. } =>
+      -- The `sorry` term is distinct from the `sorry` tactic
+      stx.isOfKind `Lean.Parser.Tactic.tacticSorry
     | _ => false
-  infos.filterMap fun p => match p with
-    | (.ofTermInfo i, _, _) => .some i
-    | _ => none
+  infos.map fun (i, _, _) => i
 
+-- NOTE: Plural deliberately not spelled "sorries"
 @[export pantograph_frontend_collect_sorrys_m]
-def collectSorrys (step: CompilationStep) : List Elab.TermInfo :=
+def collectSorrys (step: CompilationStep) : List Elab.Info :=
   step.trees.bind collectSorrysInTree
 
-@[export pantograph_frontend_sorrys_to_goal_state]
-def sorrysToGoalState (sorrys : List Elab.TermInfo) : MetaM GoalState := do
-  assert! !sorrys.isEmpty
-  let goals ← sorrys.mapM λ termInfo => Meta.withLCtx termInfo.lctx #[] do
+
+namespace MetaTranslate
+
+structure Context where
+  sourceMCtx : MetavarContext := {}
+  sourceLCtx : LocalContext := {}
+
+/-
+Monadic state for translating a frozen meta state. The underlying `MetaM`
+operates in the "target" context and state.
+-/
+abbrev MetaTranslateM := ReaderT Context MetaM
+
+def getSourceLCtx : MetaTranslateM LocalContext := do pure (← read).sourceLCtx
+def getSourceMCtx : MetaTranslateM MetavarContext := do pure (← read).sourceMCtx
+
+private def translateExpr (expr: Expr) : MetaTranslateM Expr := do
+  let (expr, _) := instantiateMVarsCore (mctx := ← getSourceMCtx) expr
+  return expr
+
+def translateLocalDecl (frozenLocalDecl: LocalDecl) : MetaTranslateM LocalDecl := do
+  let fvarId ← mkFreshFVarId
+  match frozenLocalDecl with
+  | .cdecl index _ userName type bi kind =>
+    return .cdecl index fvarId userName type bi kind
+  | .ldecl index _ userName type value nonDep kind =>
+    return .ldecl index fvarId userName type value nonDep  kind
+
+def translateMVarId (mvarId: MVarId) : MetaTranslateM MVarId := do
+  let shadowDecl := (← getSourceMCtx).findDecl? mvarId |>.get!
+  let target ← translateExpr shadowDecl.type
+  let mvar ← withTheReader Context (λ ctx => { ctx with sourceLCtx := shadowDecl.lctx }) do
+    let lctx ← MonadLCtx.getLCtx
+    let lctx ← (← getSourceLCtx).foldlM (λ lctx frozenLocalDecl => do
+        let localDecl ← translateLocalDecl frozenLocalDecl
+        let lctx := lctx.addDecl localDecl
+        pure lctx
+      ) lctx
+    withTheReader Meta.Context (fun ctx => { ctx with lctx }) do
+      Meta.mkFreshExprSyntheticOpaqueMVar target
+  return mvar.mvarId!
+
+def translateTermInfo (termInfo: Elab.TermInfo) : MetaM MVarId := do
+  let trM : MetaTranslateM MVarId := do
     let type := termInfo.expectedType?.get!
-    let mvar ← Meta.mkFreshExprSyntheticOpaqueMVar type
+    let lctx ← getSourceLCtx
+    let mvar ← withTheReader Meta.Context (fun ctx => { ctx with lctx }) do
+      Meta.mkFreshExprSyntheticOpaqueMVar type
     return mvar.mvarId!
+  trM.run { sourceLCtx := termInfo.lctx }
+
+
+def translateTacticInfoBefore (tacticInfo: Elab.TacticInfo) : MetaM (List MVarId) := do
+  let trM : MetaTranslateM (List MVarId) := do
+    tacticInfo.goalsBefore.mapM translateMVarId
+  trM.run { sourceMCtx := tacticInfo.mctxBefore }
+
+
+end MetaTranslate
+
+export MetaTranslate (MetaTranslateM)
+
+/--
+Since we cannot directly merge `MetavarContext`s, we have to get creative. This
+function duplicates frozen mvars in term and tactic info nodes, and add them to
+the current `MetavarContext`.
+-/
+@[export pantograph_frontend_sorrys_to_goal_state]
+def sorrysToGoalState (sorrys : List Elab.Info) : MetaM GoalState := do
+  assert! !sorrys.isEmpty
+  let goals ← sorrys.mapM λ info => Meta.withLCtx info.lctx #[] do
+    match info with
+    | .ofTermInfo termInfo  => do
+      let mvarId ← MetaTranslate.translateTermInfo termInfo
+      return [mvarId]
+    | .ofTacticInfo tacticInfo => do
+      MetaTranslate.translateTacticInfoBefore tacticInfo
+    | _ => panic! "Invalid info"
+  let goals := goals.bind id
   let root := match goals with
     | [] => panic! "This function cannot be called on an empty list"
     | [g] => g
