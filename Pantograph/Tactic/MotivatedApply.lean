@@ -66,6 +66,7 @@ def motivatedApply (mvarId: MVarId) (recursor: Expr) : MetaM (Array Meta.Inducti
   mvarId.checkNotAssigned `Pantograph.Tactic.motivatedApply
   let recursorType ← Meta.inferType recursor
   let resultant ← mvarId.getType
+  let tag ← mvarId.getTag
 
   let info ← match getRecursorInformation recursorType with
     | .some info => pure info
@@ -81,9 +82,9 @@ def motivatedApply (mvarId: MVarId) (recursor: Expr) : MetaM (Array Meta.Inducti
       let bvarIndex := info.nArgs - i - 1
       let argGoal ← if bvarIndex = info.iMotive then
           let surrogateMotiveType ← info.surrogateMotiveType prev resultant
-          Meta.mkFreshExprMVar surrogateMotiveType .syntheticOpaque (userName := `motive)
+          Meta.mkFreshExprSyntheticOpaqueMVar surrogateMotiveType (tag := tag ++ `motive)
         else
-          Meta.mkFreshExprMVar argType .syntheticOpaque (userName := .anonymous)
+          Meta.mkFreshExprSyntheticOpaqueMVar argType (tag := .anonymous)
       let prev :=  prev ++ [argGoal]
       go (i + 1) prev
     termination_by info.nArgs - i
@@ -91,7 +92,7 @@ def motivatedApply (mvarId: MVarId) (recursor: Expr) : MetaM (Array Meta.Inducti
 
   -- Create the conduit type which proves the result of the motive is equal to the goal
   let conduitType ← info.conduitType newMVars resultant
-  let goalConduit ← Meta.mkFreshExprMVar conduitType .natural (userName := `conduit)
+  let goalConduit ← Meta.mkFreshExprSyntheticOpaqueMVar conduitType (tag := `conduit)
   mvarId.assign $ ← Meta.mkEqMP goalConduit (mkAppN recursor newMVars)
   newMVars := newMVars ++ [goalConduit]
 
