@@ -1,9 +1,12 @@
-
+/- Adapted from https://github.com/semorrison/lean-training-data -/
 import Lean.Elab.Import
 import Lean.Elab.Command
 import Lean.Elab.InfoTree
 
-import Pantograph.Compile.Frontend
+import Pantograph.Frontend.Basic
+import Pantograph.Frontend.MetaTranslate
+import Pantograph.Goal
+import Pantograph.Protocol
 
 open Lean
 
@@ -75,7 +78,7 @@ partial def filter (p : Info → Bool) (m : MVarId → Bool := fun _ => false) :
 end Lean.Elab.InfoTree
 
 
-namespace Pantograph.Compile
+namespace Pantograph.Frontend
 
 -- Info tree filtering functions
 
@@ -86,6 +89,7 @@ structure TacticInvocation where
 namespace TacticInvocation
 
 /-- Return the range of the tactic, as a pair of file positions. -/
+@[export pantograph_frontend_tactic_invocation_range]
 protected def range (t : TacticInvocation) : Position × Position := t.ctx.fileMap.stxRange t.info.stx
 
 /-- Pretty print a tactic. -/
@@ -121,17 +125,17 @@ protected def ppExpr (t : TacticInvocation) (e : Expr) : IO Format :=
 end TacticInvocation
 
 /-- Analogue of `Lean.Elab.InfoTree.findInfo?`, but that returns a list of all results. -/
-partial def findAllInfo (t : Elab.InfoTree) (ctx : Option Elab.ContextInfo) (pred : Elab.Info → Bool) :
+partial def findAllInfo (t : Elab.InfoTree) (context?: Option Elab.ContextInfo) (pred : Elab.Info → Bool) :
     List (Elab.Info × Option Elab.ContextInfo × PersistentArray Elab.InfoTree) :=
   match t with
-  | .context inner t => findAllInfo t (inner.mergeIntoOuter? ctx) pred
+  | .context inner t => findAllInfo t (inner.mergeIntoOuter? context?) pred
   | .node i children  =>
-      (if pred i then [(i, ctx, children)] else []) ++ children.toList.bind (fun t => findAllInfo t ctx pred)
+      (if pred i then [(i, context?, children)] else []) ++ children.toList.bind (fun t => findAllInfo t context? pred)
   | _ => []
 
 /-- Return all `TacticInfo` nodes in an `InfoTree` corresponding to tactics,
 each equipped with its relevant `ContextInfo`, and any children info trees. -/
-def collectTacticNodes (t : Elab.InfoTree) : List TacticInvocation :=
+private def collectTacticNodes (t : Elab.InfoTree) : List TacticInvocation :=
   let infos := findAllInfo t none fun i => match i with
     | .ofTacticInfo _ => true
     | _ => false
@@ -142,5 +146,64 @@ def collectTacticNodes (t : Elab.InfoTree) : List TacticInvocation :=
 def collectTactics (t : Elab.InfoTree) : List TacticInvocation :=
   collectTacticNodes t |>.filter fun i => i.info.isSubstantive
 
+@[export pantograph_frontend_collect_tactics_from_compilation_step_m]
+def collectTacticsFromCompilationStep (step : CompilationStep) : IO (List Protocol.InvokedTactic) := do
+  let tacticInfoTrees := step.trees.bind λ tree => tree.filter λ
+    | info@(.ofTacticInfo _) => info.isOriginal
+    | _ => false
+  let tactics := tacticInfoTrees.bind collectTactics
+  tactics.mapM λ invocation => do
+    let goalBefore := (Format.joinSep (← invocation.goalState) "\n").pretty
+    let goalAfter := (Format.joinSep (← invocation.goalStateAfter) "\n").pretty
+    let tactic ← invocation.ctx.runMetaM {} do
+      let t ← PrettyPrinter.ppTactic ⟨invocation.info.stx⟩
+      return t.pretty
+    return { goalBefore, goalAfter, tactic }
 
-end Pantograph.Compile
+structure InfoWithContext where
+  info: Elab.Info
+  context?: Option Elab.ContextInfo := .none
+
+private def collectSorrysInTree (t : Elab.InfoTree) : List InfoWithContext :=
+  let infos := findAllInfo t none fun i => match i with
+    | .ofTermInfo { expectedType?, expr, stx, .. } =>
+      expr.isSorry ∧ expectedType?.isSome ∧ stx.isOfKind `Lean.Parser.Term.sorry
+    | .ofTacticInfo { stx, .. } =>
+      -- The `sorry` term is distinct from the `sorry` tactic
+      stx.isOfKind `Lean.Parser.Tactic.tacticSorry
+    | _ => false
+  infos.map fun (info, context?, _) => { info, context? }
+
+-- NOTE: Plural deliberately not spelled "sorries"
+@[export pantograph_frontend_collect_sorrys_m]
+def collectSorrys (step: CompilationStep) : List InfoWithContext :=
+  step.trees.bind collectSorrysInTree
+
+
+
+/--
+Since we cannot directly merge `MetavarContext`s, we have to get creative. This
+function duplicates frozen mvars in term and tactic info nodes, and add them to
+the current `MetavarContext`.
+-/
+@[export pantograph_frontend_sorrys_to_goal_state]
+def sorrysToGoalState (sorrys : List InfoWithContext) : MetaM GoalState := do
+  assert! !sorrys.isEmpty
+  let goalsM := sorrys.mapM λ i => do
+    match i.info with
+    | .ofTermInfo termInfo  => do
+      let mvarId ← MetaTranslate.translateMVarFromTermInfo termInfo i.context?
+      return [mvarId]
+    | .ofTacticInfo tacticInfo => do
+      MetaTranslate.translateMVarFromTacticInfoBefore tacticInfo i.context?
+    | _ => panic! "Invalid info"
+  let goals := (← goalsM.run {} |>.run' {}).bind id
+  let root := match goals with
+    | [] => panic! "This function cannot be called on an empty list"
+    | [g] => g
+    | _ => { name := .anonymous }
+  GoalState.createFromMVars goals root
+
+
+
+end Pantograph.Frontend

@@ -1,16 +1,15 @@
 import Lean.Data.Json
 import Lean.Environment
 
-import Pantograph.Version
-import Pantograph.Library
 import Pantograph
 import Repl
 
 -- Main IO functions
-open Pantograph
+open Pantograph.Repl
+open Pantograph.Protocol
 
 /-- Parse a command either in `{ "cmd": ..., "payload": ... }` form or `cmd { ... }` form. -/
-def parseCommand (s: String): Except String Protocol.Command := do
+def parseCommand (s: String): Except String Command := do
   let s := s.trim
   match s.get? 0 with
   | .some '{' => -- Parse in Json mode
@@ -30,7 +29,7 @@ partial def loop : MainM Unit := do
   if command.trim.length = 0 then return ()
   match parseCommand command with
   | .error error =>
-    let error  := Lean.toJson ({ error := "command", desc := error }: Protocol.InteractionError)
+    let error  := Lean.toJson ({ error := "command", desc := error }: InteractionError)
     -- Using `Lean.Json.compress` here to prevent newline
     IO.println error.compress
   | .ok command =>
@@ -46,15 +45,15 @@ unsafe def main (args: List String): IO Unit := do
   -- NOTE: A more sophisticated scheme of command line argument handling is needed.
   -- Separate imports and options
   if args == ["--version"] then do
-    println! s!"{version}"
+    println! s!"{Pantograph.version}"
     return
 
-  initSearch ""
+  Pantograph.initSearch ""
 
   let coreContext ← args.filterMap (λ s => if s.startsWith "--" then .some <| s.drop 2 else .none)
-    |>.toArray |> createCoreContext
+    |>.toArray |> Pantograph.createCoreContext
   let imports:= args.filter (λ s => ¬ (s.startsWith "--"))
-  let coreState ← createCoreState imports.toArray
+  let coreState ← Pantograph.createCoreState imports.toArray
   let context: Context := {
     imports
   }

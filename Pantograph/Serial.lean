@@ -26,6 +26,13 @@ def parseTerm (env: Environment) (s: String): Except String Syntax :=
     (input := s)
     (fileName := "<stdin>")
 
+def parseTermM [Monad m] [MonadEnv m] (s: String): m (Except String Syntax) := do
+  return Parser.runParserCategory
+    (env := ← MonadEnv.getEnv)
+    (catName := `term)
+    (input := s)
+    (fileName := "<stdin>")
+
 /-- Parse a syntax object. May generate additional metavariables! -/
 def elabType (syn: Syntax): Elab.TermElabM (Except String Expr) := do
   try

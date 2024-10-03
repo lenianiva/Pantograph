@@ -284,21 +284,25 @@ structure GoalDiag where
 
 
 /-- Executes the Lean compiler on a single file -/
-structure CompileUnit where
-  module: String
-  -- If set to true, query the string boundaries of compilation units
-  compilationUnits: Bool := false
+structure FrontendProcess where
+  -- One of these two must be supplied: Either supply the file name or the content.
+  fileName?: Option String := .none
+  file?: Option String := .none
   -- If set to true, collect tactic invocations
   invocations: Bool := false
+  -- If set to true, collect `sorry`s
+  sorrys: Bool := false
   deriving Lean.FromJson
 structure InvokedTactic where
   goalBefore: String
   goalAfter: String
   tactic: String
   deriving Lean.ToJson
-structure CompileUnitResult where
-  units?: Option $ List (Nat × Nat)
-  invocations?: Option $ List InvokedTactic
+structure FrontendProcessResult where
+  -- String boundaries of compilation units
+  units: List (Nat × Nat)
+  invocations?: Option (List InvokedTactic) := .none
+  goalStates?: Option (List (Nat × Array Goal)) := .none
   deriving Lean.ToJson
 
 abbrev CR α := Except InteractionError α

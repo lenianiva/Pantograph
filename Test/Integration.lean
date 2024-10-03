@@ -6,13 +6,13 @@ import Repl
 import Test.Common
 
 namespace Pantograph.Test.Integration
-open Pantograph
+open Pantograph.Repl
 
 def step { α } [Lean.ToJson α] (cmd: String) (payload: List (String × Lean.Json))
     (expected: α) (name? : Option String := .none): MainM LSpec.TestSeq := do
   let payload := Lean.Json.mkObj payload
   let name := name?.getD s!"{cmd} {payload.compress}"
-  let result ← execute { cmd, payload }
+  let result ← Repl.execute { cmd, payload }
   return LSpec.test name (toString result = toString (Lean.toJson expected))
 
 abbrev Test := List (MainM LSpec.TestSeq)
@@ -161,6 +161,68 @@ def test_env_add_inspect : Test :=
       Protocol.EnvInspectResult)
   ]
 
+example : ∀ (p: Prop), p → p := by
+  intro p h
+  exact h
+
+def test_frontend_process : Test :=
+  [
+    let file := "example : ∀ (p: Prop), p → p := by\n  intro p h\n  exact h"
+    let goal1 := "p : Prop\nh : p\n⊢ p"
+    step "frontend.process"
+      [
+        ("file", .str file),
+        ("invocations", .bool true),
+        ("sorrys", .bool false),
+      ]
+     ({
+       units := [(0, file.utf8ByteSize)],
+       invocations? := .some [
+         {
+           goalBefore := "⊢ ∀ (p : Prop), p → p",
+           goalAfter := goal1,
+           tactic := "intro p h",
+         },
+         {
+           goalBefore := goal1 ,
+           goalAfter := "",
+           tactic := "exact h",
+         },
+       ]
+    }: Protocol.FrontendProcessResult),
+  ]
+
+example : 1 + 2 = 3 := rfl
+example (p: Prop): p → p := by simp
+
+def test_frontend_process_sorry : Test :=
+  let solved := "example : 1 + 2 = 3 := rfl\n"
+  let withSorry := "example (p: Prop): p → p := sorry"
+  [
+    let file := s!"{solved}{withSorry}"
+    let goal1: Protocol.Goal := {
+      name := "_uniq.6",
+      target := { pp? := .some "p → p" },
+      vars := #[{ name := "_uniq.4", userName := "p", type? := .some { pp? := .some "Prop" }}],
+    }
+    step "frontend.process"
+      [
+        ("file", .str file),
+        ("invocations", .bool false),
+        ("sorrys", .bool true),
+      ]
+     ({
+       units := [
+         (0, solved.utf8ByteSize),
+         (solved.utf8ByteSize, solved.utf8ByteSize + withSorry.utf8ByteSize),
+       ],
+       goalStates? := [
+         (0, #[goal1]),
+       ]
+    }: Protocol.FrontendProcessResult),
+  ]
+
+
 def runTest (env: Lean.Environment) (steps: Test): IO LSpec.TestSeq := do
   -- Setup the environment for execution
   let context: Context := {
@@ -182,6 +244,8 @@ def suite (env : Lean.Environment): List (String × IO LSpec.TestSeq) :=
     ("Manual Mode", test_automatic_mode false),
     ("Automatic Mode", test_automatic_mode true),
     ("env.add env.inspect", test_env_add_inspect),
+    ("frontend.process invocation", test_frontend_process),
+    ("frontend.process sorry", test_frontend_process_sorry),
   ]
   tests.map (fun (name, test) => (name, runTest env test))
 

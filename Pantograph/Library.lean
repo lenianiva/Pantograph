@@ -159,7 +159,7 @@ def goalAssign (state: GoalState) (goal: MVarId) (expr: String): CoreM TacticRes
   runTermElabM <| state.tryAssign goal expr
 @[export pantograph_goal_have_m]
 protected def GoalState.tryHave (state: GoalState) (goal: MVarId) (binderName: String) (type: String): CoreM TacticResult := do
-  let type ← match (← Compile.parseTermM type) with
+  let type ← match (← parseTermM type) with
     | .ok syn => pure syn
     | .error error => return .parseError error
   runTermElabM do
@@ -167,12 +167,28 @@ protected def GoalState.tryHave (state: GoalState) (goal: MVarId) (binderName: S
     state.tryTacticM goal $ Tactic.evalHave binderName.toName type
 @[export pantograph_goal_try_define_m]
 protected def GoalState.tryDefine (state: GoalState) (goal: MVarId) (binderName: String) (expr: String): CoreM TacticResult := do
-  let expr ← match (← Compile.parseTermM expr) with
+  let expr ← match (← parseTermM expr) with
     | .ok syn => pure syn
     | .error error => return .parseError error
   runTermElabM do
     state.restoreElabM
     state.tryTacticM goal (Tactic.evalDefine binderName.toName expr)
+@[export pantograph_goal_try_motivated_apply_m]
+protected def GoalState.tryMotivatedApply (state: GoalState) (goal: MVarId) (recursor: String):
+      Elab.TermElabM TacticResult := do
+  state.restoreElabM
+  let recursor ← match (← parseTermM recursor) with
+    | .ok syn => pure syn
+    | .error error => return .parseError error
+  state.tryTacticM goal (tacticM := Tactic.evalMotivatedApply recursor)
+@[export pantograph_goal_try_no_confuse_m]
+protected def GoalState.tryNoConfuse (state: GoalState) (goal: MVarId) (eq: String):
+      Elab.TermElabM TacticResult := do
+  state.restoreElabM
+  let eq ← match (← parseTermM eq) with
+    | .ok syn => pure syn
+    | .error error => return .parseError error
+  state.tryTacticM goal (tacticM := Tactic.evalNoConfuse eq)
 @[export pantograph_goal_let_m]
 def goalLet (state: GoalState) (goal: MVarId) (binderName: String) (type: String): CoreM TacticResult :=
   runTermElabM <| state.tryLet goal binderName type

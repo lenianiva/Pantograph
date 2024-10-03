@@ -60,53 +60,54 @@ partial def instantiateDelayedMVars (eOrig: Expr) : MetaM Expr := do
       -- nested mvars.
       mvarId.setKind .syntheticOpaque
 
-      let lctx ← MonadLCtx.getLCtx
-      if mvarDecl.lctx.any (λ decl => !lctx.contains decl.fvarId) then
-        let violations := mvarDecl.lctx.decls.foldl (λ acc decl? => match decl? with
-          | .some decl => if lctx.contains decl.fvarId then acc else acc ++ [decl.fvarId.name]
-          | .none => acc) []
-        panic! s!"Local context variable violation: {violations}"
+      mvarId.withContext do
+        let lctx ← MonadLCtx.getLCtx
+        if mvarDecl.lctx.any (λ decl => !lctx.contains decl.fvarId) then
+          let violations := mvarDecl.lctx.decls.foldl (λ acc decl? => match decl? with
+            | .some decl => if lctx.contains decl.fvarId then acc else acc ++ [decl.fvarId.name]
+            | .none => acc) []
+          panic! s!"In the context of {mvarId.name}, there are local context variable violations: {violations}"
 
-      if let .some assign ← getExprMVarAssignment? mvarId then
-        --IO.println s!"{padding}├A ?{mvarId.name}"
-        assert! !(← mvarId.isDelayedAssigned)
-        return .visit (mkAppN assign args)
-      else if let some { fvars, mvarIdPending } ← getDelayedMVarAssignment? mvarId then
-        --let substTableStr := String.intercalate ", " $ Array.zipWith fvars args (λ fvar assign => s!"{fvar.fvarId!.name} := {assign}") |>.toList
-        --IO.println s!"{padding}├MD ?{mvarId.name} := ?{mvarIdPending.name} [{substTableStr}]"
+        if let .some assign ← getExprMVarAssignment? mvarId then
+          --IO.println s!"{padding}├A ?{mvarId.name}"
+          assert! !(← mvarId.isDelayedAssigned)
+          return .visit (mkAppN assign args)
+        else if let some { fvars, mvarIdPending } ← getDelayedMVarAssignment? mvarId then
+          --let substTableStr := String.intercalate ", " $ Array.zipWith fvars args (λ fvar assign => s!"{fvar.fvarId!.name} := {assign}") |>.toList
+          --IO.println s!"{padding}├MD ?{mvarId.name} := ?{mvarIdPending.name} [{substTableStr}]"
 
-        if args.size < fvars.size then
-          throwError "Not enough arguments to instantiate a delay assigned mvar. This is due to bad implementations of a tactic: {args.size} < {fvars.size}. Expr: {toString e}; Origin: {toString eOrig}"
-        --if !args.isEmpty then
-          --IO.println s!"{padding}├── Arguments Begin"
-        let args ← args.mapM self
-        --if !args.isEmpty then
-          --IO.println s!"{padding}├── Arguments End"
-        if !(← mvarIdPending.isAssignedOrDelayedAssigned) then
-          --IO.println s!"{padding}├T1"
-          let result := mkAppN f args
+          if args.size < fvars.size then
+            throwError "Not enough arguments to instantiate a delay assigned mvar. This is due to bad implementations of a tactic: {args.size} < {fvars.size}. Expr: {toString e}; Origin: {toString eOrig}"
+          --if !args.isEmpty then
+            --IO.println s!"{padding}├── Arguments Begin"
+          let args ← args.mapM self
+          --if !args.isEmpty then
+            --IO.println s!"{padding}├── Arguments End"
+          if !(← mvarIdPending.isAssignedOrDelayedAssigned) then
+            --IO.println s!"{padding}├T1"
+            let result := mkAppN f args
+            return .done result
+
+          let pending ← mvarIdPending.withContext do
+            let inner ← instantiateDelayedMVars (.mvar mvarIdPending) --(level := level + 1)
+            --IO.println s!"{padding}├Pre: {inner}"
+            pure <| (← inner.abstractM fvars).instantiateRev args
+
+          -- Tail arguments
+          let result := mkAppRange pending fvars.size args.size args
+          --IO.println s!"{padding}├MD {result}"
           return .done result
+        else
+          assert! !(← mvarId.isAssigned)
+          assert! !(← mvarId.isDelayedAssigned)
+          --if !args.isEmpty then
+          --  IO.println s!"{padding}├── Arguments Begin"
+          let args ← args.mapM self
+          --if !args.isEmpty then
+          --  IO.println s!"{padding}├── Arguments End"
 
-        let pending ← mvarIdPending.withContext do
-          let inner ← instantiateDelayedMVars (.mvar mvarIdPending) --(level := level + 1)
-          --IO.println s!"{padding}├Pre: {inner}"
-          pure <| (← inner.abstractM fvars).instantiateRev args
-
-        -- Tail arguments
-        let result := mkAppRange pending fvars.size args.size args
-        --IO.println s!"{padding}├MD {result}"
-        return .done result
-      else
-        assert! !(← mvarId.isAssigned)
-        assert! !(← mvarId.isDelayedAssigned)
-        --if !args.isEmpty then
-        --  IO.println s!"{padding}├── Arguments Begin"
-        let args ← args.mapM self
-        --if !args.isEmpty then
-        --  IO.println s!"{padding}├── Arguments End"
-
-        --IO.println s!"{padding}├M ?{mvarId.name}"
-        return .done (mkAppN f args))
+          --IO.println s!"{padding}├M ?{mvarId.name}"
+          return .done (mkAppN f args))
   --IO.println s!"{padding}└Result {result}"
   return result
   where

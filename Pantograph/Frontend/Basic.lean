@@ -8,6 +8,7 @@ namespace Lean.FileMap
 /-- Extract the range of a `Syntax` expressed as lines and columns. -/
 -- Extracted from the private declaration `Lean.Elab.formatStxRange`,
 -- in `Lean.Elab.InfoTree.Main`.
+@[export pantograph_frontend_stx_range]
 protected def stxRange (fileMap : FileMap) (stx : Syntax) : Position × Position :=
   let pos    := stx.getPos?.getD 0
   let endPos := stx.getTailPos?.getD pos
@@ -27,7 +28,9 @@ protected def drop [Inhabited α] (t : PersistentArray α) (n : Nat) : List α :
 end Lean.PersistentArray
 
 
-namespace Pantograph.Compile
+namespace Pantograph.Frontend
+
+abbrev FrontendM := Elab.Frontend.FrontendM
 
 structure CompilationStep where
   fileName : String
@@ -44,7 +47,8 @@ structure CompilationStep where
 Process one command, returning a `CompilationStep` and
 `done : Bool`, indicating whether this was the last command.
 -/
-def processOneCommand: Elab.Frontend.FrontendM (CompilationStep × Bool) := do
+@[export pantograph_frontend_process_one_command_m]
+def processOneCommand: FrontendM (CompilationStep × Bool) := do
   let s := (← get).commandState
   let before := s.env
   let done ← Elab.Frontend.processCommand
@@ -57,30 +61,52 @@ def processOneCommand: Elab.Frontend.FrontendM (CompilationStep × Bool) := do
   let ⟨_, fileName, fileMap⟩  := (← read).inputCtx
   return ({ fileName, fileMap, src, stx, before, after, msgs, trees }, done)
 
-partial def processFile : Elab.Frontend.FrontendM (List CompilationStep) := do
+partial def mapCompilationSteps { α } (f: CompilationStep → IO α) : FrontendM (List α) := do
   let (cmd, done) ← processOneCommand
   if done then
-    return [cmd]
+    if cmd.src.isEmpty then
+      return []
+    else
+      return [← f cmd]
   else
-    return cmd :: (← processFile)
+    return (← f cmd) :: (← mapCompilationSteps f)
 
 
+@[export pantograph_frontend_find_source_path_m]
 def findSourcePath (module : Name) : IO System.FilePath := do
   return System.FilePath.mk ((← findOLean module).toString.replace ".lake/build/lib/" "") |>.withExtension "lean"
 
-def processSource (module : Name) (opts : Options := {}) : IO (List CompilationStep) := unsafe do
-  let file ← IO.FS.readFile (← findSourcePath module)
-  let inputCtx := Parser.mkInputContext file module.toString
+/--
+Use with
+```lean
+let m: FrontendM α := ...
+let (context, state) ← createContextStateFromFile ...
+m.run context |>.run' state
+```
+-/
+@[export pantograph_frontend_create_context_state_from_file_m]
+def createContextStateFromFile
+    (file : String) -- Content of the file
+    (fileName : String := "<anonymous>")
+    (env? : Option Lean.Environment := .none) -- If set to true, assume there's no header.
+    (opts : Options := {})
+    : IO (Elab.Frontend.Context × Elab.Frontend.State) := unsafe do
+  --let file ← IO.FS.readFile (← findSourcePath module)
+  let inputCtx := Parser.mkInputContext file fileName
 
-  let (header, parserState, messages) ← Parser.parseHeader inputCtx
-  let (env, messages) ← Elab.processHeader header opts messages inputCtx
+  let (env, parserState, messages) ← match env? with
+    | .some env => pure (env, {}, .empty)
+    | .none =>
+      let (header, parserState, messages) ← Parser.parseHeader inputCtx
+      let (env, messages) ← Elab.processHeader header opts messages inputCtx
+      pure (env, parserState, messages)
   let commandState := Elab.Command.mkState env messages opts
-  processFile.run { inputCtx }
-    |>.run' {
+  let context: Elab.Frontend.Context := { inputCtx }
+  let state: Elab.Frontend.State := {
     commandState := { commandState with infoState.enabled := true },
     parserState,
     cmdPos := parserState.pos
   }
+  return (context, state)
 
-
-end Pantograph.Compile
+end Pantograph.Frontend

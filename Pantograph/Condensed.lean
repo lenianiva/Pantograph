@@ -2,7 +2,6 @@
 import Lean
 import Pantograph.Goal
 import Pantograph.Expr
-import Pantograph.Protocol
 
 open Lean
 

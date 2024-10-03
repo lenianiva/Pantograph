@@ -3,9 +3,7 @@ Functions for handling metavariables
 
 All the functions starting with `try` resume their inner monadic state.
 -/
-import Pantograph.Protocol
 import Pantograph.Tactic
-import Pantograph.Compile.Parse
 import Lean
 
 
@@ -45,6 +43,15 @@ protected def GoalState.create (expr: Expr): Elab.TermElabM GoalState := do
   let savedState ← savedStateMonad { elaborator := .anonymous } |>.run' { goals := [root.mvarId!]}
   return {
     root := root.mvarId!,
+    savedState,
+    parentMVar? := .none,
+  }
+@[export pantograph_goal_state_create_from_mvars_m]
+protected def GoalState.createFromMVars (goals: List MVarId) (root: MVarId): MetaM GoalState := do
+  let savedStateMonad: Elab.Tactic.TacticM Elab.Tactic.SavedState := MonadBacktrack.saveState
+  let savedState ← savedStateMonad { elaborator := .anonymous } |>.run' { goals } |>.run' {}
+  return {
+    root,
     savedState,
     parentMVar? := .none,
   }
@@ -145,6 +152,8 @@ protected def GoalState.continue (target: GoalState) (branch: GoalState): Except
 
 @[export pantograph_goal_state_root_expr]
 protected def GoalState.rootExpr? (goalState: GoalState): Option Expr := do
+  if goalState.root.name == .anonymous then
+    .none
   let expr ← goalState.mctx.eAssignment.find? goalState.root
   let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
   if expr.hasExprMVar then
@@ -384,21 +393,5 @@ protected def GoalState.tryCalc (state: GoalState) (goal: MVarId) (pred: String)
     }
   catch exception =>
     return .failure #[← exception.toMessageData.toString]
-
-
-protected def GoalState.tryMotivatedApply (state: GoalState) (goal: MVarId) (recursor: String):
-      Elab.TermElabM TacticResult := do
-  state.restoreElabM
-  let recursor ← match (← Compile.parseTermM recursor) with
-    | .ok syn => pure syn
-    | .error error => return .parseError error
-  state.tryTacticM goal (tacticM := Tactic.evalMotivatedApply recursor)
-protected def GoalState.tryNoConfuse (state: GoalState) (goal: MVarId) (eq: String):
-      Elab.TermElabM TacticResult := do
-  state.restoreElabM
-  let eq ← match (← Compile.parseTermM eq) with
-    | .ok syn => pure syn
-    | .error error => return .parseError error
-  state.tryTacticM goal (tacticM := Tactic.evalNoConfuse eq)
 
 end Pantograph
