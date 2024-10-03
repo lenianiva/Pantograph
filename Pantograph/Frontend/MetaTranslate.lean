@@ -83,21 +83,25 @@ partial def translateLocalDecl (srcLocalDecl: LocalDecl) : MetaTranslateM LocalD
 
 partial def translateLCtx : MetaTranslateM LocalContext := do
   resetFVarMap
+  let lctx ← MonadLCtx.getLCtx
+  assert! lctx.isEmpty
   (← getSourceLCtx).foldlM (λ lctx srcLocalDecl => do
-    let localDecl ← Meta.withLCtx lctx #[] do translateLocalDecl srcLocalDecl
+    let localDecl ← Meta.withLCtx lctx #[] do
+      translateLocalDecl srcLocalDecl
     pure $ lctx.addDecl localDecl
-  ) (← MonadLCtx.getLCtx)
+  ) lctx
 
 partial def translateMVarId (srcMVarId: MVarId) : MetaTranslateM MVarId := do
   if let .some mvarId' := (← get).mvarMap.find? srcMVarId then
     return mvarId'
-  let srcDecl := (← getSourceMCtx).findDecl? srcMVarId |>.get!
-  let mvar ← withTheReader Context (λ ctx => { ctx with sourceLCtx := srcDecl.lctx }) do
-    let lctx' ← translateLCtx
-    let localInstances' ← srcDecl.localInstances.mapM translateLocalInstance
-    Meta.withLCtx lctx' localInstances' do
-      let target' ← translateExpr srcDecl.type
-      Meta.mkFreshExprMVar target' srcDecl.kind srcDecl.userName
+  let mvar ← Meta.withLCtx .empty #[] do
+    let srcDecl := (← getSourceMCtx).findDecl? srcMVarId |>.get!
+    withTheReader Context (λ ctx => { ctx with sourceLCtx := srcDecl.lctx }) do
+      let lctx' ← translateLCtx
+      let localInstances' ← srcDecl.localInstances.mapM translateLocalInstance
+      Meta.withLCtx lctx' localInstances' do
+        let target' ← translateExpr srcDecl.type
+        Meta.mkFreshExprMVar target' srcDecl.kind srcDecl.userName
   addTranslatedMVar srcMVarId mvar.mvarId!
   return mvar.mvarId!
 end

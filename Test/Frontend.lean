@@ -152,10 +152,6 @@ example : ∀ (y: Nat), ∃ (x: Nat), y + 1 = x := by
       userName? := .some "w",
       target := { pp? := "Nat" },
       vars := #[{
-           userName := "y✝",
-           isInaccessible := true,
-           type? := .some { pp? := "Nat" },
-        }, {
            userName := "y",
            type? := .some { pp? := "Nat" },
         }
