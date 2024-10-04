@@ -10,16 +10,12 @@ namespace Pantograph.Environment
 @[export pantograph_is_name_internal]
 def isNameInternal (n: Name): Bool :=
   -- Returns true if the name is an implementation detail which should not be shown to the user.
-  isLeanSymbol n ∨ (Lean.privateToUserName? n |>.map isLeanSymbol |>.getD false) ∨ n.isAuxLemma ∨ n.hasMacroScopes
-  where
-  isLeanSymbol (name: Name): Bool := match name.getRoot with
-    | .str _ name => name == "Lean"
-    | _ => true
+  n.isAuxLemma ∨ n.hasMacroScopes
 
 /-- Catalog all the non-internal and safe names -/
 @[export pantograph_environment_catalog]
-def env_catalog (env: Environment): Array Name := env.constants.fold (init := #[]) (λ acc name info =>
-  match isNameInternal name || info.isUnsafe with
+def env_catalog (env: Environment): Array Name := env.constants.fold (init := #[]) (λ acc name _ =>
+  match isNameInternal name with
   | false => acc.push name
   | true => acc)
 

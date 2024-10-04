@@ -33,7 +33,7 @@ def test_catalog: IO LSpec.TestSeq := do
 def test_symbol_visibility: IO LSpec.TestSeq := do
   let entries: List (Name × Bool) := [
     ("Nat.add_comm".toName, false),
-    ("Lean.Name".toName, true),
+    ("foo.bla.Init.Data.List.Basic.2.1.Init.Lean.Expr._hyg.4".toName, true),
     ("Init.Data.Nat.Basic._auxLemma.4".toName, true),
   ]
   let suite := entries.foldl (λ suites (symbol, target) =>
