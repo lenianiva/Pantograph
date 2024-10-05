@@ -24,14 +24,6 @@ def module_of_name (env: Environment) (name: Name): Option Name := do
   let moduleId ←  env.getModuleIdxFor? name
   return env.allImportedModuleNames.get! moduleId.toNat
 
-@[export pantograph_constant_info_is_unsafe_or_partial]
-def constantInfoIsUnsafeOrPartial (info: ConstantInfo): Bool := info.isUnsafe || info.isPartial
-
-@[export pantograph_constant_info_type]
-def constantInfoType (info: ConstantInfo): CoreM Expr := unfoldAuxLemmas info.type
-@[export pantograph_constant_info_value]
-def constantInfoValue (info: ConstantInfo): CoreM (Option Expr) := info.value?.mapM unfoldAuxLemmas
-
 def toCompactSymbolName (n: Name) (info: ConstantInfo): String :=
   let pref := match info with
   | .axiomInfo  _ => "a"
