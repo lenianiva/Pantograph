@@ -298,11 +298,18 @@ structure InvokedTactic where
   goalAfter: String
   tactic: String
   deriving Lean.ToJson
-structure FrontendProcessResult where
+
+structure CompilationUnit where
   -- String boundaries of compilation units
-  units: List (Nat × Nat)
+  boundary: (Nat × Nat)
+  -- Tactic invocations
   invocations?: Option (List InvokedTactic) := .none
-  goalStates?: Option (List (Nat × Array Goal)) := .none
+  goalStateId?: Option Nat := .none
+  goals: Array Goal := #[]
+  messages: Array String := #[]
+  deriving Lean.ToJson
+structure FrontendProcessResult where
+  units: List CompilationUnit
   deriving Lean.ToJson
 
 abbrev CR α := Except InteractionError α
