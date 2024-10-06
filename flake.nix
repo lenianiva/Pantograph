@@ -29,7 +29,7 @@
       "x86_64-darwin"
     ];
     perSystem = { system, pkgs, ... }: let
-      leanPkgs = lean.packages.${system};
+      leanPkgs = lean.packages.${system}.deprecated;
       lspecLib = leanPkgs.buildLeanPackage {
         name = "LSpec";
         roots = [ "Main" "LSpec" ];
