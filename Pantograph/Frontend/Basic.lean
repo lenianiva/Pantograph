@@ -42,6 +42,14 @@ structure CompilationStep where
   msgs : List Message
   trees : List Elab.InfoTree
 
+namespace CompilationStep
+
+@[export pantograph_frontend_compilation_step_message_strings_m]
+def messageStrings (step: CompilationStep) : IO (Array String) := do
+  List.toArray <$> step.msgs.mapM (·.toString)
+
+end CompilationStep
+
 
 /--
 Process one command, returning a `CompilationStep` and

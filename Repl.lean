@@ -216,35 +216,36 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           let env ← Lean.MonadEnv.getEnv
           pure <| .some env
       let (context, state) ← do Frontend.createContextStateFromFile file fileName env? {}
-      let m := Frontend.mapCompilationSteps λ step => do
-        let unitBoundary := (step.src.startPos.byteIdx, step.src.stopPos.byteIdx)
-        let tacticInvocations ← if args.invocations then
-            Frontend.collectTacticsFromCompilationStep step
+      let frontendM := Frontend.mapCompilationSteps λ step => do
+        let boundary := (step.src.startPos.byteIdx, step.src.stopPos.byteIdx)
+        let invocations?: Option (List Protocol.InvokedTactic) ← if args.invocations then
+            let invocations ← Frontend.collectTacticsFromCompilationStep step
+            pure $ .some invocations
           else
-            pure []
+            pure .none
         let sorrys := if args.sorrys then
             Frontend.collectSorrys step
           else
             []
-        return (unitBoundary, tacticInvocations, sorrys)
-      let li ← m.run context |>.run' state
-      let units := li.map λ (unit, _, _) => unit
-      let invocations? := if args.invocations then
-          .some $ li.bind λ (_, invocations, _) => invocations
-        else
-          .none
-      let goalStates? ← if args.sorrys then do
-          let stateIds ← li.filterMapM λ (_, _, sorrys) => do
-            if sorrys.isEmpty then
-              return .none
+        let messages ← step.messageStrings
+        return (boundary, invocations?, sorrys, messages)
+      let li ← frontendM.run context |>.run' state
+      let units ← li.mapM λ (boundary, invocations?, sorrys, messages) => do
+        let (goalStateId?, goals) ← if sorrys.isEmpty then do
+            pure (.none, #[])
+          else do
             let goalState ← runMetaInMainM $ Frontend.sorrysToGoalState sorrys
             let stateId ← newGoalState goalState
             let goals ← goalSerialize goalState options
-            return .some (stateId, goals)
-          pure $ .some stateIds
-        else
-          pure .none
-      return .ok { units, invocations?, goalStates? }
+            pure (.some stateId, goals)
+        return {
+          boundary,
+          invocations?,
+          goalStateId?,
+          goals,
+          messages,
+        }
+      return .ok { units }
     catch e =>
       return .error $ errorI "frontend" (← e.toMessageData.toString)
 

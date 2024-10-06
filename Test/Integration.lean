@@ -176,19 +176,21 @@ def test_frontend_process : Test :=
         ("sorrys", .bool false),
       ]
      ({
-       units := [(0, file.utf8ByteSize)],
-       invocations? := .some [
-         {
-           goalBefore := "⊢ ∀ (p : Prop), p → p",
-           goalAfter := goal1,
-           tactic := "intro p h",
-         },
-         {
-           goalBefore := goal1 ,
-           goalAfter := "",
-           tactic := "exact h",
-         },
-       ]
+       units := [{
+         boundary := (0, file.utf8ByteSize),
+         invocations? := .some [
+           {
+             goalBefore := "⊢ ∀ (p : Prop), p → p",
+             goalAfter := goal1,
+             tactic := "intro p h",
+           },
+           {
+             goalBefore := goal1 ,
+             goalAfter := "",
+             tactic := "exact h",
+           },
+         ]
+       }],
     }: Protocol.FrontendProcessResult),
   ]
 
@@ -212,13 +214,14 @@ def test_frontend_process_sorry : Test :=
         ("sorrys", .bool true),
       ]
      ({
-       units := [
-         (0, solved.utf8ByteSize),
-         (solved.utf8ByteSize, solved.utf8ByteSize + withSorry.utf8ByteSize),
-       ],
-       goalStates? := [
-         (0, #[goal1]),
-       ]
+       units := [{
+         boundary := (0, solved.utf8ByteSize),
+       }, {
+         boundary := (solved.utf8ByteSize, solved.utf8ByteSize + withSorry.utf8ByteSize),
+         goalStateId? := .some 0,
+         goals := #[goal1],
+         messages := #["<anonymous>:2:0: warning: declaration uses 'sorry'\n"],
+       }],
     }: Protocol.FrontendProcessResult),
   ]
 
