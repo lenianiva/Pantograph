@@ -6,10 +6,10 @@
     flake-parts.url = "github:hercules-ci/flake-parts";
     lean = {
       # Do not follow input's nixpkgs since it could cause build failures
-      url = "github:leanprover/lean4?ref=v4.10.0-rc1";
+      url = "github:leanprover/lean4?ref=v4.12.0";
     };
     lspec = {
-      url = "github:lurk-lab/LSpec?ref=8a51034d049c6a229d88dd62f490778a377eec06";
+      url = "github:lenianiva/LSpec?ref=c492cecd0bc473e2f9c8b94d545d02cc0056034f";
       flake = false;
     };
   };

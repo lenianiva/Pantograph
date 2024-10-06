@@ -1,4 +1,5 @@
 import Lean.Meta
+import Std.Data.HashMap
 
 open Lean
 
@@ -10,12 +11,12 @@ structure Context where
   sourceMCtx : MetavarContext := {}
   sourceLCtx : LocalContext := {}
 
-abbrev FVarMap := HashMap FVarId FVarId
+abbrev FVarMap := Std.HashMap FVarId FVarId
 
 structure State where
   -- Stores mapping from old to new mvar/fvars
-  mvarMap: HashMap MVarId MVarId := {}
-  fvarMap: HashMap FVarId FVarId := {}
+  mvarMap: Std.HashMap MVarId MVarId := {}
+  fvarMap: Std.HashMap FVarId FVarId := {}
 
 /-
 Monadic state for translating a frozen meta state. The underlying `MetaM`
@@ -46,13 +47,13 @@ private partial def translateExpr (srcExpr: Expr) : MetaTranslateM Expr := do
     let state ← get
     match e with
     | .fvar fvarId =>
-      let .some fvarId' := state.fvarMap.find? fvarId | panic! s!"FVar id not registered: {fvarId.name}"
+      let .some fvarId' := state.fvarMap[fvarId]? | panic! s!"FVar id not registered: {fvarId.name}"
       assert! (← getLCtx).contains fvarId'
       return .done $ .fvar fvarId'
     | .mvar mvarId => do
       assert! !(sourceMCtx.dAssignment.contains mvarId)
       assert! !(sourceMCtx.eAssignment.contains mvarId)
-      match state.mvarMap.find? mvarId with
+      match state.mvarMap[mvarId]? with
       | .some mvarId' => do
         return .done $ .mvar mvarId'
       | .none => do
@@ -92,7 +93,7 @@ partial def translateLCtx : MetaTranslateM LocalContext := do
   ) lctx
 
 partial def translateMVarId (srcMVarId: MVarId) : MetaTranslateM MVarId := do
-  if let .some mvarId' := (← get).mvarMap.find? srcMVarId then
+  if let .some mvarId' := (← get).mvarMap[srcMVarId]? then
     return mvarId'
   let mvar ← Meta.withLCtx .empty #[] do
     let srcDecl := (← getSourceMCtx).findDecl? srcMVarId |>.get!
