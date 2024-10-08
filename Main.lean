@@ -33,11 +33,16 @@ partial def loop : MainM Unit := do
     -- Using `Lean.Json.compress` here to prevent newline
     IO.println error.compress
   | .ok command =>
-    let ret ← execute command
-    let str := match state.options.printJsonPretty with
-      | true => ret.pretty
-      | false => ret.compress
-    IO.println str
+    try
+      let ret ← execute command
+      let str := match state.options.printJsonPretty with
+        | true => ret.pretty
+        | false => ret.compress
+      IO.println str
+    catch e =>
+      let message ← e.toMessageData.toString
+      let error  := Lean.toJson ({ error := "io", desc := message }: InteractionError)
+      IO.println error.compress
   loop
 
 
