@@ -41,7 +41,7 @@ partial def loop : MainM Unit := do
       IO.println str
     catch e =>
       let message ← e.toMessageData.toString
-      let error  := Lean.toJson ({ error := "io", desc := message }: InteractionError)
+      let error  := Lean.toJson ({ error := "main", desc := message }: InteractionError)
       IO.println error.compress
   loop
 
@@ -50,7 +50,7 @@ unsafe def main (args: List String): IO Unit := do
   -- NOTE: A more sophisticated scheme of command line argument handling is needed.
   -- Separate imports and options
   if args == ["--version"] then do
-    println! s!"{Pantograph.version}"
+    IO.println s!"{Pantograph.version}"
     return
 
   Pantograph.initSearch ""
@@ -67,5 +67,6 @@ unsafe def main (args: List String): IO Unit := do
     IO.println "ready."
     discard <| coreM.toIO coreContext coreState
   catch ex =>
-    IO.println "Uncaught IO exception"
-    IO.println ex.toString
+    let message := ex.toString
+    let error  := Lean.toJson ({ error := "io", desc := message }: InteractionError)
+    IO.println error.compress
