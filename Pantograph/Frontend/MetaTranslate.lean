@@ -106,8 +106,9 @@ partial def translateMVarId (srcMVarId: MVarId) : MetaTranslateM MVarId := do
         let mvar' ← Meta.mkFreshExprMVar target' srcDecl.kind srcDecl.userName
         let mvarId' := mvar'.mvarId!
         if let .some { fvars, mvarIdPending }:= (← getSourceMCtx).getDelayedMVarAssignmentExp srcMVarId then
-          let fvars' ← fvars.mapM translateExpr
+          -- Map the fvars in the pending context.
           let mvarIdPending' ← translateMVarId mvarIdPending
+          let fvars' ← mvarIdPending'.withContext $ fvars.mapM translateExpr
           assignDelayedMVar mvarId' fvars' mvarIdPending'
         pure mvarId'
   addTranslatedMVar srcMVarId mvarId'
