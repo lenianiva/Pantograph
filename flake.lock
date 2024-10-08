@@ -58,16 +58,16 @@
     "lspec": {
       "flake": false,
       "locked": {
-        "lastModified": 1728255812,
+        "lastModified": 1728279187,
         "narHash": "sha256-ZMqbvCqR/gHXRuIkuo7b0Yp9N1vOQR7xnrcy/SeIBoQ=",
-        "owner": "lenianiva",
+        "owner": "argumentcomputer",
         "repo": "LSpec",
-        "rev": "c492cecd0bc473e2f9c8b94d545d02cc0056034f",
+        "rev": "504a8cecf8da601b9466ac727aebb6b511aae4ab",
         "type": "github"
       },
       "original": {
-        "owner": "lenianiva",
-        "ref": "c492cecd0bc473e2f9c8b94d545d02cc0056034f",
+        "owner": "argumentcomputer",
+        "ref": "504a8cecf8da601b9466ac727aebb6b511aae4ab",
         "repo": "LSpec",
         "type": "github"
       }

@@ -9,7 +9,7 @@
       url = "github:leanprover/lean4?ref=v4.12.0";
     };
     lspec = {
-      url = "github:lenianiva/LSpec?ref=c492cecd0bc473e2f9c8b94d545d02cc0056034f";
+      url = "github:argumentcomputer/LSpec?ref=504a8cecf8da601b9466ac727aebb6b511aae4ab";
       flake = false;
     };
   };
