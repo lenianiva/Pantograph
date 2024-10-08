@@ -1,4 +1,5 @@
 import Lean
+import Std.Data.HashMap
 
 open Lean
 
@@ -144,10 +145,10 @@ def toDelayedMVarInvocation (e: Expr): MetaM (Option DelayedMVarInvocation) := d
   assert! args.size ≥ decl.fvars.size
   assert! !(← mvarIdPending.isAssigned)
   assert! !(← mvarIdPending.isDelayedAssigned)
-  let fvarArgMap: HashMap FVarId Expr := HashMap.ofList $ (decl.fvars.map (·.fvarId!) |>.zip args).toList
+  let fvarArgMap: Std.HashMap FVarId Expr := Std.HashMap.ofList $ (decl.fvars.map (·.fvarId!) |>.zip args).toList
   let subst ← mvarDecl.lctx.foldlM (init := []) λ acc localDecl => do
     let fvarId := localDecl.fvarId
-    let a := fvarArgMap.find? fvarId
+    let a := fvarArgMap[fvarId]?
     return acc ++ [(fvarId, a)]
 
   assert! decl.fvars.all (λ fvar => mvarDecl.lctx.findFVar? fvar |>.isSome)

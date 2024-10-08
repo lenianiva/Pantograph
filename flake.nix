@@ -6,10 +6,10 @@
     flake-parts.url = "github:hercules-ci/flake-parts";
     lean = {
       # Do not follow input's nixpkgs since it could cause build failures
-      url = "github:leanprover/lean4?ref=v4.10.0-rc1";
+      url = "github:leanprover/lean4?ref=v4.12.0";
     };
     lspec = {
-      url = "github:lurk-lab/LSpec?ref=8a51034d049c6a229d88dd62f490778a377eec06";
+      url = "github:argumentcomputer/LSpec?ref=504a8cecf8da601b9466ac727aebb6b511aae4ab";
       flake = false;
     };
   };
@@ -29,7 +29,7 @@
       "x86_64-darwin"
     ];
     perSystem = { system, pkgs, ... }: let
-      leanPkgs = lean.packages.${system};
+      leanPkgs = lean.packages.${system}.deprecated;
       lspecLib = leanPkgs.buildLeanPackage {
         name = "LSpec";
         roots = [ "Main" "LSpec" ];

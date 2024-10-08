@@ -1,4 +1,4 @@
-import Lean.Data.HashMap
+import Std.Data.HashMap
 import Pantograph
 
 namespace Pantograph.Repl
@@ -10,7 +10,7 @@ structure Context where
 structure State where
   options: Protocol.Options := {}
   nextId: Nat := 0
-  goalStates: Lean.HashMap Nat GoalState := Lean.HashMap.empty
+  goalStates: Std.HashMap Nat GoalState := Std.HashMap.empty
 
 /-- Main state monad for executing commands -/
 abbrev MainM := ReaderT Context (StateT State Lean.CoreM)
@@ -66,7 +66,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   reset (_: Protocol.Reset): MainM (CR Protocol.StatResult) := do
     let state ← get
     let nGoals := state.goalStates.size
-    set { state with nextId := 0, goalStates := Lean.HashMap.empty }
+    set { state with nextId := 0, goalStates := .empty }
     return .ok { nGoals }
   stat (_: Protocol.Stat): MainM (CR Protocol.StatResult) := do
     let state ← get
@@ -119,7 +119,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
       return .ok { stateId, root := goalState.root.name.toString }
   goal_tactic (args: Protocol.GoalTactic): MainM (CR Protocol.GoalTacticResult) := do
     let state ← get
-    let .some goalState := state.goalStates.find? args.stateId |
+    let .some goalState := state.goalStates[args.stateId]? |
       return .error $ errorIndex s!"Invalid state index {args.stateId}"
     let .some goal := goalState.goals.get? args.goalId |
       return .error $ errorIndex s!"Invalid goal index {args.goalId}"
@@ -146,12 +146,15 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     | .ok (.success nextGoalState) => do
       let nextGoalState ← match state.options.automaticMode, args.conv? with
         | true, .none => do
-          let .ok result := nextGoalState.resume (nextGoalState.goals ++ goalState.goals) | throwError "Resuming known goals"
+          let .ok result := nextGoalState.resume (nextGoalState.goals ++ goalState.goals) |
+            throwError "Resuming known goals"
           pure result
         | true, .some true => pure nextGoalState
         | true, .some false => do
-          let .some (_, _, dormantGoals) := goalState.convMVar? | throwError "If conv exit succeeded this should not fail"
-          let .ok result := nextGoalState.resume (nextGoalState.goals ++ dormantGoals) | throwError "Resuming known goals"
+          let .some (_, _, dormantGoals) := goalState.convMVar? |
+            throwError "If conv exit succeeded this should not fail"
+          let .ok result := nextGoalState.resume (nextGoalState.goals ++ dormantGoals) |
+            throwError "Resuming known goals"
           pure result
         | false, _ => pure nextGoalState
       let nextStateId ← newGoalState nextGoalState
@@ -168,10 +171,11 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
       return .ok { tacticErrors? := .some messages }
   goal_continue (args: Protocol.GoalContinue): MainM (CR Protocol.GoalContinueResult) := do
     let state ← get
-    let .some target := state.goalStates.find? args.target | return .error $ errorIndex s!"Invalid state index {args.target}"
+    let .some target := state.goalStates[args.target]? |
+      return .error $ errorIndex s!"Invalid state index {args.target}"
     let nextState? ← match args.branch?, args.goals? with
       | .some branchId, .none => do
-        match state.goalStates.find? branchId with
+        match state.goalStates[branchId]? with
         | .none => return .error $ errorIndex s!"Invalid state index {branchId}"
         | .some branch => pure $ target.continue branch
       | .none, .some goals =>
@@ -197,7 +201,8 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     return .ok {}
   goal_print (args: Protocol.GoalPrint): MainM (CR Protocol.GoalPrintResult) := do
     let state ← get
-    let .some goalState := state.goalStates.find? args.stateId | return .error $ errorIndex s!"Invalid state index {args.stateId}"
+    let .some goalState := state.goalStates[args.stateId]? |
+      return .error $ errorIndex s!"Invalid state index {args.stateId}"
     let result ← runMetaInMainM <| goalPrint goalState state.options
     return .ok result
   frontend_process (args: Protocol.FrontendProcess): MainM (CR Protocol.FrontendProcessResult) := do
