@@ -41,6 +41,7 @@ def resetFVarMap : MetaTranslateM Unit := do
 mutual
 private partial def translateExpr (srcExpr: Expr) : MetaTranslateM Expr := do
   let sourceMCtx ← getSourceMCtx
+  -- We want to create as few mvars as possible
   let (srcExpr, _) := instantiateMVarsCore (mctx := sourceMCtx) srcExpr
   --IO.println s!"Transform src: {srcExpr}"
   let result ← Core.transform srcExpr λ e => do
@@ -51,7 +52,7 @@ private partial def translateExpr (srcExpr: Expr) : MetaTranslateM Expr := do
       assert! (← getLCtx).contains fvarId'
       return .done $ .fvar fvarId'
     | .mvar mvarId => do
-      assert! !(sourceMCtx.dAssignment.contains mvarId)
+      -- Must not be assigned
       assert! !(sourceMCtx.eAssignment.contains mvarId)
       match state.mvarMap[mvarId]? with
       | .some mvarId' => do
@@ -95,16 +96,22 @@ partial def translateLCtx : MetaTranslateM LocalContext := do
 partial def translateMVarId (srcMVarId: MVarId) : MetaTranslateM MVarId := do
   if let .some mvarId' := (← get).mvarMap[srcMVarId]? then
     return mvarId'
-  let mvar ← Meta.withLCtx .empty #[] do
+  let mvarId' ← Meta.withLCtx .empty #[] do
     let srcDecl := (← getSourceMCtx).findDecl? srcMVarId |>.get!
     withTheReader Context (λ ctx => { ctx with sourceLCtx := srcDecl.lctx }) do
       let lctx' ← translateLCtx
       let localInstances' ← srcDecl.localInstances.mapM translateLocalInstance
       Meta.withLCtx lctx' localInstances' do
         let target' ← translateExpr srcDecl.type
-        Meta.mkFreshExprMVar target' srcDecl.kind srcDecl.userName
-  addTranslatedMVar srcMVarId mvar.mvarId!
-  return mvar.mvarId!
+        let mvar' ← Meta.mkFreshExprMVar target' srcDecl.kind srcDecl.userName
+        let mvarId' := mvar'.mvarId!
+        if let .some { fvars, mvarIdPending }:= (← getSourceMCtx).getDelayedMVarAssignmentExp srcMVarId then
+          let fvars' ← fvars.mapM translateExpr
+          let mvarIdPending' ← translateMVarId mvarIdPending
+          assignDelayedMVar mvarId' fvars' mvarIdPending'
+        pure mvarId'
+  addTranslatedMVar srcMVarId mvarId'
+  return mvarId'
 end
 
 def translateMVarFromTermInfo (termInfo : Elab.TermInfo) (context? : Option Elab.ContextInfo)

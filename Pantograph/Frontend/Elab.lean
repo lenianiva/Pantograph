@@ -168,9 +168,10 @@ private def collectSorrysInTree (t : Elab.InfoTree) : List InfoWithContext :=
   let infos := findAllInfo t none fun i => match i with
     | .ofTermInfo { expectedType?, expr, stx, .. } =>
       expr.isSorry ∧ expectedType?.isSome ∧ stx.isOfKind `Lean.Parser.Term.sorry
-    | .ofTacticInfo { stx, .. } =>
+    | .ofTacticInfo { stx, goalsBefore, .. } =>
       -- The `sorry` term is distinct from the `sorry` tactic
-      stx.isOfKind `Lean.Parser.Tactic.tacticSorry
+      let isSorry := stx.isOfKind `Lean.Parser.Tactic.tacticSorry
+      isSorry ∧ !goalsBefore.isEmpty
     | _ => false
   infos.map fun (info, context?, _) => { info, context? }
 
@@ -197,9 +198,9 @@ def sorrysToGoalState (sorrys : List InfoWithContext) : MetaM GoalState := do
     | .ofTacticInfo tacticInfo => do
       MetaTranslate.translateMVarFromTacticInfoBefore tacticInfo i.context?
     | _ => panic! "Invalid info"
-  let goals := (← goalsM.run {} |>.run' {}).bind id
+  let goals := List.join (← goalsM.run {} |>.run' {})
   let root := match goals with
-    | [] => panic! "This function cannot be called on an empty list"
+    | [] => panic! "No MVars generated"
     | [g] => g
     | _ => { name := .anonymous }
   GoalState.createFromMVars goals root
