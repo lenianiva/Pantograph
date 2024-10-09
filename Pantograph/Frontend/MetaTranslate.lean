@@ -39,6 +39,25 @@ def resetFVarMap : MetaTranslateM Unit := do
   modifyGet λ state => ((), { state with fvarMap := {} })
 
 mutual
+private partial def translateLevel (srcLevel: Level) : MetaTranslateM Level := do
+  let sourceMCtx ← getSourceMCtx
+  let (_, level) := instantiateLevelMVarsImp sourceMCtx srcLevel
+  match level with
+  | .zero => return .zero
+  | .succ inner => do
+    let inner' ← translateLevel inner
+    return .succ inner'
+  | .max l1 l2 => do
+    let l1' ← translateLevel l1
+    let l2' ← translateLevel l2
+    return .max l1' l2'
+  | .imax l1 l2 => do
+    let l1' ← translateLevel l1
+    let l2' ← translateLevel l2
+    return .imax l1' l2'
+  | .param p => return .param p
+  | .mvar _ =>
+    Meta.mkFreshLevelMVar
 private partial def translateExpr (srcExpr: Expr) : MetaTranslateM Expr := do
   let sourceMCtx ← getSourceMCtx
   -- We want to create as few mvars as possible
@@ -63,6 +82,9 @@ private partial def translateExpr (srcExpr: Expr) : MetaTranslateM Expr := do
         let mvarId' ← translateMVarId mvarId
         restoreFVarMap fvarMap
         return .done $ .mvar mvarId'
+    | .sort level => do
+      let level' ← translateLevel level
+      return .done $ .sort level'
     | _ => return .continue
   Meta.check result
   return result
