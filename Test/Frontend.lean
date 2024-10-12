@@ -10,9 +10,9 @@ def collectSorrysFromSource (source: String) : MetaM (List GoalState) := do
   let filename := "<anonymous>"
   let (context, state) ← do Frontend.createContextStateFromFile source filename (← getEnv) {}
   let m := Frontend.mapCompilationSteps λ step => do
-    return Frontend.collectSorrys step
+    return (step.before, Frontend.collectSorrys step)
   let li ← m.run context |>.run' state
-  let goalStates ← li.filterMapM λ sorrys => do
+  let goalStates ← li.filterMapM λ (env, sorrys) => withEnv env do
     if sorrys.isEmpty then
       return .none
     let goalState ← Frontend.sorrysToGoalState sorrys
@@ -159,6 +159,24 @@ example : ∀ (y: Nat), ∃ (x: Nat), y + 1 = x := by
     }
   ])
 
+def test_environment_capture: TestT MetaM Unit := do
+  let sketch := "
+def mystery (n: Nat) := n + 1
+
+example (n: Nat) : mystery n + 1 = n + 2 := sorry
+  "
+  let goalStates ← (collectSorrysFromSource sketch).run' {}
+  let [goalState] := goalStates | panic! s!"Incorrect number of states: {goalStates.length}"
+  addTest $ LSpec.check "goals" ((← goalState.serializeGoals (options := {})).map (·.devolatilize) = #[
+    {
+      target := { pp? := "mystery n + 1 = n + 2" },
+      vars := #[{
+         userName := "n",
+         type? := .some { pp? := "Nat" },
+      }],
+    }
+  ])
+
 
 def suite (env : Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
@@ -166,6 +184,7 @@ def suite (env : Environment): List (String × IO LSpec.TestSeq) :=
     ("sorry_in_middle", test_sorry_in_middle),
     ("sorry_in_induction", test_sorry_in_induction),
     ("sorry_in_coupled", test_sorry_in_coupled),
+    ("environment_capture", test_environment_capture),
   ]
   tests.map (fun (name, test) => (name, runMetaMSeq env $ runTest test))
 

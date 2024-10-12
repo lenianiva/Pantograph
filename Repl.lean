@@ -236,9 +236,9 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           else
             []
         let messages ← step.messageStrings
-        return (boundary, invocations?, sorrys, messages)
+        return (step.before, boundary, invocations?, sorrys, messages)
       let li ← frontendM.run context |>.run' state
-      let units ← li.mapM λ (boundary, invocations?, sorrys, messages) => do
+      let units ← li.mapM λ (env, boundary, invocations?, sorrys, messages) => Lean.withEnv env do
         let (goalStateId?, goals) ← if sorrys.isEmpty then do
             pure (.none, #[])
           else do
