@@ -219,6 +219,7 @@ structure GoalTactic where
   tactic?: Option String := .none
   expr?: Option String := .none
   have?: Option String := .none
+  let?: Option String := .none
   calc?: Option String := .none
   -- true to enter `conv`, `false` to exit. In case of exit the `goalId` is ignored.
   conv?: Option Bool := .none
