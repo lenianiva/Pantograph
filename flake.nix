@@ -4,10 +4,7 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
-    lean = {
-      # Do not follow input's nixpkgs since it could cause build failures
-      url = "github:leanprover/lean4?ref=v4.12.0";
-    };
+    lean4-nix.url = "github:lenianiva/lean4-nix";
     lspec = {
       url = "github:argumentcomputer/LSpec?ref=504a8cecf8da601b9466ac727aebb6b511aae4ab";
       flake = false;
@@ -18,7 +15,7 @@
     self,
     nixpkgs,
     flake-parts,
-    lean,
+    lean4-nix,
     lspec,
     ...
   } : flake-parts.lib.mkFlake { inherit inputs; } {
@@ -29,7 +26,7 @@
       "x86_64-darwin"
     ];
     perSystem = { system, pkgs, ... }: let
-      leanPkgs = lean.packages.${system}.deprecated;
+      leanPkgs = lean4-nix.packages.${system};
       lspecLib = leanPkgs.buildLeanPackage {
         name = "LSpec";
         roots = [ "Main" "LSpec" ];
