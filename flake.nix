@@ -2,7 +2,7 @@
   description = "Pantograph";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-24.05";
     flake-parts.url = "github:hercules-ci/flake-parts";
     lean4-nix.url = "github:lenianiva/lean4-nix";
     lspec = {
@@ -26,13 +26,16 @@
       "x86_64-darwin"
     ];
     perSystem = { system, pkgs, ... }: let
-      leanPkgs = lean4-nix.packages.${system};
-      lspecLib = leanPkgs.buildLeanPackage {
+      pkgs = import nixpkgs {
+        inherit system;
+        overlays = [ lean4-nix.tags."v4.12.0" ];
+      };
+      lspecLib = pkgs.lean.buildLeanPackage {
         name = "LSpec";
         roots = [ "Main" "LSpec" ];
         src = "${lspec}";
       };
-      project = leanPkgs.buildLeanPackage {
+      project = pkgs.lean.buildLeanPackage {
         name = "Pantograph";
         roots = [ "Pantograph" ];
         src = pkgs.lib.cleanSource (pkgs.lib.cleanSourceWith {
@@ -43,7 +46,7 @@
             !(pkgs.lib.hasSuffix "Repl.lean" path);
         });
       };
-      repl = leanPkgs.buildLeanPackage {
+      repl = pkgs.lean.buildLeanPackage {
         name = "Repl";
         roots = [ "Main" "Repl" ];
         deps = [ project ];
@@ -54,7 +57,7 @@
             !(pkgs.lib.hasSuffix ".md" path);
         });
       };
-      test = leanPkgs.buildLeanPackage {
+      test = pkgs.lean.buildLeanPackage {
         name = "Test";
         # NOTE: The src directory must be ./. since that is where the import
         # root begins (e.g. `import Test.Environment` and not `import
@@ -69,24 +72,25 @@
       };
     in rec {
       packages = {
-        inherit (leanPkgs) lean lean-all;
+        inherit (pkgs.lean) lean lean-all;
         inherit (project) sharedLib;
         inherit (repl) executable;
         default = repl.executable;
       };
       legacyPackages = {
-        inherit project leanPkgs;
+        inherit project;
+        leanPkgs = pkgs.lean;
       };
       checks = {
         test = pkgs.runCommand "test" {
-          buildInputs = [ test.executable leanPkgs.lean-all ];
+          buildInputs = [ test.executable pkgs.lean.lean-all ];
         } ''
           #export LEAN_SRC_PATH="${./.}"
           ${test.executable}/bin/test > $out
         '';
       };
       devShells.default = pkgs.mkShell {
-        buildInputs = [ leanPkgs.lean-all leanPkgs.lean ];
+        buildInputs = [ pkgs.lean.lean-all pkgs.lean.lean ];
       };
     };
   };
