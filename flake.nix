@@ -28,7 +28,7 @@
     perSystem = { system, pkgs, ... }: let
       pkgs = import nixpkgs {
         inherit system;
-        overlays = [ lean4-nix.tags."v4.12.0" ];
+        overlays = [ (lean4-nix.readToolchainFile ./lean-toolchain) ];
       };
       lspecLib = pkgs.lean.buildLeanPackage {
         name = "LSpec";
