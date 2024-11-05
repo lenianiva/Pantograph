@@ -167,8 +167,8 @@ example : ∀ (p: Prop), p → p := by
 
 def test_frontend_process : Test :=
   [
-    let file := "example : ∀ (p: Prop), p → p := by\n  intro p h\n  exact h"
-    let goal1 := "p : Prop\nh : p\n⊢ p"
+    let file := "example : ∀ (p q: Prop), p → p ∨ q := by\n  intro p q h\n  exact Or.inl h"
+    let goal1 := "p q : Prop\nh : p\n⊢ p ∨ q"
     step "frontend.process"
       [
         ("file", .str file),
@@ -180,14 +180,16 @@ def test_frontend_process : Test :=
          boundary := (0, file.utf8ByteSize),
          invocations? := .some [
            {
-             goalBefore := "⊢ ∀ (p : Prop), p → p",
+             goalBefore := "⊢ ∀ (p q : Prop), p → p ∨ q",
              goalAfter := goal1,
-             tactic := "intro p h",
+             tactic := "intro p q h",
+             usedConstants := #[],
            },
            {
              goalBefore := goal1 ,
              goalAfter := "",
-             tactic := "exact h",
+             tactic := "exact Or.inl h",
+             usedConstants := #["Or.inl"],
            },
          ]
        }],

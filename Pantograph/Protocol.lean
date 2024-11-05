@@ -298,6 +298,9 @@ structure InvokedTactic where
   goalBefore: String
   goalAfter: String
   tactic: String
+
+  -- List of used constants
+  usedConstants: Array String
   deriving Lean.ToJson
 
 structure CompilationUnit where
