@@ -22,7 +22,7 @@ abbrev CR α := Except Protocol.InteractionError α
 def runMetaInMainM { α } (metaM: Lean.MetaM α): MainM α :=
   metaM.run'
 def runTermElabInMainM { α } (termElabM: Lean.Elab.TermElabM α) : MainM α :=
-  termElabM.run' (ctx := Condensed.elabContext) |>.run'
+  termElabM.run' (ctx := defaultElabContext) |>.run'
 
 def execute (command: Protocol.Command): MainM Lean.Json := do
   let run { α β: Type } [Lean.FromJson α] [Lean.ToJson β] (comm: α → MainM (CR β)): MainM Lean.Json :=

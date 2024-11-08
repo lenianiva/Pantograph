@@ -66,7 +66,7 @@ def proofRunner (env: Lean.Environment) (tests: TestM Unit): IO LSpec.TestSeq :=
   let termElabM := tests.run LSpec.TestSeq.done |>.run {} -- with default options
 
   let coreContext: Lean.Core.Context ← createCoreContext #[]
-  let metaM := termElabM.run' (ctx := Condensed.elabContext)
+  let metaM := termElabM.run' (ctx := defaultElabContext)
   let coreM := metaM.run'
   match ← (coreM.run' coreContext { env := env }).toBaseIO with
   | .error exception =>
