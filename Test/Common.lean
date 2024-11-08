@@ -1,7 +1,6 @@
 import Pantograph.Goal
 import Pantograph.Library
 import Pantograph.Protocol
-import Pantograph.Condensed
 import Lean
 import LSpec
 

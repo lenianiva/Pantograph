@@ -1,4 +1,3 @@
-import Pantograph.Condensed
 import Pantograph.Environment
 import Pantograph.Frontend
 import Pantograph.Goal
