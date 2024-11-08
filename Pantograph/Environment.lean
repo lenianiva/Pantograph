@@ -1,5 +1,5 @@
 import Pantograph.Protocol
-import Pantograph.Serial
+import Pantograph.Delate
 import Lean
 
 open Lean

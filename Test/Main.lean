@@ -5,7 +5,7 @@ import Test.Integration
 import Test.Library
 import Test.Metavar
 import Test.Proofs
-import Test.Serial
+import Test.Delate
 import Test.Tactic
 
 -- Test running infrastructure
@@ -50,7 +50,7 @@ def main (args: List String) := do
     ("Library", Library.suite env_default),
     ("Metavar", Metavar.suite env_default),
     ("Proofs", Proofs.suite env_default),
-    ("Serial", Serial.suite env_default),
+    ("Delate", Delate.suite env_default),
     ("Tactic/Congruence", Tactic.Congruence.suite env_default),
     ("Tactic/Motivated Apply", Tactic.MotivatedApply.suite env_default),
     ("Tactic/No Confuse", Tactic.NoConfuse.suite env_default),

@@ -2,7 +2,7 @@ import Pantograph.Condensed
 import Pantograph.Environment
 import Pantograph.Goal
 import Pantograph.Protocol
-import Pantograph.Serial
+import Pantograph.Delate
 import Pantograph.Version
 import Lean
 

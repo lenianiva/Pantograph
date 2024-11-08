@@ -1,6 +1,6 @@
 import LSpec
 import Pantograph.Goal
-import Pantograph.Serial
+import Pantograph.Delate
 import Test.Common
 import Lean
 

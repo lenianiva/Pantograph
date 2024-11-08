@@ -1,10 +1,10 @@
 import LSpec
-import Pantograph.Serial
+import Pantograph.Delate
 import Test.Common
 import Lean
 
 open Lean
-namespace Pantograph.Test.Serial
+namespace Pantograph.Test.Delate
 
 open Pantograph
 
@@ -106,4 +106,4 @@ def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
     ("Instance", test_instance env),
   ]
 
-end Pantograph.Test.Serial
+end Pantograph.Test.Delate
