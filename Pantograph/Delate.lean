@@ -1,7 +1,5 @@
 /-
-All serialisation functions;
-This replicates the behaviour of `Scope`s in `Lean/Elab/Command.lean` without
-using `Scope`s.
+This file handles "Delation": The conversion of Kernel view into Search view.
 -/
 import Lean
 import Pantograph.Expr
