@@ -24,6 +24,7 @@ def runMetaInMainM { α } (metaM: Lean.MetaM α): MainM α :=
 def runTermElabInMainM { α } (termElabM: Lean.Elab.TermElabM α) : MainM α :=
   termElabM.run' (ctx := defaultElabContext) |>.run'
 
+/-- Main loop command of the REPL -/
 def execute (command: Protocol.Command): MainM Lean.Json := do
   let run { α β: Type } [Lean.FromJson α] [Lean.ToJson β] (comm: α → MainM (CR β)): MainM Lean.Json :=
     match Lean.fromJson? command.payload with
@@ -32,28 +33,35 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
       | .ok result =>  return Lean.toJson result
       | .error ierror => return Lean.toJson ierror
     | .error error => return Lean.toJson $ errorCommand s!"Unable to parse json: {error}"
-  match command.cmd with
-  | "reset"         => run reset
-  | "stat"          => run stat
-  | "expr.echo"     => run expr_echo
-  | "env.catalog"   => run env_catalog
-  | "env.inspect"   => run env_inspect
-  | "env.add"       => run env_add
-  | "options.set"   => run options_set
-  | "options.print" => run options_print
-  | "goal.start"    => run goal_start
-  | "goal.tactic"   => run goal_tactic
-  | "goal.continue" => run goal_continue
-  | "goal.delete"   => run goal_delete
-  | "goal.print"    => run goal_print
-  | "frontend.process"  => run frontend_process
-  | cmd =>
-    let error: Protocol.InteractionError :=
-      errorCommand s!"Unknown command {cmd}"
-    return Lean.toJson error
+  try
+    match command.cmd with
+    | "reset"         => run reset
+    | "stat"          => run stat
+    | "expr.echo"     => run expr_echo
+    | "env.catalog"   => run env_catalog
+    | "env.inspect"   => run env_inspect
+    | "env.add"       => run env_add
+    | "env.save"      => run env_save
+    | "env.load"      => run env_load
+    | "options.set"   => run options_set
+    | "options.print" => run options_print
+    | "goal.start"    => run goal_start
+    | "goal.tactic"   => run goal_tactic
+    | "goal.continue" => run goal_continue
+    | "goal.delete"   => run goal_delete
+    | "goal.print"    => run goal_print
+    | "frontend.process"  => run frontend_process
+    | cmd =>
+      let error: Protocol.InteractionError :=
+        errorCommand s!"Unknown command {cmd}"
+      return Lean.toJson error
+  catch ex => do
+    let error ← ex.toMessageData.toString
+    return Lean.toJson $ errorIO error
   where
   errorCommand := errorI "command"
   errorIndex := errorI "index"
+  errorIO := errorI "io"
   newGoalState (goalState: GoalState) : MainM Nat := do
     let state ← get
     let stateId := state.nextId
@@ -80,6 +88,14 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     Environment.inspect args state.options
   env_add (args: Protocol.EnvAdd): MainM (CR Protocol.EnvAddResult) := do
     Environment.addDecl args
+  env_save (args: Protocol.EnvSaveLoad): MainM (CR Protocol.EnvSaveLoadResult) := do
+    let env ← Lean.MonadEnv.getEnv
+    env_pickle env args.path
+    return .ok {}
+  env_load (args: Protocol.EnvSaveLoad): MainM (CR Protocol.EnvSaveLoadResult) := do
+    let (env, _) ← env_unpickle args.path
+    Lean.setEnv env
+    return .ok {}
   expr_echo (args: Protocol.ExprEcho): MainM (CR Protocol.ExprEchoResult) := do
     let state ← get
     exprEcho args.expr (expectedType? := args.type?) (levels := args.levels.getD #[]) (options := state.options)

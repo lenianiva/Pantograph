@@ -183,6 +183,12 @@ structure EnvAdd where
 structure EnvAddResult where
   deriving Lean.ToJson
 
+structure EnvSaveLoad where
+  path: System.FilePath
+  deriving Lean.FromJson
+structure EnvSaveLoadResult where
+  deriving Lean.ToJson
+
 /-- Set options; See `Options` struct above for meanings -/
 structure OptionsSet where
   printJsonPretty?: Option Bool
