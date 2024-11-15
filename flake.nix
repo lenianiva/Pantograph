@@ -73,7 +73,7 @@
     in rec {
       packages = {
         inherit (pkgs.lean) lean lean-all;
-        inherit (project) sharedLib;
+        inherit (project) sharedLib iTree;
         inherit (repl) executable;
         default = repl.executable;
       };
