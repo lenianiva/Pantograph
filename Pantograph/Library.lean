@@ -1,8 +1,7 @@
-import Pantograph.Condensed
 import Pantograph.Environment
 import Pantograph.Goal
 import Pantograph.Protocol
-import Pantograph.Serial
+import Pantograph.Delate
 import Pantograph.Version
 import Lean
 
@@ -42,7 +41,7 @@ namespace Pantograph
 def runMetaM { α } (metaM: MetaM α): CoreM α :=
   metaM.run'
 def runTermElabM { α } (termElabM: Elab.TermElabM α): CoreM α :=
-  termElabM.run' (ctx := Condensed.elabContext) |>.run'
+  termElabM.run' (ctx := defaultElabContext) |>.run'
 
 def errorI (type desc: String): Protocol.InteractionError := { error := type, desc := desc }
 

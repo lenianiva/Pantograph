@@ -1,4 +1,5 @@
-import Pantograph.Condensed
+import Pantograph.Delate
+import Pantograph.Elab
 import Pantograph.Environment
 import Pantograph.Frontend
 import Pantograph.Goal

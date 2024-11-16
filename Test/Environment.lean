@@ -1,5 +1,5 @@
 import LSpec
-import Pantograph.Serial
+import Pantograph.Delate
 import Pantograph.Environment
 import Test.Common
 import Lean

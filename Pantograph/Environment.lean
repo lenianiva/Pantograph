@@ -1,6 +1,9 @@
+import Pantograph.Delate
+import Pantograph.Elab
 import Pantograph.Protocol
 import Pantograph.Serial
-import Lean
+import Lean.Environment
+import Lean.Replay
 
 open Lean
 open Pantograph
