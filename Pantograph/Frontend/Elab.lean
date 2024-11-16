@@ -122,6 +122,13 @@ protected def goalStateAfter (t : TacticInvocation) : IO (List Format) := do
 protected def ppExpr (t : TacticInvocation) (e : Expr) : IO Format :=
   t.runMetaM (fun _ => do Meta.ppExpr (← instantiateMVars e))
 
+protected def usedConstants (t: TacticInvocation) : NameSet :=
+  let info := t.info
+  info.goalsBefore
+    |>.filterMap info.mctxAfter.getExprAssignmentCore?
+    |>.map Expr.getUsedConstantsAsSet
+    |>.foldl .union .empty
+
 end TacticInvocation
 
 /-- Analogue of `Lean.Elab.InfoTree.findInfo?`, but that returns a list of all results. -/
@@ -158,7 +165,13 @@ def collectTacticsFromCompilationStep (step : CompilationStep) : IO (List Protoc
     let tactic ← invocation.ctx.runMetaM {} do
       let t ← PrettyPrinter.ppTactic ⟨invocation.info.stx⟩
       return t.pretty
-    return { goalBefore, goalAfter, tactic }
+    let usedConstants := invocation.usedConstants.toArray.map λ n => n.toString
+    return {
+      goalBefore,
+      goalAfter,
+      tactic,
+      usedConstants,
+    }
 
 structure InfoWithContext where
   info: Elab.Info
