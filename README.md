@@ -7,6 +7,8 @@ A Machine-to-Machine interaction system for Lean 4.
 Pantograph provides interfaces to execute proofs, construct expressions, and
 examine the symbol list of a Lean project for machine learning.
 
+See [documentations][doc/] for design rationale and references.
+
 ## Installation
 
 For Nix users, run
