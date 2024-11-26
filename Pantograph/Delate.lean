@@ -327,11 +327,11 @@ partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM
       -- Lean these are handled using a `#` prefix.
       pure s!"{deBruijnIndex}"
     | .fvar fvarId =>
-      let name := ofName fvarId.name
+      let name := fvarId.name
       pure s!"(:fv {name})"
     | .mvar mvarId => do
         let pref := if ← mvarId.isDelayedAssigned then "mvd" else "mv"
-        let name := ofName mvarId.name
+        let name := mvarId.name
         pure s!"(:{pref} {name})"
     | .sort level =>
       let level := serializeSortLevel level sanitize
@@ -387,7 +387,6 @@ partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM
     | .implicit => " :implicit"
     | .strictImplicit => " :strictImplicit"
     | .instImplicit => " :instImplicit"
-  ofName (name: Name) := serializeName name sanitize
 
 def serializeExpression (options: @&Protocol.Options) (e: Expr): MetaM Protocol.Expression := do
   let pp?: Option String ← match options.printExprPretty with
@@ -420,13 +419,13 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
       match localDecl with
       | .cdecl _ fvarId userName _ _ _ =>
         return {
-          name := ofName fvarId.name,
+          name := fvarId.name.toString,
           userName:= ofName userName.simpMacroScopes,
           isInaccessible := userName.isInaccessibleUserName
         }
       | .ldecl _ fvarId userName _ _ _ _ => do
         return {
-          name := ofName fvarId.name,
+          name := fvarId.name.toString,
           userName := toString userName.simpMacroScopes,
           isInaccessible := userName.isInaccessibleUserName
         }
@@ -436,7 +435,7 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
         let userName := userName.simpMacroScopes
         let type ← instantiate type
         return {
-          name := ofName fvarId.name,
+          name := fvarId.name.toString,
           userName:= ofName userName,
           isInaccessible := userName.isInaccessibleUserName
           type? := .some (← serializeExpression options type)
@@ -450,7 +449,7 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
         else
           pure $ .none
         return {
-          name := ofName fvarId.name,
+          name := fvarId.name.toString,
           userName:= ofName userName,
           isInaccessible := userName.isInaccessibleUserName
           type? := .some (← serializeExpression options type)
@@ -469,7 +468,7 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
           | false => ppVar localDecl
         return var::acc
     return {
-      name := ofName goal.name,
+      name := goal.name.toString,
       userName? := if mvarDecl.userName == .anonymous then .none else .some (ofName mvarDecl.userName),
       isConversion := isLHSGoal? mvarDecl.type |>.isSome,
       target := (← serializeExpression options (← instantiate mvarDecl.type)),
