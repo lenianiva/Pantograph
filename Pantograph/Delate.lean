@@ -346,20 +346,20 @@ partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM
       let args := " ".intercalate args
       pure s!"({fn'} {args})"
     | .lam binderName binderType body binderInfo => do
-      let binderName' := ofName binderName
+      let binderName' := binderName.eraseMacroScopes
       let binderType' ← self binderType
       let body' ← self body
       let binderInfo' := binderInfoSexp binderInfo
       pure s!"(:lambda {binderName'} {binderType'} {body'}{binderInfo'})"
     | .forallE binderName binderType body binderInfo => do
-      let binderName' := ofName binderName
+      let binderName' := binderName.eraseMacroScopes
       let binderType' ← self binderType
       let body' ← self body
       let binderInfo' := binderInfoSexp binderInfo
       pure s!"(:forall {binderName'} {binderType'} {body'}{binderInfo'})"
     | .letE name type value body _ => do
       -- Dependent boolean flag diacarded
-      let name' := serializeName name
+      let name' := name.eraseMacroScopes
       let type' ← self type
       let value' ← self value
       let body' ← self body
