@@ -130,6 +130,8 @@ def addTest [Monad m] (test: LSpec.TestSeq): TestT m Unit := do
 
 def runTest [Monad m] (t: TestT m Unit): m LSpec.TestSeq :=
   Prod.snd <$> t.run LSpec.TestSeq.done
+def runTestWithResult { α } [Monad m] (t: TestT m α): m (α × LSpec.TestSeq) :=
+  t.run LSpec.TestSeq.done
 
 def runTestTermElabM (env: Environment) (t: TestT Elab.TermElabM Unit):
   IO LSpec.TestSeq :=
