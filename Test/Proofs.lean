@@ -282,9 +282,9 @@ def test_or_comm: TestM Unit := do
     serializeExpressionSexp (← instantiateAll state2.parentExpr?.get!) (sanitize := false)
   let orPQ := s!"((:c Or) (:fv {fvP}) (:fv {fvQ}))"
   let orQP := s!"((:c Or) (:fv {fvQ}) (:fv {fvP}))"
-  let motive := s!"(:lambda t._@._hyg.26 {orPQ} (:forall h ((:c Eq) ((:c Or) (:fv {fvP}) (:fv {fvQ})) (:fv {fvH}) 0) {orQP}))"
-  let caseL := s!"(:lambda h._@._hyg.27 (:fv {fvP}) (:lambda h._@._hyg.28 ((:c Eq) {orPQ} (:fv {fvH}) ((:c Or.inl) (:fv {fvP}) (:fv {fvQ}) 0)) (:subst (:mv {caseL}) (:fv {fvP}) (:fv {fvQ}) 1)))"
-  let caseR := s!"(:lambda h._@._hyg.29 (:fv {fvQ}) (:lambda h._@._hyg.30 ((:c Eq) {orPQ} (:fv {fvH}) ((:c Or.inr) (:fv {fvP}) (:fv {fvQ}) 0)) (:subst (:mv {caseR}) (:fv {fvP}) (:fv {fvQ}) 1)))"
+  let motive := s!"(:lambda t {orPQ} (:forall h ((:c Eq) ((:c Or) (:fv {fvP}) (:fv {fvQ})) (:fv {fvH}) 0) {orQP}))"
+  let caseL := s!"(:lambda h (:fv {fvP}) (:lambda h ((:c Eq) {orPQ} (:fv {fvH}) ((:c Or.inl) (:fv {fvP}) (:fv {fvQ}) 0)) (:subst (:mv {caseL}) (:fv {fvP}) (:fv {fvQ}) 1)))"
+  let caseR := s!"(:lambda h (:fv {fvQ}) (:lambda h ((:c Eq) {orPQ} (:fv {fvH}) ((:c Or.inr) (:fv {fvP}) (:fv {fvQ}) 0)) (:subst (:mv {caseR}) (:fv {fvP}) (:fv {fvQ}) 1)))"
   let conduit := s!"((:c Eq.refl) {orPQ} (:fv {fvH}))"
   addTest $ LSpec.test "(2 parent)" (state2parent ==
     s!"((:c Or.casesOn) (:fv {fvP}) (:fv {fvQ}) {motive} (:fv {fvH}) {caseL} {caseR} {conduit})")

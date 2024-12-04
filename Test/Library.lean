@@ -24,7 +24,7 @@ def test_expr_echo (env: Environment): IO LSpec.TestSeq := do
       },
       expr := {
         pp? := "⟨∀ (x : Prop), x → x, fun x h => h⟩",
-        sexp? := "((:c PSigma.mk) (:sort 0) (:lambda p (:sort 0) 0) (:forall x (:sort 0) (:forall _ 0 1)) (:lambda x (:sort 0) (:lambda h 0 0)))",
+        sexp? := "((:c PSigma.mk) (:sort 0) (:lambda p (:sort 0) 0) (:forall x (:sort 0) (:forall a 0 1)) (:lambda x (:sort 0) (:lambda h 0 0)))",
       }
     }))
     return tests
