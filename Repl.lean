@@ -90,10 +90,10 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     Environment.addDecl args
   env_save (args: Protocol.EnvSaveLoad): MainM (CR Protocol.EnvSaveLoadResult) := do
     let env ← Lean.MonadEnv.getEnv
-    env_pickle env args.path
+    environmentPickle env args.path
     return .ok {}
   env_load (args: Protocol.EnvSaveLoad): MainM (CR Protocol.EnvSaveLoadResult) := do
-    let (env, _) ← env_unpickle args.path
+    let (env, _) ← environmentUnpickle args.path
     Lean.setEnv env
     return .ok {}
   expr_echo (args: Protocol.ExprEcho): MainM (CR Protocol.ExprEchoResult) := do

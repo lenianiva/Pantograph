@@ -55,7 +55,7 @@ and when unpickling, we build a fresh `Environment` from the imports,
 and then add the new constants.
 -/
 @[export pantograph_env_pickle_m]
-def env_pickle (env : Environment) (path : System.FilePath) : IO Unit :=
+def environmentPickle (env : Environment) (path : System.FilePath) : IO Unit :=
   Pantograph.pickle path (env.header.imports, env.constants.map₂)
 
 /--
@@ -65,7 +65,7 @@ We construct a fresh `Environment` with the relevant imports,
 and then replace the new constants.
 -/
 @[export pantograph_env_unpickle_m]
-def env_unpickle (path : System.FilePath) : IO (Environment × CompactedRegion) := unsafe do
+def environmentUnpickle (path : System.FilePath) : IO (Environment × CompactedRegion) := unsafe do
   let ((imports, map₂), region) ← Pantograph.unpickle (Array Import × PHashMap Name ConstantInfo) path
   let env ← importModules imports {} 0
   return (← env.replay (Std.HashMap.ofList map₂.toList), region)
