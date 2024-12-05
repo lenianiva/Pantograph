@@ -2,6 +2,7 @@ import Lean.Environment
 import Lean.Replay
 import Init.System.IOError
 import Std.Data.HashMap
+import Pantograph.Goal
 
 /-!
 Input/Output functions
@@ -69,5 +70,93 @@ def environmentUnpickle (path : System.FilePath) : IO (Environment × CompactedR
   let ((imports, map₂), region) ← Pantograph.unpickle (Array Import × PHashMap Name ConstantInfo) path
   let env ← importModules imports {} 0
   return (← env.replay (Std.HashMap.ofList map₂.toList), region)
+
+
+open Lean.Core in
+structure CompactCoreState where
+  -- env             : Environment
+  nextMacroScope  : MacroScope     := firstFrontendMacroScope + 1
+  ngen            : NameGenerator  := {}
+  -- traceState      : TraceState     := {}
+  -- cache           : Cache     := {}
+  -- messages        : MessageLog     := {}
+  -- infoState       : Elab.InfoState := {}
+
+@[export pantograph_goal_state_pickle_m]
+def goalStatePickle (goalState : GoalState) (path : System.FilePath) : IO Unit :=
+  let {
+    savedState := {
+      term := {
+        meta := {
+          core,
+          meta,
+        }
+        «elab»,
+      },
+      tactic
+    }
+    root,
+    parentMVar?,
+    convMVar?,
+    calcPrevRhs?,
+  } := goalState
+  --let env := core.env
+  Pantograph.pickle path (
+    ({ core with } : CompactCoreState),
+    meta,
+    «elab»,
+    tactic,
+
+    root,
+    parentMVar?,
+    convMVar?,
+    calcPrevRhs?,
+  )
+
+@[export pantograph_goal_state_unpickle_m]
+def goalStateUnpickle (path : System.FilePath) (env : Environment)
+    : IO (GoalState × CompactedRegion) := unsafe do
+  let ((
+    compactCore,
+    meta,
+    «elab»,
+    tactic,
+
+    root,
+    parentMVar?,
+    convMVar?,
+    calcPrevRhs?,
+  ), region) ← Pantograph.unpickle (
+    CompactCoreState ×
+    Meta.State ×
+    Elab.Term.State ×
+    Elab.Tactic.State ×
+
+    MVarId ×
+    Option MVarId ×
+    Option (MVarId × MVarId × List MVarId) ×
+    Option (MVarId × Expr)
+  ) path
+  let goalState := {
+    savedState := {
+      term := {
+        meta := {
+          core := {
+            compactCore with
+            passedHeartbeats := 0,
+            env,
+          },
+          meta,
+        },
+        «elab»,
+      },
+      tactic,
+    },
+    root,
+    parentMVar?,
+    convMVar?,
+    calcPrevRhs?,
+  }
+  return (goalState, region)
 
 end Pantograph
