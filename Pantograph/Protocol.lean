@@ -289,6 +289,19 @@ structure GoalDiag where
   instantiate: Bool := true
   printSexp: Bool := false
 
+structure GoalSave where
+  id: Nat
+  path: System.FilePath
+  deriving Lean.FromJson
+structure GoalSaveResult where
+  deriving Lean.ToJson
+structure GoalLoad where
+  path: System.FilePath
+  deriving Lean.FromJson
+structure GoalLoadResult where
+  id: Nat
+  deriving Lean.ToJson
+
 
 /-- Executes the Lean compiler on a single file -/
 structure FrontendProcess where
