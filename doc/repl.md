@@ -39,7 +39,7 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
   - `{ "goals": <names> }`: Resume the given goals
 * `goal.remove {"stateIds": [<id>]}"`: Drop the goal states specified in the list
 * `goal.print {"stateId": <id>}"`: Print a goal state
-* `goal.save`{ id, path }, `env.load { path }`: Save/Load a goal state to/from a
+* `goal.save{ id, path }`, `goal.load { path }`: Save/Load a goal state to/from a
   file. The environment is not carried with the state. The user is responsible
   to ensure the sender/receiver instances share the same environment.
 * `frontend.process { ["fileName": <fileName>",] ["file": <str>], invocations:
