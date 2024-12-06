@@ -215,6 +215,7 @@ protected def GoalState.tryTacticM (state: GoalState) (goal: MVarId) (tacticM: E
     return .failure #[← exception.toMessageData.toString]
 
 /-- Execute a string tactic on given state. Restores TermElabM -/
+@[export pantograph_goal_state_try_tactic_m]
 protected def GoalState.tryTactic (state: GoalState) (goal: MVarId) (tactic: String):
     Elab.TermElabM TacticResult := do
   state.restoreElabM
