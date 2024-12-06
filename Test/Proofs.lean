@@ -14,10 +14,7 @@ inductive Start where
   | copy (name: String) -- Start from some name in the environment
   | expr (expr: String) -- Start from some expression
 
-abbrev TestM := StateRefT LSpec.TestSeq (ReaderT Protocol.Options Elab.TermElabM)
-
-def addTest (test: LSpec.TestSeq): TestM Unit := do
-  set $ (← get) ++ test
+abbrev TestM := TestT $ ReaderT Protocol.Options $ Elab.TermElabM
 
 def startProof (start: Start): TestM (Option GoalState) := do
   let env ← Lean.MonadEnv.getEnv
@@ -704,6 +701,25 @@ def test_nat_zero_add_alt: TestM Unit := do
       }
     ])
 
+def test_composite_tactic_failure: TestM Unit := do
+  let state? ← startProof (.expr "∀ (p : Prop), ∃ (x : Nat), p")
+  let state0 ← match state? with
+    | .some state => pure state
+    | .none => do
+      addTest $ assertUnreachable "Goal could not parse"
+      return ()
+
+  let tactic := "intro p"
+  let state1 ← match ← state0.tacticOn 0 tactic with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+
+  let tactic := "exact ⟨0, by simp⟩"
+  let .failure messages ← state1.tacticOn 0 tactic | addTest $ assertUnreachable s!"{tactic} should fail"
+  checkEq tactic messages #["placeholder"]
+
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
     ("identity", test_identity),
@@ -716,6 +732,7 @@ def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
     ("calc", test_calc),
     ("Nat.zero_add", test_nat_zero_add),
     ("Nat.zero_add alt", test_nat_zero_add_alt),
+    ("composite tactic failure", test_composite_tactic_failure),
   ]
   tests.map (fun (name, test) => (name, proofRunner env test))
 
