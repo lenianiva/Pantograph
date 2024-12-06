@@ -40,7 +40,7 @@ def test_nat_brec_on : TestT Elab.TermElabM Unit := do
         "Nat → Prop",
         "Nat",
         "∀ (t : Nat), Nat.below t → ?motive t",
-        "?motive ?m.67 = (n + 0 = n)",
+        "?motive ?m.71 = (n + 0 = n)",
       ])
     addTest test
 
@@ -83,7 +83,7 @@ def test_partial_motive_instantiation : TestT Elab.TermElabM Unit := do
     let target ← Meta.mkFreshExprSyntheticOpaqueMVar body
     let tactic := Tactic.evalMotivatedApply recursor
     let newGoals ← runTacticOnMVar tactic target.mvarId!
-    let majorId := 67
+    let majorId := 71
     addTest $ (LSpec.check "goals" ((← newGoals.mapM (λ g => do exprToStr (← g.getType))) =
       [
         "Nat → Prop",
@@ -100,7 +100,7 @@ def test_partial_motive_instantiation : TestT Elab.TermElabM Unit := do
 
     addTest $ ← conduit.withContext do
       let t := toString (← Meta.ppExpr $ ← conduit.getType)
-      return LSpec.check "conduit" (t = s!"(?m.{majorId}.add + 0 = ?m.138 ?m.{majorId}) = (n + 0 = n)")
+      return LSpec.check "conduit" (t = s!"(?m.{majorId}.add + 0 = ?m.146 ?m.{majorId}) = (n + 0 = n)")
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   [

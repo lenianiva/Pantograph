@@ -70,9 +70,9 @@ partial def filter (p : Info → Bool) (m : MVarId → Bool := fun _ => false) :
   | .context ctx tree => tree.filter p m |>.map (.context ctx)
   | .node info children =>
     if p info then
-      [.node info (children.toList.map (filter p m)).join.toPArray']
+      [.node info (children.toList.map (filter p m)).flatten.toPArray']
     else
-      (children.toList.map (filter p m)).join
+      (children.toList.map (filter p m)).flatten
   | .hole mvar => if m mvar then [.hole mvar] else []
 
 end Lean.Elab.InfoTree
@@ -137,7 +137,8 @@ partial def findAllInfo (t : Elab.InfoTree) (context?: Option Elab.ContextInfo) 
   match t with
   | .context inner t => findAllInfo t (inner.mergeIntoOuter? context?) pred
   | .node i children  =>
-      (if pred i then [(i, context?, children)] else []) ++ children.toList.bind (fun t => findAllInfo t context? pred)
+      (if pred i then [(i, context?, children)] else []) ++
+        children.toList.flatMap (fun t => findAllInfo t context? pred)
   | _ => []
 
 /-- Return all `TacticInfo` nodes in an `InfoTree` corresponding to tactics,
@@ -155,10 +156,10 @@ def collectTactics (t : Elab.InfoTree) : List TacticInvocation :=
 
 @[export pantograph_frontend_collect_tactics_from_compilation_step_m]
 def collectTacticsFromCompilationStep (step : CompilationStep) : IO (List Protocol.InvokedTactic) := do
-  let tacticInfoTrees := step.trees.bind λ tree => tree.filter λ
+  let tacticInfoTrees := step.trees.flatMap λ tree => tree.filter λ
     | info@(.ofTacticInfo _) => info.isOriginal
     | _ => false
-  let tactics := tacticInfoTrees.bind collectTactics
+  let tactics := tacticInfoTrees.flatMap collectTactics
   tactics.mapM λ invocation => do
     let goalBefore := (Format.joinSep (← invocation.goalState) "\n").pretty
     let goalAfter := (Format.joinSep (← invocation.goalStateAfter) "\n").pretty
@@ -191,7 +192,7 @@ private def collectSorrysInTree (t : Elab.InfoTree) : List InfoWithContext :=
 -- NOTE: Plural deliberately not spelled "sorries"
 @[export pantograph_frontend_collect_sorrys_m]
 def collectSorrys (step: CompilationStep) : List InfoWithContext :=
-  step.trees.bind collectSorrysInTree
+  step.trees.flatMap collectSorrysInTree
 
 
 
@@ -211,7 +212,7 @@ def sorrysToGoalState (sorrys : List InfoWithContext) : MetaM GoalState := do
     | .ofTacticInfo tacticInfo => do
       MetaTranslate.translateMVarFromTacticInfoBefore tacticInfo i.context?
     | _ => panic! "Invalid info"
-  let goals := List.join (← goalsM.run {} |>.run' {})
+  let goals := List.flatten (← goalsM.run {} |>.run' {})
   let root := match goals with
     | [] => panic! "No MVars generated"
     | [g] => g

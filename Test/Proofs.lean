@@ -564,10 +564,10 @@ def test_nat_zero_add: TestM Unit := do
       return ()
   addTest $ LSpec.check s!"mapply {recursor}" ((← state2.serializeGoals (options := ← read)).map (·.devolatilizeVars) =
     #[
-      buildNamedGoal "_uniq.67" [("n", "Nat")] "Nat → Prop" (.some "motive"),
-      buildNamedGoal "_uniq.68" [("n", "Nat")] "Nat",
-      buildNamedGoal "_uniq.69" [("n", "Nat")] "∀ (t : Nat), Nat.below t → ?motive t",
-      buildNamedGoal "_uniq.70" [("n", "Nat")] "?motive ?m.68 = (n + 0 = n)" (.some "conduit")
+      buildNamedGoal "_uniq.71" [("n", "Nat")] "Nat → Prop" (.some "motive"),
+      buildNamedGoal "_uniq.72" [("n", "Nat")] "Nat",
+      buildNamedGoal "_uniq.73" [("n", "Nat")] "∀ (t : Nat), Nat.below t → ?motive t",
+      buildNamedGoal "_uniq.74" [("n", "Nat")] "?motive ?m.72 = (n + 0 = n)" (.some "conduit")
     ])
 
   let tactic := "exact n"
@@ -650,13 +650,13 @@ def test_nat_zero_add_alt: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  let major := "_uniq.68"
+  let major := "_uniq.72"
   addTest $ LSpec.check s!"mapply {recursor}" ((← state2.serializeGoals (options := ← read)).map (·.devolatilizeVars) =
     #[
-      buildNamedGoal "_uniq.67" [("n", "Nat")] "Nat → Prop" (.some "motive"),
+      buildNamedGoal "_uniq.71" [("n", "Nat")] "Nat → Prop" (.some "motive"),
       buildNamedGoal major [("n", "Nat")] "Nat",
-      buildNamedGoal "_uniq.69" [("n", "Nat")] "∀ (t : Nat), Nat.below t → ?motive t",
-      buildNamedGoal "_uniq.70" [("n", "Nat")] "?motive ?m.68 = (n + 0 = n)" (.some "conduit")
+      buildNamedGoal "_uniq.73" [("n", "Nat")] "∀ (t : Nat), Nat.below t → ?motive t",
+      buildNamedGoal "_uniq.74" [("n", "Nat")] "?motive ?m.72 = (n + 0 = n)" (.some "conduit")
     ])
 
   let tactic := "intro x"
@@ -673,7 +673,7 @@ def test_nat_zero_add_alt: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  let (eqL, eqR, eqT) := ("_uniq.88", "_uniq.89", "_uniq.87")
+  let (eqL, eqR, eqT) := ("_uniq.92", "_uniq.93", "_uniq.91")
   addTest $ LSpec.check tactic $ state3m2.goals.map (·.name.toString) = [eqL, eqR, eqT]
   let [_motive, _major, _step, conduit] := state2.goals | panic! "Goals conflict"
   let state2b ← match state3m2.resume [conduit] with
@@ -684,16 +684,16 @@ def test_nat_zero_add_alt: TestM Unit := do
 
   let cNatAdd := "(:c HAdd.hAdd) (:c Nat) (:c Nat) (:c Nat) ((:c instHAdd) (:c Nat) (:c instAddNat))"
   let cNat0 := "((:c OfNat.ofNat) (:c Nat) (:lit 0) ((:c instOfNatNat) (:lit 0)))"
-  let fvN := "_uniq.63"
+  let fvN := "_uniq.67"
   let conduitRight := s!"((:c Eq) (:c Nat) ({cNatAdd} (:fv {fvN}) {cNat0}) (:fv {fvN}))"
   let substOf (mv: String) := s!"(:subst (:mv {mv}) (:fv {fvN}) (:mv {major}))"
   addTest $ LSpec.check "resume" ((← state2b.serializeGoals (options := { ← read with printExprAST := true })) =
     #[
       {
-        name := "_uniq.70",
+        name := "_uniq.74",
         userName? := .some "conduit",
         target := {
-          pp? := .some "(?m.92 ?m.68 = ?m.94 ?m.68) = (n + 0 = n)",
+          pp? := .some "(?m.96 ?m.72 = ?m.98 ?m.72) = (n + 0 = n)",
           sexp? := .some s!"((:c Eq) (:sort 0) ((:c Eq) {substOf eqT} {substOf eqL} {substOf eqR}) {conduitRight})",
         },
         vars := #[{
