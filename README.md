@@ -7,6 +7,8 @@ A Machine-to-Machine interaction system for Lean 4.
 Pantograph provides interfaces to execute proofs, construct expressions, and
 examine the symbol list of a Lean project for machine learning.
 
+See [documentations](doc/) for design rationale and references.
+
 ## Installation
 
 For Nix users, run
@@ -15,7 +17,9 @@ nix build .#{sharedLib,executable}
 ```
 to build either the shared library or executable.
 
-Install `elan` and `lake`, and run
+Install `lake` and `lean` fixed to the version of the `lean-toolchain` file, and
+run
+
 ``` sh
 lake build
 ```
@@ -24,8 +28,11 @@ This builds the executable in `.lake/build/bin/pantograph-repl`.
 ## Executable Usage
 
 ``` sh
-pantograph MODULES|LEAN_OPTIONS
+pantograph-repl MODULES|LEAN_OPTIONS
 ```
+
+The `pantograph-repl` executable must be run with a list of modules to import.
+It can also accept lean options of the form `--key=value` e.g. `--pp.raw=true`.
 
 The REPL loop accepts commands as single-line JSON inputs and outputs either an
 `Error:` (indicating malformed command) or a JSON return value indicating the
@@ -37,8 +44,6 @@ command { ... }
 The list of available commands can be found in `Pantograph/Protocol.lean` and below. An
 empty command aborts the REPL.
 
-The `pantograph` executable must be run with a list of modules to import. It can
-also accept lean options of the form `--key=value` e.g. `--pp.raw=true`.
 
 Example: (~5k symbols)
 ```
