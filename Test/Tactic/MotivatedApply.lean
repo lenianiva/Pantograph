@@ -28,7 +28,7 @@ def test_nat_brec_on : TestT Elab.TermElabM Unit := do
       (env := ← MonadEnv.getEnv)
       (catName := `term)
       (input := "@Nat.brecOn")
-      (fileName := filename) with
+      (fileName := ← getFileName) with
       | .ok syn => pure syn
       | .error error => throwError "Failed to parse: {error}"
     -- Apply the tactic
@@ -52,7 +52,7 @@ def test_list_brec_on : TestT Elab.TermElabM Unit := do
       (env := ← MonadEnv.getEnv)
       (catName := `term)
       (input := "@List.brecOn")
-      (fileName := filename) with
+      (fileName := ← getFileName) with
       | .ok syn => pure syn
       | .error error => throwError "Failed to parse: {error}"
     -- Apply the tactic
@@ -74,7 +74,7 @@ def test_partial_motive_instantiation : TestT Elab.TermElabM Unit := do
     (env := ← MonadEnv.getEnv)
     (catName := `term)
     (input := "@Nat.brecOn")
-    (fileName := filename) with
+    (fileName := ← getFileName) with
     | .ok syn => pure syn
     | .error error => throwError "Failed to parse: {error}"
   let expr ← parseSentence expr

@@ -95,19 +95,19 @@ def runTermElabMSeq (env: Environment) (termElabM: Elab.TermElabM LSpec.TestSeq)
 
 def exprToStr (e: Expr): Lean.MetaM String := toString <$> Meta.ppExpr e
 
-def strToTermSyntax [Monad m] [MonadEnv m] (s: String): m Syntax := do
+def strToTermSyntax (s: String): CoreM Syntax := do
   let .ok stx := Parser.runParserCategory
     (env := ← MonadEnv.getEnv)
     (catName := `term)
     (input := s)
-    (fileName := filename) | panic! s!"Failed to parse {s}"
+    (fileName := ← getFileName) | panic! s!"Failed to parse {s}"
   return stx
 def parseSentence (s: String): Elab.TermElabM Expr := do
   let stx ← match Parser.runParserCategory
     (env := ← MonadEnv.getEnv)
     (catName := `term)
     (input := s)
-    (fileName := filename) with
+    (fileName := ← getFileName) with
     | .ok syn => pure syn
     | .error error => throwError "Failed to parse: {error}"
   Elab.Term.elabTerm (stx := stx) .none

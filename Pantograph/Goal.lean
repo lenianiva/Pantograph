@@ -10,8 +10,6 @@ import Lean
 namespace Pantograph
 open Lean
 
-def filename: String := "<pantograph>"
-
 /--
 Represents an interconnected set of metavariables, or a state in proof search
  -/
@@ -224,7 +222,7 @@ protected def GoalState.tryTactic (state: GoalState) (goal: MVarId) (tactic: Str
     (env := ← MonadEnv.getEnv)
     (catName := if state.isConv then `conv else `tactic)
     (input := tactic)
-    (fileName := filename) with
+    (fileName := ← getFileName) with
     | .ok stx => pure $ stx
     | .error error => return .parseError error
   state.tryTacticM goal $ Elab.Tactic.evalTactic tactic
@@ -236,7 +234,7 @@ protected def GoalState.tryAssign (state: GoalState) (goal: MVarId) (expr: Strin
     (env := ← MonadEnv.getEnv)
     (catName := `term)
     (input := expr)
-    (fileName := filename) with
+    (fileName := ← getFileName) with
     | .ok syn => pure syn
     | .error error => return .parseError error
   state.tryTacticM goal $ Tactic.evalAssign expr
@@ -250,7 +248,7 @@ protected def GoalState.tryLet (state: GoalState) (goal: MVarId) (binderName: St
     (env := ← MonadEnv.getEnv)
     (catName := `term)
     (input := type)
-    (fileName := filename) with
+    (fileName := ← getFileName) with
     | .ok syn => pure syn
     | .error error => return .parseError error
   state.tryTacticM goal $ Tactic.evalLet binderName.toName type
@@ -337,7 +335,7 @@ protected def GoalState.tryCalc (state: GoalState) (goal: MVarId) (pred: String)
     (env := state.env)
     (catName := `term)
     (input := pred)
-    (fileName := filename) with
+    (fileName := ← getFileName) with
     | .ok syn => pure syn
     | .error error => return .parseError error
   goal.checkNotAssigned `GoalState.tryCalc
