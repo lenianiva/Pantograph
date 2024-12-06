@@ -123,22 +123,28 @@ def mvarUserNameAndType (mvarId: MVarId): MetaM (Name × String) := do
 
 -- Monadic testing
 
-abbrev TestT := StateT LSpec.TestSeq
+abbrev TestT := StateRefT' IO.RealWorld LSpec.TestSeq
 
-def addTest [Monad m] (test: LSpec.TestSeq) : TestT m Unit := do
+section Monadic
+
+variable [Monad m] [MonadLiftT (ST IO.RealWorld) m]
+
+def addTest (test: LSpec.TestSeq) : TestT m Unit := do
   set $ (← get) ++ test
 
-def checkEq [Monad m] [DecidableEq α] (desc : String) (lhs rhs : α) : TestT m Unit := do
-  addTest $ LSpec.check desc (lhs == rhs)
-def checkTrue [Monad m] (desc : String) (flag : Bool) : TestT m Unit := do
+def checkEq [DecidableEq α] [Repr α] (desc : String) (lhs rhs : α) : TestT m Unit := do
+  addTest $ LSpec.check desc (lhs = rhs)
+def checkTrue (desc : String) (flag : Bool) : TestT m Unit := do
   addTest $ LSpec.check desc flag
-def fail [Monad m] (desc : String) : TestT m Unit := do
+def fail (desc : String) : TestT m Unit := do
   addTest $ LSpec.check desc false
 
-def runTest [Monad m] (t: TestT m Unit): m LSpec.TestSeq :=
+def runTest (t: TestT m Unit): m LSpec.TestSeq :=
   Prod.snd <$> t.run LSpec.TestSeq.done
-def runTestWithResult { α } [Monad m] (t: TestT m α): m (α × LSpec.TestSeq) :=
+def runTestWithResult { α } (t: TestT m α): m (α × LSpec.TestSeq) :=
   t.run LSpec.TestSeq.done
+
+end Monadic
 
 def runTestTermElabM (env: Environment) (t: TestT Elab.TermElabM Unit):
   IO LSpec.TestSeq :=

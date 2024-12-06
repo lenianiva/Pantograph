@@ -73,6 +73,8 @@ protected def GoalState.metaContextOfGoal (state: GoalState) (mvarId: MVarId): O
   return { lctx := mvarDecl.lctx, localInstances := mvarDecl.localInstances }
 protected def GoalState.metaState (state: GoalState): Meta.State :=
   state.savedState.term.meta.meta
+protected def GoalState.coreState (state: GoalState): Core.SavedState :=
+  state.savedState.term.meta.core
 
 protected def GoalState.withContext (state: GoalState) (mvarId: MVarId) (m: MetaM α): MetaM α := do
   mvarId.withContext m |>.run' (← read) state.metaState
@@ -207,6 +209,9 @@ protected def GoalState.tryTacticM (state: GoalState) (goal: MVarId) (tacticM: E
       Elab.TermElabM TacticResult := do
   try
     let nextState ← state.step goal tacticM
+    let newMessages ← (← getThe Core.State).messages.toList.drop (state.coreState.messages.toList.length) |>.mapM λ m => m.toString
+    if ¬ newMessages.isEmpty then
+      return .failure newMessages.toArray
     return .success nextState
   catch exception =>
     return .failure #[← exception.toMessageData.toString]

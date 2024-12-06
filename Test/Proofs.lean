@@ -702,7 +702,7 @@ def test_nat_zero_add_alt: TestM Unit := do
     ])
 
 def test_composite_tactic_failure: TestM Unit := do
-  let state? ← startProof (.expr "∀ (p : Prop), ∃ (x : Nat), p")
+  let state? ← startProof (.expr "∀ (p : Nat → Prop), ∃ (x : Nat), p (0 + x + 0)")
   let state0 ← match state? with
     | .some state => pure state
     | .none => do
@@ -718,7 +718,7 @@ def test_composite_tactic_failure: TestM Unit := do
 
   let tactic := "exact ⟨0, by simp⟩"
   let .failure messages ← state1.tacticOn 0 tactic | addTest $ assertUnreachable s!"{tactic} should fail"
-  checkEq tactic messages #["placeholder"]
+  checkEq s!"{tactic} fails" messages #[s!"{← getFileName}:0:12: error: unsolved goals\np : Nat → Prop\n⊢ p 0\n"]
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
