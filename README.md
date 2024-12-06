@@ -75,7 +75,7 @@ the environment might be setup like this:
 
 ``` sh
 LIB="../lib"
-LIB_MATHLIB="$LIB/mathlib4/lake-packages"
+LIB_MATHLIB="$LIB/mathlib4/.lake"
 export LEAN_PATH="$LIB/mathlib4/build/lib:$LIB_MATHLIB/aesop/build/lib:$LIB_MATHLIB/Qq/build/lib:$LIB_MATHLIB/std/build/lib"
 
 LEAN_PATH=$LEAN_PATH build/bin/pantograph $@
