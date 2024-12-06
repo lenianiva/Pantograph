@@ -202,12 +202,19 @@ inductive TacticResult where
   -- The given action cannot be executed in the state
   | invalidAction (message: String)
 
-/-- Executes a `TacticM` monads on this `GoalState`, collecting the errors as necessary -/
+/-- Executes a `TacticM` monad on this `GoalState`, collecting the errors as necessary -/
 protected def GoalState.tryTacticM (state: GoalState) (goal: MVarId) (tacticM: Elab.Tactic.TacticM Unit):
       Elab.TermElabM TacticResult := do
   try
     let nextState ← state.step goal tacticM
-    let newMessages ← (← getThe Core.State).messages.toList.drop (state.coreState.messages.toList.length) |>.mapM λ m => m.toString
+
+    -- Check if error messages have been generated in the core.
+    let newMessages ← (← Core.getMessageLog).toList.drop state.coreState.messages.toList.length
+      |>.filterMapM λ m => do
+        if m.severity == .error then
+          return .some $ ← m.toString
+        else
+          return .none
     if ¬ newMessages.isEmpty then
       return .failure newMessages.toArray
     return .success nextState
@@ -357,7 +364,7 @@ protected def GoalState.tryCalc (state: GoalState) (goal: MVarId) (pred: String)
       throwErrorAt pred "invalid 'calc' step, relation expected{indentExpr step}"
     if let some prevRhs := calcPrevRhs? then
       unless ← Meta.isDefEqGuarded lhs prevRhs do
-        throwErrorAt pred "invalid 'calc' step, left-hand-side is{indentD m!"{lhs} : {← Meta.inferType lhs}"}\nprevious right-hand-side is{indentD m!"{prevRhs} : {← Meta.inferType prevRhs}"}" -- "
+        throwErrorAt pred "invalid 'calc' step, left-hand-side is{indentD m!"{lhs} : {← Meta.inferType lhs}"}\nprevious right-hand-side is{indentD m!"{prevRhs} : {← Meta.inferType prevRhs}"}"
 
     -- Creates a mvar to represent the proof that the calc tactic solves the
     -- current branch
