@@ -11,8 +11,8 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
 * `env.inspect {"name": <name>, "value": <bool>}`: Show the type and package of a
   given symbol; If value flag is set, the value is printed or hidden. By default
   only the values of definitions are printed.
-* `env.save { path }`, `env.load { path }`: Save/Load the current environment
-  to/from a file
+* `env.save { "path": <fileName> }`, `env.load { "path": <fileName> }`: Save/Load the
+  current environment to/from a file
 * `options.set { key: value, ... }`: Set one or more options (not Lean options; those
   have to be set via command line arguments.), for options, see `Pantograph/Protocol.lean`
 
@@ -39,10 +39,11 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
   - `{ "goals": <names> }`: Resume the given goals
 * `goal.remove {"stateIds": [<id>]}"`: Drop the goal states specified in the list
 * `goal.print {"stateId": <id>}"`: Print a goal state
-* `goal.save{ id, path }`, `goal.load { path }`: Save/Load a goal state to/from a
-  file. The environment is not carried with the state. The user is responsible
-  to ensure the sender/receiver instances share the same environment.
-* `frontend.process { ["fileName": <fileName>",] ["file": <str>], invocations:
+* `goal.save { "id": <id>, "path": <fileName> }`, `goal.load { "path": <fileName> }`:
+  Save/Load a goal state to/from a file. The environment is not carried with the
+  state. The user is responsible to ensure the sender/receiver instances share
+  the same environment.
+* `frontend.process { ["fileName": <fileName>,] ["file": <str>], invocations:
   <bool>, sorrys: <bool> }`: Executes the Lean frontend on a file, collecting
   either the tactic invocations (`"invocations": true`) or the sorrys into goal
   states (`"sorrys": true`)
