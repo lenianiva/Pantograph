@@ -15,6 +15,16 @@ structure State where
 /-- Main state monad for executing commands -/
 abbrev MainM := ReaderT Context (StateT State Lean.CoreM)
 
+def newGoalState (goalState: GoalState) : MainM Nat := do
+  let state ← get
+  let stateId := state.nextId
+  set { state with
+    goalStates := state.goalStates.insert stateId goalState,
+    nextId := state.nextId + 1
+  }
+  return stateId
+
+
 -- HACK: For some reason writing `CommandM α := MainM (Except ... α)` disables
 -- certain monadic features in `MainM`
 abbrev CR α := Except Protocol.InteractionError α
@@ -50,6 +60,8 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     | "goal.continue" => run goal_continue
     | "goal.delete"   => run goal_delete
     | "goal.print"    => run goal_print
+    | "goal.save"     => run goal_save
+    | "goal.load"     => run goal_load
     | "frontend.process"  => run frontend_process
     | cmd =>
       let error: Protocol.InteractionError :=
@@ -62,14 +74,6 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   errorCommand := errorI "command"
   errorIndex := errorI "index"
   errorIO := errorI "io"
-  newGoalState (goalState: GoalState) : MainM Nat := do
-    let state ← get
-    let stateId := state.nextId
-    set { state with
-      goalStates := state.goalStates.insert stateId goalState,
-      nextId := state.nextId + 1
-    }
-    return stateId
   -- Command Functions
   reset (_: Protocol.Reset): MainM (CR Protocol.StatResult) := do
     let state ← get
@@ -90,10 +94,10 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     Environment.addDecl args
   env_save (args: Protocol.EnvSaveLoad): MainM (CR Protocol.EnvSaveLoadResult) := do
     let env ← Lean.MonadEnv.getEnv
-    env_pickle env args.path
+    environmentPickle env args.path
     return .ok {}
   env_load (args: Protocol.EnvSaveLoad): MainM (CR Protocol.EnvSaveLoadResult) := do
-    let (env, _) ← env_unpickle args.path
+    let (env, _) ← environmentUnpickle args.path
     Lean.setEnv env
     return .ok {}
   expr_echo (args: Protocol.ExprEcho): MainM (CR Protocol.ExprEchoResult) := do
@@ -203,11 +207,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     match nextState? with
     | .error error => return .error <| errorI "structure" error
     | .ok nextGoalState =>
-      let nextStateId := state.nextId
-      set { state with
-        goalStates := state.goalStates.insert nextStateId nextGoalState,
-        nextId := state.nextId + 1
-      }
+      let nextStateId ← newGoalState nextGoalState
       let goals ← goalSerialize nextGoalState (options := state.options)
       return .ok {
         nextStateId,
@@ -224,6 +224,16 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
       return .error $ errorIndex s!"Invalid state index {args.stateId}"
     let result ← runMetaInMainM <| goalPrint goalState state.options
     return .ok result
+  goal_save (args: Protocol.GoalSave): MainM (CR Protocol.GoalSaveResult) := do
+    let state ← get
+    let .some goalState := state.goalStates[args.id]? |
+      return .error $ errorIndex s!"Invalid state index {args.id}"
+    goalStatePickle goalState args.path
+    return .ok {}
+  goal_load (args: Protocol.GoalLoad): MainM (CR Protocol.GoalLoadResult) := do
+    let (goalState, _) ← goalStateUnpickle args.path (← Lean.MonadEnv.getEnv)
+    let id ← newGoalState goalState
+    return .ok { id }
   frontend_process (args: Protocol.FrontendProcess): MainM (CR Protocol.FrontendProcessResult) := do
     let options := (← get).options
     try
