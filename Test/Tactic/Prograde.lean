@@ -15,7 +15,7 @@ def test_define : TestT Elab.TermElabM Unit := do
       (env := ← MonadEnv.getEnv)
       (catName := `term)
       (input := "Or.inl h")
-      (fileName := filename) with
+      (fileName := ← getFileName) with
       | .ok syn => pure syn
       | .error error => throwError "Failed to parse: {error}"
     -- Apply the tactic

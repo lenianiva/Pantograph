@@ -95,19 +95,19 @@ def runTermElabMSeq (env: Environment) (termElabM: Elab.TermElabM LSpec.TestSeq)
 
 def exprToStr (e: Expr): Lean.MetaM String := toString <$> Meta.ppExpr e
 
-def strToTermSyntax [Monad m] [MonadEnv m] (s: String): m Syntax := do
+def strToTermSyntax (s: String): CoreM Syntax := do
   let .ok stx := Parser.runParserCategory
     (env := ← MonadEnv.getEnv)
     (catName := `term)
     (input := s)
-    (fileName := filename) | panic! s!"Failed to parse {s}"
+    (fileName := ← getFileName) | panic! s!"Failed to parse {s}"
   return stx
 def parseSentence (s: String): Elab.TermElabM Expr := do
   let stx ← match Parser.runParserCategory
     (env := ← MonadEnv.getEnv)
     (catName := `term)
     (input := s)
-    (fileName := filename) with
+    (fileName := ← getFileName) with
     | .ok syn => pure syn
     | .error error => throwError "Failed to parse: {error}"
   Elab.Term.elabTerm (stx := stx) .none
@@ -123,13 +123,28 @@ def mvarUserNameAndType (mvarId: MVarId): MetaM (Name × String) := do
 
 -- Monadic testing
 
-abbrev TestT := StateT LSpec.TestSeq
+abbrev TestT := StateRefT' IO.RealWorld LSpec.TestSeq
 
-def addTest [Monad m] (test: LSpec.TestSeq): TestT m Unit := do
+section Monadic
+
+variable [Monad m] [MonadLiftT (ST IO.RealWorld) m]
+
+def addTest (test: LSpec.TestSeq) : TestT m Unit := do
   set $ (← get) ++ test
 
-def runTest [Monad m] (t: TestT m Unit): m LSpec.TestSeq :=
+def checkEq [DecidableEq α] [Repr α] (desc : String) (lhs rhs : α) : TestT m Unit := do
+  addTest $ LSpec.check desc (lhs = rhs)
+def checkTrue (desc : String) (flag : Bool) : TestT m Unit := do
+  addTest $ LSpec.check desc flag
+def fail (desc : String) : TestT m Unit := do
+  addTest $ LSpec.check desc false
+
+def runTest (t: TestT m Unit): m LSpec.TestSeq :=
   Prod.snd <$> t.run LSpec.TestSeq.done
+def runTestWithResult { α } (t: TestT m α): m (α × LSpec.TestSeq) :=
+  t.run LSpec.TestSeq.done
+
+end Monadic
 
 def runTestTermElabM (env: Environment) (t: TestT Elab.TermElabM Unit):
   IO LSpec.TestSeq :=

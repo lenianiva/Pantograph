@@ -8,10 +8,7 @@ namespace Pantograph.Test.Metavar
 open Pantograph
 open Lean
 
-abbrev TestM := StateRefT LSpec.TestSeq (ReaderT Protocol.Options Elab.TermElabM)
-
-def addTest (test: LSpec.TestSeq): TestM Unit := do
-  set $ (← get) ++ test
+abbrev TestM := TestT $ ReaderT Protocol.Options Elab.TermElabM
 
 -- Tests that all delay assigned mvars are instantiated
 def test_instantiate_mvar: TestM Unit := do
@@ -31,8 +28,6 @@ def test_instantiate_mvar: TestM Unit := do
   addTest $ LSpec.check "typing" ((toString (← serializeExpressionSexp t)) =
     "((:c LE.le) (:c Nat) (:c instLENat) ((:c OfNat.ofNat) (:mv _uniq.2) (:lit 2) (:mv _uniq.3)) ((:c OfNat.ofNat) (:mv _uniq.14) (:lit 5) (:mv _uniq.15)))")
   return ()
-
-
 
 def startProof (expr: String): TestM (Option GoalState) := do
   let env ← Lean.MonadEnv.getEnv
