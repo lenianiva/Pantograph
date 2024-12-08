@@ -10,8 +10,6 @@ import Lean
 namespace Pantograph
 open Lean
 
-def filename: String := "<pantograph>"
-
 /--
 Represents an interconnected set of metavariables, or a state in proof search
  -/
@@ -73,6 +71,8 @@ protected def GoalState.metaContextOfGoal (state: GoalState) (mvarId: MVarId): O
   return { lctx := mvarDecl.lctx, localInstances := mvarDecl.localInstances }
 protected def GoalState.metaState (state: GoalState): Meta.State :=
   state.savedState.term.meta.meta
+protected def GoalState.coreState (state: GoalState): Core.SavedState :=
+  state.savedState.term.meta.core
 
 protected def GoalState.withContext (state: GoalState) (mvarId: MVarId) (m: MetaM α): MetaM α := do
   mvarId.withContext m |>.run' (← read) state.metaState
@@ -202,16 +202,27 @@ inductive TacticResult where
   -- The given action cannot be executed in the state
   | invalidAction (message: String)
 
-/-- Executes a `TacticM` monads on this `GoalState`, collecting the errors as necessary -/
+/-- Executes a `TacticM` monad on this `GoalState`, collecting the errors as necessary -/
 protected def GoalState.tryTacticM (state: GoalState) (goal: MVarId) (tacticM: Elab.Tactic.TacticM Unit):
       Elab.TermElabM TacticResult := do
   try
     let nextState ← state.step goal tacticM
+
+    -- Check if error messages have been generated in the core.
+    let newMessages ← (← Core.getMessageLog).toList.drop state.coreState.messages.toList.length
+      |>.filterMapM λ m => do
+        if m.severity == .error then
+          return .some $ ← m.toString
+        else
+          return .none
+    if ¬ newMessages.isEmpty then
+      return .failure newMessages.toArray
     return .success nextState
   catch exception =>
     return .failure #[← exception.toMessageData.toString]
 
 /-- Execute a string tactic on given state. Restores TermElabM -/
+@[export pantograph_goal_state_try_tactic_m]
 protected def GoalState.tryTactic (state: GoalState) (goal: MVarId) (tactic: String):
     Elab.TermElabM TacticResult := do
   state.restoreElabM
@@ -219,7 +230,7 @@ protected def GoalState.tryTactic (state: GoalState) (goal: MVarId) (tactic: Str
     (env := ← MonadEnv.getEnv)
     (catName := if state.isConv then `conv else `tactic)
     (input := tactic)
-    (fileName := filename) with
+    (fileName := ← getFileName) with
     | .ok stx => pure $ stx
     | .error error => return .parseError error
   state.tryTacticM goal $ Elab.Tactic.evalTactic tactic
@@ -231,7 +242,7 @@ protected def GoalState.tryAssign (state: GoalState) (goal: MVarId) (expr: Strin
     (env := ← MonadEnv.getEnv)
     (catName := `term)
     (input := expr)
-    (fileName := filename) with
+    (fileName := ← getFileName) with
     | .ok syn => pure syn
     | .error error => return .parseError error
   state.tryTacticM goal $ Tactic.evalAssign expr
@@ -245,7 +256,7 @@ protected def GoalState.tryLet (state: GoalState) (goal: MVarId) (binderName: St
     (env := ← MonadEnv.getEnv)
     (catName := `term)
     (input := type)
-    (fileName := filename) with
+    (fileName := ← getFileName) with
     | .ok syn => pure syn
     | .error error => return .parseError error
   state.tryTacticM goal $ Tactic.evalLet binderName.toName type
@@ -332,7 +343,7 @@ protected def GoalState.tryCalc (state: GoalState) (goal: MVarId) (pred: String)
     (env := state.env)
     (catName := `term)
     (input := pred)
-    (fileName := filename) with
+    (fileName := ← getFileName) with
     | .ok syn => pure syn
     | .error error => return .parseError error
   goal.checkNotAssigned `GoalState.tryCalc
@@ -353,7 +364,7 @@ protected def GoalState.tryCalc (state: GoalState) (goal: MVarId) (pred: String)
       throwErrorAt pred "invalid 'calc' step, relation expected{indentExpr step}"
     if let some prevRhs := calcPrevRhs? then
       unless ← Meta.isDefEqGuarded lhs prevRhs do
-        throwErrorAt pred "invalid 'calc' step, left-hand-side is{indentD m!"{lhs} : {← Meta.inferType lhs}"}\nprevious right-hand-side is{indentD m!"{prevRhs} : {← Meta.inferType prevRhs}"}" -- "
+        throwErrorAt pred "invalid 'calc' step, left-hand-side is{indentD m!"{lhs} : {← Meta.inferType lhs}"}\nprevious right-hand-side is{indentD m!"{prevRhs} : {← Meta.inferType prevRhs}"}"
 
     -- Creates a mvar to represent the proof that the calc tactic solves the
     -- current branch
