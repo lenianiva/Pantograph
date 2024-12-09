@@ -9,7 +9,7 @@ namespace Lean.Elab
 
 private def elaboratorToString : Name → String
   | .anonymous => ""
-  | n => s!"[{n}]"
+  | n => s!"⟨{n}⟩ "
 private def indent (s : String) : String := "\n".intercalate $ s.splitOn "\n" |>.map ("\t" ++ .)
 
 /-- The `Syntax` for a `Lean.Elab.Info`, if there is one. -/
@@ -39,14 +39,14 @@ def ContextInfo.ppExpr (ctx : ContextInfo) (lctx : LocalContext) (e : Expr) : IO
 
 def CommandInfo.toString (info : CommandInfo) (ctx : ContextInfo) : IO String := do
   let stx := (← ctx.ppSyntax {} info.stx).pretty
-  return s!"{stx}\n{elaboratorToString info.elaborator}"
+  return s!"{elaboratorToString info.elaborator}\n{stx}"
 
 def TermInfo.toString (info : TermInfo) (ctx : ContextInfo) : IO String := do
   let stx := (← ctx.ppSyntax info.lctx info.stx).pretty
-  let expectedType ← info.expectedType?.mapM fun ty => do
-    pure s!": {(← ctx.ppExpr info.lctx ty).pretty}"
+  let expectedType := (← info.expectedType?.mapM fun ty => do
+    pure s!": {(← ctx.ppExpr info.lctx ty).pretty}").getD ""
   let expr := (← ctx.ppExpr info.lctx info.expr).pretty
-  return s!"{stx}\n{elaboratorToString info.elaborator}{expr}{expectedType}"
+  return s!"{elaboratorToString info.elaborator}{expr}{expectedType}\n{stx}"
 
 /-- Find the name for the outermost `Syntax` in this `TacticInfo`. -/
 def TacticInfo.name? (t : TacticInfo) : Option Name :=
@@ -75,7 +75,7 @@ def TacticInfo.pp (info : TacticInfo) (ctx : ContextInfo) : IO Format :=
 def TacticInfo.toString (i : TacticInfo) (ctx : ContextInfo) : IO String := do
   let name := i.name?
   let stx := Format.pretty (← i.pp ctx)
-  return s!"{stx}\n{name} {stx}"
+  return s!"{name}\n{stx}"
 
 /--
 Keep `.node` nodes and `.hole` nodes satisfying predicates.
@@ -102,16 +102,24 @@ partial def InfoTree.findAllInfo (t : InfoTree) (context?: Option Elab.ContextIn
   | _ => []
 
 @[export pantograph_infotree_to_string_m]
-partial def InfoTree.toString (t : InfoTree) (ctx?: Option Elab.ContextInfo) : IO String := do
+partial def InfoTree.toString (t : InfoTree) (ctx?: Option Elab.ContextInfo := .none) : IO String := do
   match t with
   | .context ctx t => t.toString (ctx.mergeIntoOuter? ctx?)
   | .node info children =>
     if let some ctx := ctx? then
-      let node : Option String ← match info with
-      | .ofTermInfo    info => some <$> (do pure <| s!"[term] {(← info.toString ctx)}")
-      | .ofCommandInfo info => some <$> (do pure <| s!"[command] {(← info.toString ctx)}")
-      | .ofTacticInfo  info => some <$> (do pure <| s!"[tactic] {(← info.toString ctx)}")
-      | _                   => pure none
+      let node : String ← match info with
+      | .ofTermInfo    info => pure s!"[term] {(← info.toString ctx)}"
+      | .ofCommandInfo info => pure s!"[command] {(← info.toString ctx)}"
+      | .ofTacticInfo  info => pure s!"[tactic] {(← info.toString ctx)}"
+      | .ofMacroExpansionInfo _ => pure "[macro_exp]"
+      | .ofOptionInfo _ => pure "[option]"
+      | .ofFieldInfo _ => pure "[field]"
+      | .ofCompletionInfo _ => pure "[completion]"
+      | .ofUserWidgetInfo _ => pure "[user_widget]"
+      | .ofCustomInfo _ => pure "[custom]"
+      | .ofFVarAliasInfo _ => pure "[fvar]"
+      | .ofFieldRedeclInfo _ => pure "[field_redecl]"
+      | .ofOmissionInfo _ => pure "[omission]"
       let children := "\n".intercalate (← children.toList.mapM λ t' => do pure $ indent $ ← t'.toString ctx)
       return s!"{node}\n{children}"
     else throw <| IO.userError "No `ContextInfo` available."
