@@ -103,7 +103,7 @@ partial def InfoTree.findAllInfo
   | .context inner t => findAllInfo t (inner.mergeIntoOuter? context?) haltOnMatch pred
   | .node i children  =>
     let head := if pred i then [(i, context?, children)] else []
-    let tail := if haltOnMatch then [] else children.toList.bind (fun t => findAllInfo t context? haltOnMatch pred)
+    let tail := if haltOnMatch ∧ !head.isEmpty then [] else children.toList.bind (fun t => findAllInfo t context? haltOnMatch pred)
     head ++ tail
   | _ => []
 
@@ -118,7 +118,7 @@ partial def InfoTree.findAllInfoM [Monad m]
   | .context inner t => t.findAllInfoM (inner.mergeIntoOuter? context?) haltOnMatch pred
   | .node i children  =>
     let head := if ← pred i context? then [(i, context?, children)] else []
-    let tail := if haltOnMatch then pure [] else children.toList.mapM (fun t => t.findAllInfoM context? haltOnMatch pred)
+    let tail := if haltOnMatch ∧ !head.isEmpty then pure [] else children.toList.mapM (fun t => t.findAllInfoM context? haltOnMatch pred)
     return head ++ (← tail).join
   | _ => return []
 

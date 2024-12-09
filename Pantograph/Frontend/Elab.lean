@@ -123,8 +123,6 @@ private def collectSorrysInTree (t : Elab.InfoTree) : IO (List InfoWithContext) 
 def collectSorrys (step: CompilationStep) : IO (List InfoWithContext) := do
   return (← step.trees.mapM collectSorrysInTree).join
 
-
-
 /--
 Since we cannot directly merge `MetavarContext`s, we have to get creative. This
 function duplicates frozen mvars in term and tactic info nodes, and add them to

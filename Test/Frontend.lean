@@ -10,8 +10,6 @@ def collectSorrysFromSource (source: String) : MetaM (List GoalState) := do
   let filename := "<anonymous>"
   let (context, state) ← do Frontend.createContextStateFromFile source filename (← getEnv) {}
   let m := Frontend.mapCompilationSteps λ step => do
-    for tree in step.trees do
-      IO.println s!"{← tree.toString}"
     return (step.before, ← Frontend.collectSorrys step)
   let li ← m.run context |>.run' state
   let goalStates ← li.filterMapM λ (env, sorrys) => withEnv env do
