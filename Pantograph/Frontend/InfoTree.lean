@@ -93,13 +93,34 @@ partial def InfoTree.filter (p : Info → Bool) (m : MVarId → Bool := fun _ =>
   | .hole mvar => if m mvar then [.hole mvar] else []
 
 /-- Analogue of `Lean.Elab.InfoTree.findInfo?`, but that returns a list of all results. -/
-partial def InfoTree.findAllInfo (t : InfoTree) (context?: Option Elab.ContextInfo) (pred : Elab.Info → Bool) :
-    List (Elab.Info × Option Elab.ContextInfo × PersistentArray Elab.InfoTree) :=
+partial def InfoTree.findAllInfo
+    (t : InfoTree)
+    (context?: Option Elab.ContextInfo)
+    (haltOnMatch : Bool := false)
+    (pred : Elab.Info → Bool)
+    : List (Elab.Info × Option Elab.ContextInfo × PersistentArray Elab.InfoTree) :=
   match t with
-  | .context inner t => findAllInfo t (inner.mergeIntoOuter? context?) pred
+  | .context inner t => findAllInfo t (inner.mergeIntoOuter? context?) haltOnMatch pred
   | .node i children  =>
-      (if pred i then [(i, context?, children)] else []) ++ children.toList.bind (fun t => findAllInfo t context? pred)
+    let head := if pred i then [(i, context?, children)] else []
+    let tail := if haltOnMatch then [] else children.toList.bind (fun t => findAllInfo t context? haltOnMatch pred)
+    head ++ tail
   | _ => []
+
+/-- Monadic analogue of `findAllInfo` -/
+partial def InfoTree.findAllInfoM [Monad m]
+    (t : InfoTree)
+    (context?: Option Elab.ContextInfo)
+    (haltOnMatch : Bool)
+    (pred : Elab.Info → Option Elab.ContextInfo → m Bool)
+    : m (List (Elab.Info × Option Elab.ContextInfo × PersistentArray Elab.InfoTree)) := do
+  match t with
+  | .context inner t => t.findAllInfoM (inner.mergeIntoOuter? context?) haltOnMatch pred
+  | .node i children  =>
+    let head := if ← pred i context? then [(i, context?, children)] else []
+    let tail := if haltOnMatch then pure [] else children.toList.mapM (fun t => t.findAllInfoM context? haltOnMatch pred)
+    return head ++ (← tail).join
+  | _ => return []
 
 @[export pantograph_infotree_to_string_m]
 partial def InfoTree.toString (t : InfoTree) (ctx?: Option Elab.ContextInfo := .none) : IO String := do

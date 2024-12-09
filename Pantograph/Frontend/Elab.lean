@@ -67,7 +67,7 @@ end TacticInvocation
 /-- Return all `TacticInfo` nodes in an `InfoTree` corresponding to tactics,
 each equipped with its relevant `ContextInfo`, and any children info trees. -/
 private def collectTacticNodes (t : Elab.InfoTree) : List TacticInvocation :=
-  let infos := t.findAllInfo none fun i => match i with
+  let infos := t.findAllInfo none false fun i => match i with
     | .ofTacticInfo _ => true
     | _ => false
   infos.filterMap fun p => match p with
@@ -101,21 +101,27 @@ structure InfoWithContext where
   info: Elab.Info
   context?: Option Elab.ContextInfo := .none
 
-private def collectSorrysInTree (t : Elab.InfoTree) : List InfoWithContext :=
-  let infos := t.findAllInfo none fun i => match i with
-    | .ofTermInfo { expectedType?, expr, stx, .. } =>
-      expr.isSorry ∧ expectedType?.isSome ∧ stx.isOfKind `Lean.Parser.Term.sorry
+private def collectSorrysInTree (t : Elab.InfoTree) : IO (List InfoWithContext) := do
+  let infos ← t.findAllInfoM none true fun i ctx? => match i with
+    | .ofTermInfo { expectedType?, expr, stx, lctx, .. } => do
+      let .some expectedType := expectedType? | return false
+      let .some ctx := ctx? | return false
+      if expr.isSorry ∧ stx.isOfKind `Lean.Parser.Term.sorry then
+        return true
+      ctx.runMetaM lctx do
+        let type ← Meta.inferType expr
+        Bool.not <$> Meta.isDefEq type expectedType
     | .ofTacticInfo { stx, goalsBefore, .. } =>
       -- The `sorry` term is distinct from the `sorry` tactic
       let isSorry := stx.isOfKind `Lean.Parser.Tactic.tacticSorry
-      isSorry ∧ !goalsBefore.isEmpty
-    | _ => false
-  infos.map fun (info, context?, _) => { info, context? }
+      return isSorry ∧ !goalsBefore.isEmpty
+    | _ => return false
+  return infos.map fun (info, context?, _) => { info, context? }
 
 -- NOTE: Plural deliberately not spelled "sorries"
 @[export pantograph_frontend_collect_sorrys_m]
-def collectSorrys (step: CompilationStep) : List InfoWithContext :=
-  step.trees.bind collectSorrysInTree
+def collectSorrys (step: CompilationStep) : IO (List InfoWithContext) := do
+  return (← step.trees.mapM collectSorrysInTree).join
 
 
 

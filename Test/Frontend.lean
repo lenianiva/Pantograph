@@ -10,7 +10,9 @@ def collectSorrysFromSource (source: String) : MetaM (List GoalState) := do
   let filename := "<anonymous>"
   let (context, state) ← do Frontend.createContextStateFromFile source filename (← getEnv) {}
   let m := Frontend.mapCompilationSteps λ step => do
-    return (step.before, Frontend.collectSorrys step)
+    for tree in step.trees do
+      IO.println s!"{← tree.toString}"
+    return (step.before, ← Frontend.collectSorrys step)
   let li ← m.run context |>.run' state
   let goalStates ← li.filterMapM λ (env, sorrys) => withEnv env do
     if sorrys.isEmpty then
@@ -177,6 +179,13 @@ example (n: Nat) : mystery n + 1 = n + 2 := sorry
     }
   ])
 
+def test_capture_type_mismatch : TestT MetaM Unit := do
+  let input := "
+def mystery : Nat := true
+  "
+  let goalStates ← (collectSorrysFromSource input).run' {}
+  let [goalState] := goalStates | panic! s!"Incorrect number of states: {goalStates.length}"
+
 
 def suite (env : Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
@@ -185,6 +194,7 @@ def suite (env : Environment): List (String × IO LSpec.TestSeq) :=
     ("sorry_in_induction", test_sorry_in_induction),
     ("sorry_in_coupled", test_sorry_in_coupled),
     ("environment_capture", test_environment_capture),
+    ("capture_type_mismatch", test_capture_type_mismatch),
   ]
   tests.map (fun (name, test) => (name, runMetaMSeq env $ runTest test))
 

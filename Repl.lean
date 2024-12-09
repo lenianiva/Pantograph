@@ -257,10 +257,10 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
             pure $ .some invocations
           else
             pure .none
-        let sorrys := if args.sorrys then
+        let sorrys ← if args.sorrys then
             Frontend.collectSorrys step
           else
-            []
+            pure []
         let messages ← step.messageStrings
         return (step.before, boundary, invocations?, sorrys, messages)
       let li ← frontendM.run context |>.run' state
