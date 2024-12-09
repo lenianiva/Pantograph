@@ -110,7 +110,7 @@ private def collectSorrysInTree (t : Elab.InfoTree) : IO (List InfoWithContext) 
         return true
       ctx.runMetaM lctx do
         let type ← Meta.inferType expr
-        Bool.not <$> Meta.isDefEq type expectedType
+        Bool.not <$> Meta.isExprDefEqGuarded type expectedType
     | .ofTacticInfo { stx, goalsBefore, .. } =>
       -- The `sorry` term is distinct from the `sorry` tactic
       let isSorry := stx.isOfKind `Lean.Parser.Tactic.tacticSorry
