@@ -271,12 +271,16 @@ structure GoalDeleteResult where
 
 structure GoalPrint where
   stateId: Nat
+  -- Print values of extra mvars
+  extraMVars?: Option (Array String) := .none
   deriving Lean.FromJson
 structure GoalPrintResult where
   -- The root expression
   root?: Option Expression := .none
   -- The filling expression of the parent goal
   parent?: Option Expression
+
+  extraMVars: Array Expression := #[]
   deriving Lean.ToJson
 
 -- Diagnostic Options, not available in REPL

@@ -138,16 +138,22 @@ def goalSerialize (state: GoalState) (options: @&Protocol.Options): CoreM (Array
   runMetaM <| state.serializeGoals (parent := .none) options
 
 @[export pantograph_goal_print_m]
-def goalPrint (state: GoalState) (options: @&Protocol.Options): CoreM Protocol.GoalPrintResult :=
+def goalPrint (state: GoalState) (extraMVars : Array String) (options: @&Protocol.Options): CoreM Protocol.GoalPrintResult :=
   runMetaM do
     state.restoreMetaM
     return {
-      root? := ← state.rootExpr?.mapM (λ expr =>
+      root? := ← state.rootExpr?.mapM λ expr =>
         state.withRootContext do
-          serializeExpression options (← instantiateAll expr)),
-      parent? := ← state.parentExpr?.mapM (λ expr =>
+          serializeExpression options (← instantiateAll expr),
+      parent? := ← state.parentExpr?.mapM λ expr =>
         state.withParentContext do
-          serializeExpression options (← instantiateAll expr)),
+          serializeExpression options (← instantiateAll expr),
+      extraMVars := ← extraMVars.mapM λ mvarId => do
+        let mvarId: MVarId := { name := mvarId.toName }
+        let .some _ ← mvarId.findDecl? | return {}
+        state.withContext mvarId do
+          let .some expr ← getExprMVarAssignment? mvarId | return {}
+          serializeExpression options (← instantiateAll expr),
     }
 
 @[export pantograph_goal_tactic_m]

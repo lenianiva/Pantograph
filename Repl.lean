@@ -222,7 +222,8 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     let state ← get
     let .some goalState := state.goalStates[args.stateId]? |
       return .error $ errorIndex s!"Invalid state index {args.stateId}"
-    let result ← runMetaInMainM <| goalPrint goalState state.options
+    let extraMVars := args.extraMVars?.getD #[]
+    let result ← runMetaInMainM <| goalPrint goalState extraMVars state.options
     return .ok result
   goal_save (args: Protocol.GoalSave): MainM (CR Protocol.GoalSaveResult) := do
     let state ← get
