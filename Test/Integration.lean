@@ -222,6 +222,7 @@ def test_frontend_process_sorry : Test :=
          boundary := (solved.utf8ByteSize, solved.utf8ByteSize + withSorry.utf8ByteSize),
          goalStateId? := .some 0,
          goals := #[goal1],
+         goalSrcBoundaries := #[(57, 62)],
          messages := #["<anonymous>:2:0: warning: declaration uses 'sorry'\n"],
        }],
     }: Protocol.FrontendProcessResult),
