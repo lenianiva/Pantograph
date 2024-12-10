@@ -2,6 +2,7 @@
 import Lean.Elab.Import
 import Lean.Elab.Command
 import Lean.Elab.InfoTree
+import Lean.DeclarationRange
 
 import Pantograph.Frontend.Basic
 import Pantograph.Frontend.MetaTranslate
@@ -128,7 +129,7 @@ Since we cannot directly merge `MetavarContext`s, we have to get creative. This
 function duplicates frozen mvars in term and tactic info nodes, and add them to
 the current `MetavarContext`.
 -/
-@[export pantograph_frontend_sorrys_to_goal_state]
+@[export pantograph_frontend_sorrys_to_goal_state_m]
 def sorrysToGoalState (sorrys : List InfoWithContext) : MetaM GoalState := do
   assert! !sorrys.isEmpty
   let goalsM := sorrys.mapM λ i => do
@@ -147,5 +148,17 @@ def sorrysToGoalState (sorrys : List InfoWithContext) : MetaM GoalState := do
   GoalState.createFromMVars goals root
 
 
+@[export pantograph_frontend_collect_new_defined_constants_m]
+def collectNewDefinedConstants (step : CompilationStep) : IO (List Name) := do
+  step.after.constants.map₂.foldlM (λ acc name _ => do
+    if step.before.contains name then
+      return acc
+    let coreM : CoreM Bool := Option.isSome <$> findDeclarationRanges? name
+    let hasRange ← coreM.run' { fileName := step.fileName, fileMap := step.fileMap } { env := step.after } |>.toBaseIO
+    match hasRange with
+    | .ok true => return name :: acc
+    | .ok false => return acc
+    | .error e => throw $ IO.userError (← e.toMessageData.toString)
+    ) []
 
 end Pantograph.Frontend

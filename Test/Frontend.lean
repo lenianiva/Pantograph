@@ -184,6 +184,31 @@ def mystery : Nat := true
   let goalStates ← (collectSorrysFromSource input).run' {}
   let [goalState] := goalStates | panic! s!"Incorrect number of states: {goalStates.length}"
 
+def collectNewConstants (source: String) : MetaM (List (List Name)) := do
+  let filename := "<anonymous>"
+  let (context, state) ← do Frontend.createContextStateFromFile source filename (← getEnv) {}
+  let m := Frontend.mapCompilationSteps λ step => do
+    Frontend.collectNewDefinedConstants step
+  m.run context |>.run' state
+
+def test_collect_one_constant : TestT MetaM Unit := do
+  let input := "
+def mystery : Nat := 123
+  "
+  let names ← collectNewConstants input
+  checkEq "constants" names [[`mystery]]
+def test_collect_one_theorem : TestT MetaM Unit := do
+  let input := "
+theorem mystery [SizeOf α] (as : List α) (i : Fin as.length) : sizeOf (as.get i) < sizeOf as := by
+  match as, i with
+  | a::as, ⟨0, _⟩  => simp_arith [get]
+  | a::as, ⟨i+1, h⟩ =>
+    have ih := sizeOf_get as ⟨i, Nat.le_of_succ_le_succ h⟩
+    apply Nat.lt_trans ih
+    simp_arith
+  "
+  let names ← collectNewConstants input
+  checkEq "constants" names [[`mystery]]
 
 def suite (env : Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
@@ -193,6 +218,8 @@ def suite (env : Environment): List (String × IO LSpec.TestSeq) :=
     ("sorry_in_coupled", test_sorry_in_coupled),
     ("environment_capture", test_environment_capture),
     ("capture_type_mismatch", test_capture_type_mismatch),
+    ("collect_one_constant", test_collect_one_constant),
+    ("collect_one_theorem", test_collect_one_theorem),
   ]
   tests.map (fun (name, test) => (name, runMetaMSeq env $ runTest test))
 
