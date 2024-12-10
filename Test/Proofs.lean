@@ -737,9 +737,19 @@ def test_tactic_failure_synthesize_placeholder : TestM Unit := do
       return ()
 
   let tactic := "simpa [h] using And.imp_left h _"
-  let .failure messages ← state1.tacticOn 0 tactic | addTest $ assertUnreachable s!"{tactic} should fail"
-  let message := s!"<Pantograph>:0:31: error: don't know how to synthesize placeholder\ncontext:\np q r : Prop\nh : p → q\n⊢ p ∧ r\n"
-  checkEq s!"{tactic} fails" messages #[message]
+  let state2 ← match ← state1.tacticOn 0 tactic with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+
+  checkEq tactic ((← state2.serializeGoals).map (·.devolatilize))  #[
+    buildGoal [("p", "Prop"), ("q", "Prop"), ("r", "Prop"), ("h", "p → q")] "p ∧ r"
+  ]
+
+  --let .failure messages ← state1.tacticOn 0 tactic | addTest $ assertUnreachable s!"{tactic} should fail"
+  --let message := s!"<Pantograph>:0:31: error: don't know how to synthesize placeholder\ncontext:\np q r : Prop\nh : p → q\n⊢ p ∧ r\n"
+  --checkEq s!"{tactic} fails" messages #[message]
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
