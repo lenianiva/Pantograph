@@ -30,6 +30,13 @@ end Lean.PersistentArray
 
 namespace Pantograph.Frontend
 
+@[export pantograph_frontend_stx_byte_range]
+def stxByteRange (stx : Syntax) : String.Pos × String.Pos :=
+  let pos := stx.getPos?.getD 0
+  let endPos := stx.getTailPos?.getD 0
+  (pos, endPos)
+
+
 abbrev FrontendM := Elab.Frontend.FrontendM
 
 structure CompilationStep where

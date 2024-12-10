@@ -15,8 +15,8 @@ def collectSorrysFromSource (source: String) : MetaM (List GoalState) := do
   let goalStates ← li.filterMapM λ (env, sorrys) => withEnv env do
     if sorrys.isEmpty then
       return .none
-    let goalState ← Frontend.sorrysToGoalState sorrys
-    return .some goalState
+    let { state, .. } ← Frontend.sorrysToGoalState sorrys
+    return .some state
   return goalStates
 
 def test_multiple_sorrys_in_proof : TestT MetaM Unit := do

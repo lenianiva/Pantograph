@@ -129,28 +129,37 @@ private def collectSorrysInTree (t : Elab.InfoTree) : IO (List InfoWithContext) 
 def collectSorrys (step: CompilationStep) : IO (List InfoWithContext) := do
   return (← step.trees.mapM collectSorrysInTree).join
 
+structure AnnotatedGoalState where
+  state : GoalState
+  srcBoundaries : List (String.Pos × String.Pos)
+
 /--
 Since we cannot directly merge `MetavarContext`s, we have to get creative. This
 function duplicates frozen mvars in term and tactic info nodes, and add them to
 the current `MetavarContext`.
 -/
 @[export pantograph_frontend_sorrys_to_goal_state_m]
-def sorrysToGoalState (sorrys : List InfoWithContext) : MetaM GoalState := do
+def sorrysToGoalState (sorrys : List InfoWithContext) : MetaM AnnotatedGoalState := do
   assert! !sorrys.isEmpty
   let goalsM := sorrys.mapM λ i => do
     match i.info with
     | .ofTermInfo termInfo  => do
       let mvarId ← MetaTranslate.translateMVarFromTermInfo termInfo i.context?
-      return [mvarId]
+      return [(mvarId, stxByteRange termInfo.stx)]
     | .ofTacticInfo tacticInfo => do
-      MetaTranslate.translateMVarFromTacticInfoBefore tacticInfo i.context?
+      let mvarIds ← MetaTranslate.translateMVarFromTacticInfoBefore tacticInfo i.context?
+      let range := stxByteRange tacticInfo.stx
+      return mvarIds.map (·, range)
     | _ => panic! "Invalid info"
-  let goals := List.join (← goalsM.run {} |>.run' {})
+  let annotatedGoals := List.join (← goalsM.run {} |>.run' {})
+  let goals := annotatedGoals.map Prod.fst
+  let srcBoundaries := annotatedGoals.map Prod.snd
   let root := match goals with
     | [] => panic! "No MVars generated"
     | [g] => g
     | _ => { name := .anonymous }
-  GoalState.createFromMVars goals root
+  let state ← GoalState.createFromMVars goals root
+  return { state, srcBoundaries }
 
 
 @[export pantograph_frontend_collect_new_defined_constants_m]

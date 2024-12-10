@@ -329,6 +329,8 @@ structure CompilationUnit where
   invocations?: Option (List InvokedTactic) := .none
   goalStateId?: Option Nat := .none
   goals: Array Goal := #[]
+  -- Code segments which generated the goals
+  goalSrcBoundaries: Array (Nat × Nat) := #[]
   messages: Array String := #[]
   deriving Lean.ToJson
 structure FrontendProcessResult where

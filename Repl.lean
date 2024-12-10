@@ -265,18 +265,19 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
         return (step.before, boundary, invocations?, sorrys, messages)
       let li ← frontendM.run context |>.run' state
       let units ← li.mapM λ (env, boundary, invocations?, sorrys, messages) => Lean.withEnv env do
-        let (goalStateId?, goals) ← if sorrys.isEmpty then do
-            pure (.none, #[])
+        let (goalStateId?, goals, goalSrcBoundaries) ← if sorrys.isEmpty then do
+            pure (.none, #[], #[])
           else do
-            let goalState ← runMetaInMainM $ Frontend.sorrysToGoalState sorrys
-            let stateId ← newGoalState goalState
-            let goals ← goalSerialize goalState options
-            pure (.some stateId, goals)
+            let { state, srcBoundaries } ← runMetaInMainM $ Frontend.sorrysToGoalState sorrys
+            let stateId ← newGoalState state
+            let goals ← goalSerialize state options
+            pure (.some stateId, goals, srcBoundaries.toArray.map (λ (b, e) => (b.byteIdx, e.byteIdx)))
         return {
           boundary,
           invocations?,
           goalStateId?,
           goals,
+          goalSrcBoundaries,
           messages,
         }
       return .ok { units }
