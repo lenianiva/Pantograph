@@ -1,4 +1,3 @@
-/- Adapted from https://github.com/semorrison/lean-training-data -/
 import Lean.Elab.Import
 import Lean.Elab.Command
 import Lean.Elab.InfoTree
@@ -16,6 +15,7 @@ namespace Pantograph.Frontend
 
 -- Info tree filtering functions
 
+/- Adapted from lean-training-data -/
 structure TacticInvocation where
   info : Elab.TacticInfo
   ctx : Elab.ContextInfo
@@ -107,10 +107,12 @@ structure InfoWithContext where
 private def collectSorrysInTree (t : Elab.InfoTree) : IO (List InfoWithContext) := do
   let infos ← t.findAllInfoM none fun i ctx? => match i with
     | .ofTermInfo { expectedType?, expr, stx, lctx, .. } => do
-      let .some expectedType := expectedType? | return (false, true)
       let .some ctx := ctx? | return (false, true)
       if expr.isSorry ∧ stx.isOfKind `Lean.Parser.Term.sorry then
+        if expectedType?.isNone then
+          throw $ .userError "Sorry of indeterminant type is not allowed"
         return (true, false)
+      let .some expectedType := expectedType? | return (false, true)
       let typeMatch ← ctx.runMetaM lctx do
         let type ← Meta.inferType expr
         Meta.isExprDefEqGuarded type expectedType
