@@ -87,9 +87,11 @@ def collectTacticsFromCompilationStep (step : CompilationStep) : IO (List Protoc
   tactics.mapM λ invocation => do
     let goalBefore := (Format.joinSep (← invocation.goalState) "\n").pretty
     let goalAfter := (Format.joinSep (← invocation.goalStateAfter) "\n").pretty
-    let tactic ← invocation.ctx.runMetaM {} do
-      let t ← PrettyPrinter.ppTactic ⟨invocation.info.stx⟩
-      return t.pretty
+    let tactic ← invocation.ctx.runMetaM {} <| Meta.withMCtx invocation.info.mctxBefore do
+      return (← invocation.ctx.ppSyntax {} invocation.info.stx).pretty
+      -- FIXME: Why does this not work? There are problems with `term.pseudo.antiquot`
+      --PrettyPrinter.ppTactic ⟨invocation.info.stx⟩
+      --return t.pretty
     let usedConstants := invocation.usedConstants.toArray.map λ n => n.toString
     return {
       goalBefore,
