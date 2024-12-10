@@ -262,9 +262,17 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           else
             pure []
         let messages ← step.messageStrings
-        return (step.before, boundary, invocations?, sorrys, messages)
+        let newConstants ← if args.newConstants then
+            Frontend.collectNewDefinedConstants step
+          else
+            pure []
+        return (step.before, boundary, invocations?, sorrys, messages, newConstants)
       let li ← frontendM.run context |>.run' state
-      let units ← li.mapM λ (env, boundary, invocations?, sorrys, messages) => Lean.withEnv env do
+      let units ← li.mapM λ (env, boundary, invocations?, sorrys, messages, newConstants) => Lean.withEnv env do
+        let newConstants := if args.newConstants then
+            .some $ newConstants.toArray.map λ name => name.toString
+          else
+            .none
         let (goalStateId?, goals, goalSrcBoundaries) ← if sorrys.isEmpty then do
             pure (.none, #[], #[])
           else do
@@ -279,6 +287,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           goals,
           goalSrcBoundaries,
           messages,
+          newConstants,
         }
       return .ok { units }
     catch e =>

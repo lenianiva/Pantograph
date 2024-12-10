@@ -312,6 +312,8 @@ structure FrontendProcess where
   invocations: Bool := false
   -- If set to true, collect `sorry`s
   sorrys: Bool := false
+  -- If set to true, extract new constants
+  newConstants: Bool := false
   deriving Lean.FromJson
 structure InvokedTactic where
   goalBefore: String
@@ -332,6 +334,7 @@ structure CompilationUnit where
   -- Code segments which generated the goals
   goalSrcBoundaries: Array (Nat × Nat) := #[]
   messages: Array String := #[]
+  newConstants: Option (Array String) := .none
   deriving Lean.ToJson
 structure FrontendProcessResult where
   units: List CompilationUnit

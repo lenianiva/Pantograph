@@ -174,6 +174,7 @@ def test_frontend_process : Test :=
         ("file", .str file),
         ("invocations", .bool true),
         ("sorrys", .bool false),
+        ("newConstants", .bool false),
       ]
      ({
        units := [{
@@ -214,6 +215,7 @@ def test_frontend_process_sorry : Test :=
         ("file", .str file),
         ("invocations", .bool false),
         ("sorrys", .bool true),
+        ("newConstants", .bool false),
       ]
      ({
        units := [{
