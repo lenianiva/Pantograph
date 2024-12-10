@@ -179,10 +179,19 @@ example (n: Nat) : mystery n + 1 = n + 2 := sorry
 
 def test_capture_type_mismatch : TestT MetaM Unit := do
   let input := "
-def mystery : Nat := true
+def mystery (k: Nat) : Nat := true
   "
   let goalStates ← (collectSorrysFromSource input).run' {}
   let [goalState] := goalStates | panic! s!"Incorrect number of states: {goalStates.length}"
+  checkEq "goals" ((← goalState.serializeGoals (options := {})).map (·.devolatilize)) #[
+    {
+      target := { pp? := "Nat" },
+      vars := #[{
+         userName := "k",
+         type? := .some { pp? := "Nat" },
+      }],
+    }
+  ]
 
 def collectNewConstants (source: String) : MetaM (List (List Name)) := do
   let filename := "<anonymous>"

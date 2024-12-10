@@ -107,18 +107,18 @@ partial def InfoTree.findAllInfo
     head ++ tail
   | _ => []
 
-/-- Monadic analogue of `findAllInfo` -/
+/-- Monadic analogue of `findAllInfo`, but predicate controls whether to recurse. -/
 partial def InfoTree.findAllInfoM [Monad m]
     (t : InfoTree)
     (context?: Option Elab.ContextInfo)
-    (haltOnMatch : Bool)
-    (pred : Elab.Info → Option Elab.ContextInfo → m Bool)
+    (pred : Elab.Info → Option Elab.ContextInfo → m (Bool × Bool))
     : m (List (Elab.Info × Option Elab.ContextInfo × PersistentArray Elab.InfoTree)) := do
   match t with
-  | .context inner t => t.findAllInfoM (inner.mergeIntoOuter? context?) haltOnMatch pred
+  | .context inner t => t.findAllInfoM (inner.mergeIntoOuter? context?) pred
   | .node i children  =>
-    let head := if ← pred i context? then [(i, context?, children)] else []
-    let tail := if haltOnMatch ∧ !head.isEmpty then pure [] else children.toList.mapM (fun t => t.findAllInfoM context? haltOnMatch pred)
+    let (flagCollect, flagRecurse) ← pred i context?
+    let head := if flagCollect then [(i, context?, children)] else []
+    let tail := if ¬ flagRecurse then pure [] else children.toList.mapM (fun t => t.findAllInfoM context? pred)
     return head ++ (← tail).join
   | _ => return []
 

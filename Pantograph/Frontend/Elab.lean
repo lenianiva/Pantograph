@@ -103,20 +103,25 @@ structure InfoWithContext where
   context?: Option Elab.ContextInfo := .none
 
 private def collectSorrysInTree (t : Elab.InfoTree) : IO (List InfoWithContext) := do
-  let infos ← t.findAllInfoM none true fun i ctx? => match i with
+  let infos ← t.findAllInfoM none fun i ctx? => match i with
     | .ofTermInfo { expectedType?, expr, stx, lctx, .. } => do
-      let .some expectedType := expectedType? | return false
-      let .some ctx := ctx? | return false
+      let .some expectedType := expectedType? | return (false, true)
+      let .some ctx := ctx? | return (false, true)
       if expr.isSorry ∧ stx.isOfKind `Lean.Parser.Term.sorry then
-        return true
-      ctx.runMetaM lctx do
+        return (true, false)
+      let typeMatch ← ctx.runMetaM lctx do
         let type ← Meta.inferType expr
-        Bool.not <$> Meta.isExprDefEqGuarded type expectedType
+        Meta.isExprDefEqGuarded type expectedType
+      return match typeMatch, expr.hasSorry with
+      | false, true => (true, false) -- Types mismatch but has sorry -> collect, halt
+      | false, false => (true, false) -- Types mistmatch but no sorry -> collect, halt
+      | true, true => (false, true) -- Types match but has sorry -> continue
+      | true, false => (false, false) -- Types match but no sorries -> halt
     | .ofTacticInfo { stx, goalsBefore, .. } =>
       -- The `sorry` term is distinct from the `sorry` tactic
       let isSorry := stx.isOfKind `Lean.Parser.Tactic.tacticSorry
-      return isSorry ∧ !goalsBefore.isEmpty
-    | _ => return false
+      return (isSorry ∧ !goalsBefore.isEmpty, ¬ isSorry)
+    | _ => return (false, true)
   return infos.map fun (info, context?, _) => { info, context? }
 
 -- NOTE: Plural deliberately not spelled "sorries"
