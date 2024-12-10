@@ -162,9 +162,7 @@ def collectTacticsFromCompilationStep (step : CompilationStep) : IO (List Protoc
   tactics.mapM λ invocation => do
     let goalBefore := (Format.joinSep (← invocation.goalState) "\n").pretty
     let goalAfter := (Format.joinSep (← invocation.goalStateAfter) "\n").pretty
-    let tactic ← invocation.ctx.runMetaM {} do
-      let t ← PrettyPrinter.ppTactic ⟨invocation.info.stx⟩
-      return t.pretty
+    let tactic := (← invocation.pp).pretty
     let usedConstants := invocation.usedConstants.toArray.map λ n => n.toString
     return {
       goalBefore,

@@ -177,6 +177,26 @@ example (n: Nat) : mystery n + 1 = n + 2 := sorry
     }
   ])
 
+def collectInvocationsFromSource (source: String) : MetaM (List (List Protocol.InvokedTactic)) := do
+  let filename := "<anonymous>"
+  let (context, state) ← do Frontend.createContextStateFromFile source filename (← getEnv) {}
+  let m := Frontend.mapCompilationSteps λ step => do
+    return (step.before, ← Frontend.collectTacticsFromCompilationStep step)
+  let li ← m.run context |>.run' state
+  let invocationLists ← li.mapM λ (env, invocations) => withEnv env do
+    return invocations
+  return invocationLists
+
+def test_invalid_tactic_syntax: TestT MetaM Unit := do
+  let sketch := "
+  example : 17 * 2 = 34 := by
+    have h1 (x y : ℕ) : (6 * x + 3 * y) = 5 * x - y (mod 7)
+  "
+  let invocationLists ← collectInvocationsFromSource sketch
+  let [[i]] := invocationLists |
+    panic s!"Incorrect number of invocations"
+  addTest $ LSpec.check "invocations"
+    (i.tactic = "<failed to pretty print>")
 
 def suite (env : Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
@@ -185,6 +205,7 @@ def suite (env : Environment): List (String × IO LSpec.TestSeq) :=
     ("sorry_in_induction", test_sorry_in_induction),
     ("sorry_in_coupled", test_sorry_in_coupled),
     ("environment_capture", test_environment_capture),
+    ("invalid_tactic_syntax", test_invalid_tactic_syntax),
   ]
   tests.map (fun (name, test) => (name, runMetaMSeq env $ runTest test))
 
