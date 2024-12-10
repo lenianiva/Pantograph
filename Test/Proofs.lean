@@ -720,6 +720,7 @@ def test_tactic_failure_unresolved_goals : TestM Unit := do
   let .failure messages ← state1.tacticOn 0 tactic | addTest $ assertUnreachable s!"{tactic} should fail"
   checkEq s!"{tactic} fails" messages #[s!"{← getFileName}:0:12: error: unsolved goals\np : Nat → Prop\n⊢ p 0\n"]
 
+
 def test_tactic_failure_synthesize_placeholder : TestM Unit := do
   let state? ← startProof (.expr "∀ (p q r : Prop) (h : p → q), q ∧ r")
   let state0 ← match state? with
@@ -737,7 +738,8 @@ def test_tactic_failure_synthesize_placeholder : TestM Unit := do
 
   let tactic := "simpa [h] using And.imp_left h _"
   let .failure messages ← state1.tacticOn 0 tactic | addTest $ assertUnreachable s!"{tactic} should fail"
-  checkEq s!"{tactic} fails" messages #[s!"{← getFileName}:0:12: error: unsolved goals\np : Nat → Prop\n⊢ p 0\n"]
+  let message := s!"<Pantograph>:0:31: error: don't know how to synthesize placeholder\ncontext:\np q r : Prop\nh : p → q\n⊢ p ∧ r\n"
+  checkEq s!"{tactic} fails" messages #[message]
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
