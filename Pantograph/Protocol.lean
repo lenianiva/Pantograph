@@ -327,14 +327,16 @@ structure InvokedTactic where
 structure CompilationUnit where
   -- String boundaries of compilation units
   boundary: (Nat × Nat)
+  messages: Array String := #[]
   -- Tactic invocations
   invocations?: Option (List InvokedTactic) := .none
   goalStateId?: Option Nat := .none
-  goals: Array Goal := #[]
+  goals?: Option (Array Goal) := .none
   -- Code segments which generated the goals
-  goalSrcBoundaries: Array (Nat × Nat) := #[]
-  messages: Array String := #[]
-  newConstants: Option (Array String) := .none
+  goalSrcBoundaries?: Option (Array (Nat × Nat)) := .none
+
+  -- New constants defined in compilation unit
+  newConstants?: Option (Array String) := .none
   deriving Lean.ToJson
 structure FrontendProcessResult where
   units: List CompilationUnit
