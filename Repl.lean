@@ -257,27 +257,38 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
             pure $ .some invocations
           else
             pure .none
-        let sorrys := if args.sorrys then
+        let sorrys ← if args.sorrys then
             Frontend.collectSorrys step
           else
-            []
+            pure []
         let messages ← step.messageStrings
-        return (step.before, boundary, invocations?, sorrys, messages)
+        let newConstants ← if args.newConstants then
+            Frontend.collectNewDefinedConstants step
+          else
+            pure []
+        return (step.before, boundary, invocations?, sorrys, messages, newConstants)
       let li ← frontendM.run context |>.run' state
-      let units ← li.mapM λ (env, boundary, invocations?, sorrys, messages) => Lean.withEnv env do
-        let (goalStateId?, goals) ← if sorrys.isEmpty then do
-            pure (.none, #[])
+      let units ← li.mapM λ (env, boundary, invocations?, sorrys, messages, newConstants) => Lean.withEnv env do
+        let newConstants? := if args.newConstants then
+            .some $ newConstants.toArray.map λ name => name.toString
+          else
+            .none
+        let (goalStateId?, goals?, goalSrcBoundaries?) ← if sorrys.isEmpty then do
+            pure (.none, .none, .none)
           else do
-            let goalState ← runMetaInMainM $ Frontend.sorrysToGoalState sorrys
-            let stateId ← newGoalState goalState
-            let goals ← goalSerialize goalState options
-            pure (.some stateId, goals)
+            let { state, srcBoundaries } ← runMetaInMainM $ Frontend.sorrysToGoalState sorrys
+            let stateId ← newGoalState state
+            let goals ← goalSerialize state options
+            let srcBoundaries := srcBoundaries.toArray.map (λ (b, e) => (b.byteIdx, e.byteIdx))
+            pure (.some stateId, .some goals, .some srcBoundaries)
         return {
           boundary,
+          messages,
           invocations?,
           goalStateId?,
-          goals,
-          messages,
+          goals?,
+          goalSrcBoundaries?,
+          newConstants?,
         }
       return .ok { units }
     catch e =>

@@ -174,6 +174,7 @@ def test_frontend_process : Test :=
         ("file", .str file),
         ("invocations", .bool true),
         ("sorrys", .bool false),
+        ("newConstants", .bool false),
       ]
      ({
        units := [{
@@ -214,6 +215,7 @@ def test_frontend_process_sorry : Test :=
         ("file", .str file),
         ("invocations", .bool false),
         ("sorrys", .bool true),
+        ("newConstants", .bool false),
       ]
      ({
        units := [{
@@ -221,7 +223,8 @@ def test_frontend_process_sorry : Test :=
        }, {
          boundary := (solved.utf8ByteSize, solved.utf8ByteSize + withSorry.utf8ByteSize),
          goalStateId? := .some 0,
-         goals := #[goal1],
+         goals? := .some #[goal1],
+         goalSrcBoundaries? := .some #[(57, 62)],
          messages := #["<anonymous>:2:0: warning: declaration uses 'sorry'\n"],
        }],
     }: Protocol.FrontendProcessResult),
