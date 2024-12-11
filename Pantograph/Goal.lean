@@ -186,8 +186,7 @@ private def collectAllErroredMVars (src : MVarId) : Elab.TermElabM (List MVarId)
   let descendants ←  Meta.getMVars $ ← instantiateMVars (.mvar src)
   let mut alreadyVisited : MVarIdSet := {}
   let mut result : MVarIdSet := {}
-  for mvarErrorInfo in (← get).mvarErrorInfos do
-    let mvarId := mvarErrorInfo.mvarId
+  for { mvarId, .. } in (← get).mvarErrorInfos do
     unless alreadyVisited.contains mvarId do
       alreadyVisited := alreadyVisited.insert mvarId
       /- The metavariable `mvarErrorInfo.mvarId` may have been assigned or
@@ -196,10 +195,6 @@ private def collectAllErroredMVars (src : MVarId) : Elab.TermElabM (List MVarId)
       if mvarDeps.any descendants.contains then do
         result := result.insert mvarId
   return result.toList
-  --(← getThe Elab.Term.State).mvarErrorInfos
-  --  |>.map (·.mvarId)
-  --  |>.filterM λ mvarId =>
-  --    return descendants.contains mvarId ∧ !(← mvarId.isAssignedOrDelayedAssigned)
 
 private def mergeMVarLists (li1 li2 : List MVarId) : List MVarId :=
   let li2' := li2.filter (¬ li1.contains ·)
