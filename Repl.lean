@@ -79,6 +79,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     let state ← get
     let nGoals := state.goalStates.size
     set { state with nextId := 0, goalStates := .empty }
+    Lean.Core.resetMessageLog
     return .ok { nGoals }
   stat (_: Protocol.Stat): MainM (CR Protocol.StatResult) := do
     let state ← get
