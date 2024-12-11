@@ -244,7 +244,7 @@ protected def GoalState.tryTacticM (state: GoalState) (goal: MVarId) (tacticM: E
     let nextState ← state.step goal tacticM guardMVarErrors
 
     -- Check if error messages have been generated in the core.
-    let newMessages ← (← Core.getMessageLog).toList --.drop state.coreState.messages.toList.length
+    let newMessages ← (← Core.getMessageLog).toList.drop state.coreState.messages.toList.length
       |>.filterMapM λ m => do
         if m.severity == .error then
           return .some $ ← m.toString
