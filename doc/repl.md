@@ -44,9 +44,11 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
   state. The user is responsible to ensure the sender/receiver instances share
   the same environment.
 * `frontend.process { ["fileName": <fileName>,] ["file": <str>], invocations:
-  <bool>, sorrys: <bool> }`: Executes the Lean frontend on a file, collecting
-  either the tactic invocations (`"invocations": true`) or the sorrys into goal
-  states (`"sorrys": true`)
+  <bool>, sorrys: <bool>, newConstants: <bool> }`: Executes the Lean frontend on
+  a file, collecting the tactic invocations (`"invocations": true`), the
+  sorrys and type errors into goal states (`"sorrys": true`), and new constants
+  (`"newConstants": true`). In the case of `sorrys`, this command additionally
+  outputs the position of each captured `sorry`.
 
 ## Errors
 
