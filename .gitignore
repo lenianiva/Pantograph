@@ -1,6 +1,4 @@
 .*
 !.gitignore
-
-*.olean
-/build
-/lake-packages
+*.[io]lean
+/result

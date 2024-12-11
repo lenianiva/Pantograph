@@ -1,11 +1,12 @@
 import LSpec
+import Test.Delate
 import Test.Environment
 import Test.Frontend
 import Test.Integration
 import Test.Library
 import Test.Metavar
 import Test.Proofs
-import Test.Delate
+import Test.Serial
 import Test.Tactic
 
 -- Test running infrastructure
@@ -51,6 +52,7 @@ def main (args: List String) := do
     ("Metavar", Metavar.suite env_default),
     ("Proofs", Proofs.suite env_default),
     ("Delate", Delate.suite env_default),
+    ("Serial", Serial.suite env_default),
     ("Tactic/Congruence", Tactic.Congruence.suite env_default),
     ("Tactic/Motivated Apply", Tactic.MotivatedApply.suite env_default),
     ("Tactic/No Confuse", Tactic.NoConfuse.suite env_default),
