@@ -177,16 +177,51 @@ protected def GoalState.getMVarEAssignment (goalState: GoalState) (mvarId: MVarI
 
 --- Tactic execution functions ---
 
-protected def GoalState.step (state: GoalState) (goal: MVarId) (tacticM: Elab.Tactic.TacticM Unit)
+-- Mimics `Elab.Term.logUnassignedUsingErrorInfos`
+private def collectAllErroredMVars (src : MVarId) : Elab.TermElabM (List MVarId) := do
+  -- These descendants serve as "seed" mvars. If a MVarError's mvar is related
+  -- to one of these seed mvars, it means an error has occurred when a tactic
+  -- was executing on `src`. `evalTactic`, will not capture these mvars, so we
+  -- need to manually find them and save them into the goal list.
+  let descendants ←  Meta.getMVars $ ← instantiateMVars (.mvar src)
+  --let _ ← Elab.Term.logUnassignedUsingErrorInfos descendants
+  let mut alreadyVisited : MVarIdSet := {}
+  let mut result : MVarIdSet := {}
+  for { mvarId, .. } in (← get).mvarErrorInfos do
+    unless alreadyVisited.contains mvarId do
+      alreadyVisited := alreadyVisited.insert mvarId
+      /- The metavariable `mvarErrorInfo.mvarId` may have been assigned or
+         delayed assigned to another metavariable that is unassigned. -/
+      let mvarDeps ← Meta.getMVars (.mvar mvarId)
+      if mvarDeps.any descendants.contains then do
+        result := mvarDeps.foldl (·.insert ·) result
+  return result.toList
+
+private def mergeMVarLists (li1 li2 : List MVarId) : List MVarId :=
+  let li2' := li2.filter (¬ li1.contains ·)
+  li1 ++ li2'
+
+/--
+Set `guardMVarErrors` to true to capture mvar errors. Lean will not
+automatically collect mvars from text tactics (vide
+`test_tactic_failure_synthesize_placeholder`)
+-/
+protected def GoalState.step (state: GoalState) (goal: MVarId) (tacticM: Elab.Tactic.TacticM Unit) (guardMVarErrors : Bool := false)
   : Elab.TermElabM GoalState := do
   unless (← getMCtx).decls.contains goal do
     throwError s!"Goal is not in context: {goal.name}"
   goal.checkNotAssigned `GoalState.step
-  let (_, newGoals) ← tacticM { elaborator := .anonymous } |>.run { goals := [goal] }
+  let (_, { goals }) ← tacticM { elaborator := .anonymous } |>.run { goals := [goal] }
   let nextElabState ← MonadBacktrack.saveState
+  Elab.Term.synthesizeSyntheticMVarsNoPostponing
+
+  let goals ← if guardMVarErrors then
+      pure $ mergeMVarLists goals (← collectAllErroredMVars goal)
+    else
+      pure goals
   return {
     state with
-    savedState := { term := nextElabState, tactic := newGoals },
+    savedState := { term := nextElabState, tactic := { goals }, },
     parentMVar? := .some goal,
     calcPrevRhs? := .none,
   }
@@ -203,13 +238,13 @@ inductive TacticResult where
   | invalidAction (message: String)
 
 /-- Executes a `TacticM` monad on this `GoalState`, collecting the errors as necessary -/
-protected def GoalState.tryTacticM (state: GoalState) (goal: MVarId) (tacticM: Elab.Tactic.TacticM Unit):
+protected def GoalState.tryTacticM (state: GoalState) (goal: MVarId) (tacticM: Elab.Tactic.TacticM Unit) (guardMVarErrors : Bool := false):
       Elab.TermElabM TacticResult := do
   try
-    let nextState ← state.step goal tacticM
+    let nextState ← state.step goal tacticM guardMVarErrors
 
     -- Check if error messages have been generated in the core.
-    let newMessages ← (← Core.getMessageLog).toList.drop state.coreState.messages.toList.length
+    let newMessages ← (← Core.getMessageLog).toList --.drop state.coreState.messages.toList.length
       |>.filterMapM λ m => do
         if m.severity == .error then
           return .some $ ← m.toString
@@ -233,7 +268,7 @@ protected def GoalState.tryTactic (state: GoalState) (goal: MVarId) (tactic: Str
     (fileName := ← getFileName) with
     | .ok stx => pure $ stx
     | .error error => return .parseError error
-  state.tryTacticM goal $ Elab.Tactic.evalTactic tactic
+  state.tryTacticM goal (Elab.Tactic.evalTactic tactic) true
 
 protected def GoalState.tryAssign (state: GoalState) (goal: MVarId) (expr: String):
       Elab.TermElabM TacticResult := do
