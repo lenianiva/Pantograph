@@ -179,6 +179,10 @@ protected def GoalState.getMVarEAssignment (goalState: GoalState) (mvarId: MVarI
 
 -- Mimics `Elab.Term.logUnassignedUsingErrorInfos`
 private def collectAllErroredMVars (src : MVarId) : Elab.TermElabM (List MVarId) := do
+  -- These descendants serve as "seed" mvars. If a MVarError's mvar is related
+  -- to one of these seed mvars, it means an error has occurred when a tactic
+  -- was executing on `src`. `evalTactic`, will not capture these mvars, so we
+  -- need to manually find them and save them into the goal list.
   let descendants ←  Meta.getMVars $ ← instantiateMVars (.mvar src)
   let mut alreadyVisited : MVarIdSet := {}
   let mut result : MVarIdSet := {}
@@ -213,6 +217,7 @@ protected def GoalState.step (state: GoalState) (goal: MVarId) (tacticM: Elab.Ta
   goal.checkNotAssigned `GoalState.step
   let (_, { goals }) ← tacticM { elaborator := .anonymous } |>.run { goals := [goal] }
   let nextElabState ← MonadBacktrack.saveState
+  Elab.Term.synthesizeSyntheticMVarsNoPostponing
 
   let goals ← if guardMVarErrors then
       pure $ mergeMVarLists goals (← collectAllErroredMVars goal)
