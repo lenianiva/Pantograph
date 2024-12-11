@@ -184,6 +184,7 @@ private def collectAllErroredMVars (src : MVarId) : Elab.TermElabM (List MVarId)
   -- was executing on `src`. `evalTactic`, will not capture these mvars, so we
   -- need to manually find them and save them into the goal list.
   let descendants ←  Meta.getMVars $ ← instantiateMVars (.mvar src)
+  --let _ ← Elab.Term.logUnassignedUsingErrorInfos descendants
   let mut alreadyVisited : MVarIdSet := {}
   let mut result : MVarIdSet := {}
   for { mvarId, .. } in (← get).mvarErrorInfos do
@@ -191,9 +192,9 @@ private def collectAllErroredMVars (src : MVarId) : Elab.TermElabM (List MVarId)
       alreadyVisited := alreadyVisited.insert mvarId
       /- The metavariable `mvarErrorInfo.mvarId` may have been assigned or
          delayed assigned to another metavariable that is unassigned. -/
-      let mvarDeps ← Meta.getMVars (mkMVar mvarId)
+      let mvarDeps ← Meta.getMVars (.mvar mvarId)
       if mvarDeps.any descendants.contains then do
-        result := result.insert mvarId
+        result := mvarDeps.foldl (·.insert ·) result
   return result.toList
 
 private def mergeMVarLists (li1 li2 : List MVarId) : List MVarId :=
