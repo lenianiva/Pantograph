@@ -250,6 +250,7 @@ protected def GoalState.tryTacticM (state: GoalState) (goal: MVarId) (tacticM: E
           return .some $ ← m.toString
         else
           return .none
+    Core.resetMessageLog
     if ¬ newMessages.isEmpty then
       return .failure newMessages.toArray
     return .success nextState
