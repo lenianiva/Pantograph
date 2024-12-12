@@ -138,23 +138,36 @@ def goalSerialize (state: GoalState) (options: @&Protocol.Options): CoreM (Array
   runMetaM <| state.serializeGoals (parent := .none) options
 
 @[export pantograph_goal_print_m]
-def goalPrint (state: GoalState) (extraMVars : Array String) (options: @&Protocol.Options): CoreM Protocol.GoalPrintResult :=
-  runMetaM do
-    state.restoreMetaM
-    return {
-      root? := ← state.rootExpr?.mapM λ expr =>
-        state.withRootContext do
-          serializeExpression options (← instantiateAll expr),
-      parent? := ← state.parentExpr?.mapM λ expr =>
-        state.withParentContext do
-          serializeExpression options (← instantiateAll expr),
-      extraMVars := ← extraMVars.mapM λ mvarId => do
-        let mvarId: MVarId := { name := mvarId.toName }
-        let .some _ ← mvarId.findDecl? | return {}
-        state.withContext mvarId do
-          let .some expr ← getExprMVarAssignment? mvarId | return {}
-          serializeExpression options (← instantiateAll expr),
-    }
+def goalPrint (state: GoalState) (rootExpr: Bool) (parentExpr: Bool) (goals: Bool) (extraMVars : Array String) (options: @&Protocol.Options)
+  : CoreM Protocol.GoalPrintResult := runMetaM do
+  state.restoreMetaM
+
+  let root? ← if rootExpr then
+      state.rootExpr?.mapM λ expr => state.withRootContext do
+        serializeExpression options (← instantiateAll expr)
+    else
+      pure .none
+  let parent? ← if parentExpr then
+      state.parentExpr?.mapM λ expr => state.withParentContext do
+        serializeExpression options (← instantiateAll expr)
+    else
+      pure .none
+  let goals ← if goals then
+      goalSerialize state options
+    else
+      pure #[]
+  let extraMVars ← extraMVars.mapM λ mvarId => do
+    let mvarId: MVarId := { name := mvarId.toName }
+    let .some _ ← mvarId.findDecl? | return {}
+    state.withContext mvarId do
+      let .some expr ← getExprMVarAssignment? mvarId | return {}
+      serializeExpression options (← instantiateAll expr)
+  return {
+    root?,
+    parent?,
+    goals,
+    extraMVars,
+  }
 
 @[export pantograph_goal_tactic_m]
 def goalTactic (state: GoalState) (goal:  MVarId) (tactic: String): CoreM TacticResult :=
