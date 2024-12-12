@@ -10,8 +10,6 @@ import Lean
 namespace Pantograph
 open Lean
 
-def filename: String := "<pantograph>"
-
 /--
 Represents an interconnected set of metavariables, or a state in proof search
  -/
@@ -73,6 +71,8 @@ protected def GoalState.metaContextOfGoal (state: GoalState) (mvarId: MVarId): O
   return { lctx := mvarDecl.lctx, localInstances := mvarDecl.localInstances }
 protected def GoalState.metaState (state: GoalState): Meta.State :=
   state.savedState.term.meta.meta
+protected def GoalState.coreState (state: GoalState): Core.SavedState :=
+  state.savedState.term.meta.core
 
 protected def GoalState.withContext (state: GoalState) (mvarId: MVarId) (m: MetaM α): MetaM α := do
   mvarId.withContext m |>.run' (← read) state.metaState
@@ -177,16 +177,51 @@ protected def GoalState.getMVarEAssignment (goalState: GoalState) (mvarId: MVarI
 
 --- Tactic execution functions ---
 
-protected def GoalState.step (state: GoalState) (goal: MVarId) (tacticM: Elab.Tactic.TacticM Unit)
+-- Mimics `Elab.Term.logUnassignedUsingErrorInfos`
+private def collectAllErroredMVars (src : MVarId) : Elab.TermElabM (List MVarId) := do
+  -- These descendants serve as "seed" mvars. If a MVarError's mvar is related
+  -- to one of these seed mvars, it means an error has occurred when a tactic
+  -- was executing on `src`. `evalTactic`, will not capture these mvars, so we
+  -- need to manually find them and save them into the goal list.
+  let descendants ←  Meta.getMVars $ ← instantiateMVars (.mvar src)
+  --let _ ← Elab.Term.logUnassignedUsingErrorInfos descendants
+  let mut alreadyVisited : MVarIdSet := {}
+  let mut result : MVarIdSet := {}
+  for { mvarId, .. } in (← get).mvarErrorInfos do
+    unless alreadyVisited.contains mvarId do
+      alreadyVisited := alreadyVisited.insert mvarId
+      /- The metavariable `mvarErrorInfo.mvarId` may have been assigned or
+         delayed assigned to another metavariable that is unassigned. -/
+      let mvarDeps ← Meta.getMVars (.mvar mvarId)
+      if mvarDeps.any descendants.contains then do
+        result := mvarDeps.foldl (·.insert ·) result
+  return result.toList
+
+private def mergeMVarLists (li1 li2 : List MVarId) : List MVarId :=
+  let li2' := li2.filter (¬ li1.contains ·)
+  li1 ++ li2'
+
+/--
+Set `guardMVarErrors` to true to capture mvar errors. Lean will not
+automatically collect mvars from text tactics (vide
+`test_tactic_failure_synthesize_placeholder`)
+-/
+protected def GoalState.step (state: GoalState) (goal: MVarId) (tacticM: Elab.Tactic.TacticM Unit) (guardMVarErrors : Bool := false)
   : Elab.TermElabM GoalState := do
   unless (← getMCtx).decls.contains goal do
     throwError s!"Goal is not in context: {goal.name}"
   goal.checkNotAssigned `GoalState.step
-  let (_, newGoals) ← tacticM { elaborator := .anonymous } |>.run { goals := [goal] }
+  let (_, { goals }) ← tacticM { elaborator := .anonymous } |>.run { goals := [goal] }
   let nextElabState ← MonadBacktrack.saveState
+  Elab.Term.synthesizeSyntheticMVarsNoPostponing
+
+  let goals ← if guardMVarErrors then
+      pure $ mergeMVarLists goals (← collectAllErroredMVars goal)
+    else
+      pure goals
   return {
     state with
-    savedState := { term := nextElabState, tactic := newGoals },
+    savedState := { term := nextElabState, tactic := { goals }, },
     parentMVar? := .some goal,
     calcPrevRhs? := .none,
   }
@@ -202,16 +237,28 @@ inductive TacticResult where
   -- The given action cannot be executed in the state
   | invalidAction (message: String)
 
-/-- Executes a `TacticM` monads on this `GoalState`, collecting the errors as necessary -/
-protected def GoalState.tryTacticM (state: GoalState) (goal: MVarId) (tacticM: Elab.Tactic.TacticM Unit):
+/-- Executes a `TacticM` monad on this `GoalState`, collecting the errors as necessary -/
+protected def GoalState.tryTacticM (state: GoalState) (goal: MVarId) (tacticM: Elab.Tactic.TacticM Unit) (guardMVarErrors : Bool := false):
       Elab.TermElabM TacticResult := do
   try
-    let nextState ← state.step goal tacticM
+    let nextState ← state.step goal tacticM guardMVarErrors
+
+    -- Check if error messages have been generated in the core.
+    let newMessages ← (← Core.getMessageLog).toList.drop state.coreState.messages.toList.length
+      |>.filterMapM λ m => do
+        if m.severity == .error then
+          return .some $ ← m.toString
+        else
+          return .none
+    Core.resetMessageLog
+    if ¬ newMessages.isEmpty then
+      return .failure newMessages.toArray
     return .success nextState
   catch exception =>
     return .failure #[← exception.toMessageData.toString]
 
 /-- Execute a string tactic on given state. Restores TermElabM -/
+@[export pantograph_goal_state_try_tactic_m]
 protected def GoalState.tryTactic (state: GoalState) (goal: MVarId) (tactic: String):
     Elab.TermElabM TacticResult := do
   state.restoreElabM
@@ -219,10 +266,10 @@ protected def GoalState.tryTactic (state: GoalState) (goal: MVarId) (tactic: Str
     (env := ← MonadEnv.getEnv)
     (catName := if state.isConv then `conv else `tactic)
     (input := tactic)
-    (fileName := filename) with
+    (fileName := ← getFileName) with
     | .ok stx => pure $ stx
     | .error error => return .parseError error
-  state.tryTacticM goal $ Elab.Tactic.evalTactic tactic
+  state.tryTacticM goal (Elab.Tactic.evalTactic tactic) true
 
 protected def GoalState.tryAssign (state: GoalState) (goal: MVarId) (expr: String):
       Elab.TermElabM TacticResult := do
@@ -231,7 +278,7 @@ protected def GoalState.tryAssign (state: GoalState) (goal: MVarId) (expr: Strin
     (env := ← MonadEnv.getEnv)
     (catName := `term)
     (input := expr)
-    (fileName := filename) with
+    (fileName := ← getFileName) with
     | .ok syn => pure syn
     | .error error => return .parseError error
   state.tryTacticM goal $ Tactic.evalAssign expr
@@ -245,7 +292,7 @@ protected def GoalState.tryLet (state: GoalState) (goal: MVarId) (binderName: St
     (env := ← MonadEnv.getEnv)
     (catName := `term)
     (input := type)
-    (fileName := filename) with
+    (fileName := ← getFileName) with
     | .ok syn => pure syn
     | .error error => return .parseError error
   state.tryTacticM goal $ Tactic.evalLet binderName.toName type
@@ -332,7 +379,7 @@ protected def GoalState.tryCalc (state: GoalState) (goal: MVarId) (pred: String)
     (env := state.env)
     (catName := `term)
     (input := pred)
-    (fileName := filename) with
+    (fileName := ← getFileName) with
     | .ok syn => pure syn
     | .error error => return .parseError error
   goal.checkNotAssigned `GoalState.tryCalc
@@ -353,7 +400,7 @@ protected def GoalState.tryCalc (state: GoalState) (goal: MVarId) (pred: String)
       throwErrorAt pred "invalid 'calc' step, relation expected{indentExpr step}"
     if let some prevRhs := calcPrevRhs? then
       unless ← Meta.isDefEqGuarded lhs prevRhs do
-        throwErrorAt pred "invalid 'calc' step, left-hand-side is{indentD m!"{lhs} : {← Meta.inferType lhs}"}\nprevious right-hand-side is{indentD m!"{prevRhs} : {← Meta.inferType prevRhs}"}" -- "
+        throwErrorAt pred "invalid 'calc' step, left-hand-side is{indentD m!"{lhs} : {← Meta.inferType lhs}"}\nprevious right-hand-side is{indentD m!"{prevRhs} : {← Meta.inferType prevRhs}"}"
 
     -- Creates a mvar to represent the proof that the calc tactic solves the
     -- current branch

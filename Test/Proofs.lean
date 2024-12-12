@@ -14,10 +14,7 @@ inductive Start where
   | copy (name: String) -- Start from some name in the environment
   | expr (expr: String) -- Start from some expression
 
-abbrev TestM := StateRefT LSpec.TestSeq (ReaderT Protocol.Options Elab.TermElabM)
-
-def addTest (test: LSpec.TestSeq): TestM Unit := do
-  set $ (← get) ++ test
+abbrev TestM := TestT $ ReaderT Protocol.Options $ Elab.TermElabM
 
 def startProof (start: Start): TestM (Option GoalState) := do
   let env ← Lean.MonadEnv.getEnv
@@ -704,6 +701,56 @@ def test_nat_zero_add_alt: TestM Unit := do
       }
     ])
 
+def test_tactic_failure_unresolved_goals : TestM Unit := do
+  let state? ← startProof (.expr "∀ (p : Nat → Prop), ∃ (x : Nat), p (0 + x + 0)")
+  let state0 ← match state? with
+    | .some state => pure state
+    | .none => do
+      addTest $ assertUnreachable "Goal could not parse"
+      return ()
+
+  let tactic := "intro p"
+  let state1 ← match ← state0.tacticOn 0 tactic with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+
+  let tactic := "exact ⟨0, by simp⟩"
+  let .failure messages ← state1.tacticOn 0 tactic | addTest $ assertUnreachable s!"{tactic} should fail"
+  checkEq s!"{tactic} fails" messages #[s!"{← getFileName}:0:12: error: unsolved goals\np : Nat → Prop\n⊢ p 0\n"]
+
+
+def test_tactic_failure_synthesize_placeholder : TestM Unit := do
+  let state? ← startProof (.expr "∀ (p q r : Prop) (h : p → q), q ∧ r")
+  let state0 ← match state? with
+    | .some state => pure state
+    | .none => do
+      addTest $ assertUnreachable "Goal could not parse"
+      return ()
+
+  let tactic := "intro p q r h"
+  let state1 ← match ← state0.tacticOn 0 tactic with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+
+  let tactic := "simpa [h] using And.imp_left h _"
+  let state2 ← match ← state1.tacticOn 0 tactic with
+    | .success state => pure state
+    | other => do
+      addTest $ assertUnreachable $ other.toString
+      return ()
+
+  checkEq tactic ((← state2.serializeGoals).map (·.devolatilize))  #[
+    buildGoal [("p", "Prop"), ("q", "Prop"), ("r", "Prop"), ("h", "p → q")] "p ∧ r"
+  ]
+
+  --let .failure messages ← state1.tacticOn 0 tactic | addTest $ assertUnreachable s!"{tactic} should fail"
+  --let message := s!"<Pantograph>:0:31: error: don't know how to synthesize placeholder\ncontext:\np q r : Prop\nh : p → q\n⊢ p ∧ r\n"
+  --checkEq s!"{tactic} fails" messages #[message]
+
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
     ("identity", test_identity),
@@ -716,6 +763,8 @@ def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
     ("calc", test_calc),
     ("Nat.zero_add", test_nat_zero_add),
     ("Nat.zero_add alt", test_nat_zero_add_alt),
+    ("tactic failure with unresolved goals", test_tactic_failure_unresolved_goals),
+    ("tactic failure with synthesize placeholder", test_tactic_failure_synthesize_placeholder),
   ]
   tests.map (fun (name, test) => (name, proofRunner env test))
 

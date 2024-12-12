@@ -15,7 +15,7 @@ def test_nat : TestT Elab.TermElabM Unit := do
       (env := ← MonadEnv.getEnv)
       (catName := `term)
       (input := "h")
-      (fileName := filename) with
+      (fileName := ← getFileName) with
       | .ok syn => pure syn
       | .error error => throwError "Failed to parse: {error}"
     -- Apply the tactic
@@ -32,7 +32,7 @@ def test_nat_fail : TestT Elab.TermElabM Unit := do
       (env := ← MonadEnv.getEnv)
       (catName := `term)
       (input := "h")
-      (fileName := filename) with
+      (fileName := ← getFileName) with
       | .ok syn => pure syn
       | .error error => throwError "Failed to parse: {error}"
     -- Apply the tactic
@@ -52,7 +52,7 @@ def test_list : TestT Elab.TermElabM Unit := do
       (env := ← MonadEnv.getEnv)
       (catName := `term)
       (input := "h")
-      (fileName := filename) with
+      (fileName := ← getFileName) with
       | .ok syn => pure syn
       | .error error => throwError "Failed to parse: {error}"
     -- Apply the tactic

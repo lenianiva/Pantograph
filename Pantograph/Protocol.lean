@@ -271,12 +271,23 @@ structure GoalDeleteResult where
 
 structure GoalPrint where
   stateId: Nat
+
+  -- Print root?
+  rootExpr?: Option Bool := .some False
+  -- Print the parent expr?
+  parentExpr?: Option Bool := .some False
+  -- Print goals?
+  goals?: Option Bool := .some False
+  -- Print values of extra mvars?
+  extraMVars?: Option (Array String) := .none
   deriving Lean.FromJson
 structure GoalPrintResult where
   -- The root expression
   root?: Option Expression := .none
   -- The filling expression of the parent goal
-  parent?: Option Expression
+  parent?: Option Expression := .none
+  goals: Array Goal := #[]
+  extraMVars: Array Expression := #[]
   deriving Lean.ToJson
 
 -- Diagnostic Options, not available in REPL
@@ -312,6 +323,8 @@ structure FrontendProcess where
   invocations: Bool := false
   -- If set to true, collect `sorry`s
   sorrys: Bool := false
+  -- If set to true, extract new constants
+  newConstants: Bool := false
   deriving Lean.FromJson
 structure InvokedTactic where
   goalBefore: String
@@ -325,11 +338,16 @@ structure InvokedTactic where
 structure CompilationUnit where
   -- String boundaries of compilation units
   boundary: (Nat × Nat)
+  messages: Array String := #[]
   -- Tactic invocations
   invocations?: Option (List InvokedTactic) := .none
   goalStateId?: Option Nat := .none
-  goals: Array Goal := #[]
-  messages: Array String := #[]
+  goals?: Option (Array Goal) := .none
+  -- Code segments which generated the goals
+  goalSrcBoundaries?: Option (Array (Nat × Nat)) := .none
+
+  -- New constants defined in compilation unit
+  newConstants?: Option (Array String) := .none
   deriving Lean.ToJson
 structure FrontendProcessResult where
   units: List CompilationUnit

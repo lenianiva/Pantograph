@@ -18,9 +18,19 @@
     lean4-nix,
     lspec,
     ...
-  }:
-    flake-parts.lib.mkFlake {inherit inputs;} {
-      flake = {
+  } : flake-parts.lib.mkFlake { inherit inputs; } {
+    flake = {
+    };
+    systems = [
+      "aarch64-linux"
+      "aarch64-darwin"
+      "x86_64-linux"
+      "x86_64-darwin"
+    ];
+    perSystem = { system, pkgs, ... }: let
+      pkgs = import nixpkgs {
+        inherit system;
+        overlays = [ (lean4-nix.readToolchainFile ./lean-toolchain) ];
       };
       systems = [
         "aarch64-linux"
