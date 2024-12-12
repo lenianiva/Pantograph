@@ -1,87 +1,21 @@
-/- Adapted from https://github.com/semorrison/lean-training-data -/
 import Lean.Elab.Import
 import Lean.Elab.Command
 import Lean.Elab.InfoTree
+import Lean.DeclarationRange
 
 import Pantograph.Frontend.Basic
 import Pantograph.Frontend.MetaTranslate
 import Pantograph.Goal
 import Pantograph.Protocol
+import Pantograph.Frontend.InfoTree
 
 open Lean
-
-namespace Lean.Elab.Info
-/-- The `Syntax` for a `Lean.Elab.Info`, if there is one. -/
-protected def stx? : Info → Option Syntax
-  | .ofTacticInfo         info => info.stx
-  | .ofTermInfo           info => info.stx
-  | .ofCommandInfo        info => info.stx
-  | .ofMacroExpansionInfo info => info.stx
-  | .ofOptionInfo         info => info.stx
-  | .ofFieldInfo          info => info.stx
-  | .ofCompletionInfo     info => info.stx
-  | .ofUserWidgetInfo     info => info.stx
-  | .ofCustomInfo         info => info.stx
-  | .ofFVarAliasInfo      _    => none
-  | .ofFieldRedeclInfo    info => info.stx
-  | .ofOmissionInfo       info => info.stx
-/-- Is the `Syntax` for this `Lean.Elab.Info` original, or synthetic? -/
-protected def isOriginal (i : Info) : Bool :=
-  match i.stx? with
-  | none => true   -- Somewhat unclear what to do with `FVarAliasInfo`, so be conservative.
-  | some stx => match stx.getHeadInfo with
-    | .original .. => true
-    | _ => false
-end Lean.Elab.Info
-
-namespace Lean.Elab.TacticInfo
-
-/-- Find the name for the outermost `Syntax` in this `TacticInfo`. -/
-def name? (t : TacticInfo) : Option Name :=
-  match t.stx with
-  | Syntax.node _ n _ => some n
-  | _ => none
-/-- Decide whether a tactic is "substantive",
-or is merely a tactic combinator (e.g. `by`, `;`, multiline tactics, parenthesized tactics). -/
-def isSubstantive (t : TacticInfo) : Bool :=
-  match t.name? with
-  | none => false
-  | some `null => false
-  | some ``cdot => false
-  | some ``cdotTk => false
-  | some ``Lean.Parser.Term.byTactic => false
-  | some ``Lean.Parser.Tactic.tacticSeq => false
-  | some ``Lean.Parser.Tactic.tacticSeq1Indented => false
-  | some ``Lean.Parser.Tactic.«tactic_<;>_» => false
-  | some ``Lean.Parser.Tactic.paren => false
-  | _ => true
-
-end Lean.Elab.TacticInfo
-
-namespace Lean.Elab.InfoTree
-
-/--
-Keep `.node` nodes and `.hole` nodes satisfying predicates.
-
-Returns a `List InfoTree`, although in most situations this will be a singleton.
--/
-partial def filter (p : Info → Bool) (m : MVarId → Bool := fun _ => false) :
-    InfoTree → List InfoTree
-  | .context ctx tree => tree.filter p m |>.map (.context ctx)
-  | .node info children =>
-    if p info then
-      [.node info (children.toList.map (filter p m)).join.toPArray']
-    else
-      (children.toList.map (filter p m)).join
-  | .hole mvar => if m mvar then [.hole mvar] else []
-
-end Lean.Elab.InfoTree
-
 
 namespace Pantograph.Frontend
 
 -- Info tree filtering functions
 
+/- Adapted from lean-training-data -/
 structure TacticInvocation where
   info : Elab.TacticInfo
   ctx : Elab.ContextInfo
@@ -131,19 +65,10 @@ protected def usedConstants (t: TacticInvocation) : NameSet :=
 
 end TacticInvocation
 
-/-- Analogue of `Lean.Elab.InfoTree.findInfo?`, but that returns a list of all results. -/
-partial def findAllInfo (t : Elab.InfoTree) (context?: Option Elab.ContextInfo) (pred : Elab.Info → Bool) :
-    List (Elab.Info × Option Elab.ContextInfo × PersistentArray Elab.InfoTree) :=
-  match t with
-  | .context inner t => findAllInfo t (inner.mergeIntoOuter? context?) pred
-  | .node i children  =>
-      (if pred i then [(i, context?, children)] else []) ++ children.toList.bind (fun t => findAllInfo t context? pred)
-  | _ => []
-
 /-- Return all `TacticInfo` nodes in an `InfoTree` corresponding to tactics,
 each equipped with its relevant `ContextInfo`, and any children info trees. -/
 private def collectTacticNodes (t : Elab.InfoTree) : List TacticInvocation :=
-  let infos := findAllInfo t none fun i => match i with
+  let infos := t.findAllInfo none false fun i => match i with
     | .ofTacticInfo _ => true
     | _ => false
   infos.filterMap fun p => match p with
@@ -162,9 +87,11 @@ def collectTacticsFromCompilationStep (step : CompilationStep) : IO (List Protoc
   tactics.mapM λ invocation => do
     let goalBefore := (Format.joinSep (← invocation.goalState) "\n").pretty
     let goalAfter := (Format.joinSep (← invocation.goalStateAfter) "\n").pretty
-    let tactic ← invocation.ctx.runMetaM {} do
-      let t ← PrettyPrinter.ppTactic ⟨invocation.info.stx⟩
-      return t.pretty
+    let tactic ← invocation.ctx.runMetaM {} <| Meta.withMCtx invocation.info.mctxBefore do
+      return (← invocation.ctx.ppSyntax {} invocation.info.stx).pretty
+      -- FIXME: Why does this not work? There are problems with `term.pseudo.antiquot`
+      --PrettyPrinter.ppTactic ⟨invocation.info.stx⟩
+      --return t.pretty
     let usedConstants := invocation.usedConstants.toArray.map λ n => n.toString
     return {
       goalBefore,
@@ -177,47 +104,79 @@ structure InfoWithContext where
   info: Elab.Info
   context?: Option Elab.ContextInfo := .none
 
-private def collectSorrysInTree (t : Elab.InfoTree) : List InfoWithContext :=
-  let infos := findAllInfo t none fun i => match i with
-    | .ofTermInfo { expectedType?, expr, stx, .. } =>
-      expr.isSorry ∧ expectedType?.isSome ∧ stx.isOfKind `Lean.Parser.Term.sorry
+private def collectSorrysInTree (t : Elab.InfoTree) : IO (List InfoWithContext) := do
+  let infos ← t.findAllInfoM none fun i ctx? => match i with
+    | .ofTermInfo { expectedType?, expr, stx, lctx, .. } => do
+      let .some ctx := ctx? | return (false, true)
+      if expr.isSorry ∧ stx.isOfKind `Lean.Parser.Term.sorry then
+        if expectedType?.isNone then
+          throw $ .userError "Sorry of indeterminant type is not allowed"
+        return (true, false)
+      let .some expectedType := expectedType? | return (false, true)
+      let typeMatch ← ctx.runMetaM lctx do
+        let type ← Meta.inferType expr
+        Meta.isExprDefEqGuarded type expectedType
+      return match typeMatch, expr.hasSorry with
+      | false, true => (true, false) -- Types mismatch but has sorry -> collect, halt
+      | false, false => (true, false) -- Types mistmatch but no sorry -> collect, halt
+      | true, true => (false, true) -- Types match but has sorry -> continue
+      | true, false => (false, false) -- Types match but no sorries -> halt
     | .ofTacticInfo { stx, goalsBefore, .. } =>
       -- The `sorry` term is distinct from the `sorry` tactic
       let isSorry := stx.isOfKind `Lean.Parser.Tactic.tacticSorry
-      isSorry ∧ !goalsBefore.isEmpty
-    | _ => false
-  infos.map fun (info, context?, _) => { info, context? }
+      return (isSorry ∧ !goalsBefore.isEmpty, ¬ isSorry)
+    | _ => return (false, true)
+  return infos.map fun (info, context?, _) => { info, context? }
 
 -- NOTE: Plural deliberately not spelled "sorries"
 @[export pantograph_frontend_collect_sorrys_m]
-def collectSorrys (step: CompilationStep) : List InfoWithContext :=
-  step.trees.bind collectSorrysInTree
+def collectSorrys (step: CompilationStep) : IO (List InfoWithContext) := do
+  return (← step.trees.mapM collectSorrysInTree).join
 
-
+structure AnnotatedGoalState where
+  state : GoalState
+  srcBoundaries : List (String.Pos × String.Pos)
 
 /--
 Since we cannot directly merge `MetavarContext`s, we have to get creative. This
 function duplicates frozen mvars in term and tactic info nodes, and add them to
 the current `MetavarContext`.
 -/
-@[export pantograph_frontend_sorrys_to_goal_state]
-def sorrysToGoalState (sorrys : List InfoWithContext) : MetaM GoalState := do
+@[export pantograph_frontend_sorrys_to_goal_state_m]
+def sorrysToGoalState (sorrys : List InfoWithContext) : MetaM AnnotatedGoalState := do
   assert! !sorrys.isEmpty
   let goalsM := sorrys.mapM λ i => do
     match i.info with
     | .ofTermInfo termInfo  => do
       let mvarId ← MetaTranslate.translateMVarFromTermInfo termInfo i.context?
-      return [mvarId]
+      return [(mvarId, stxByteRange termInfo.stx)]
     | .ofTacticInfo tacticInfo => do
-      MetaTranslate.translateMVarFromTacticInfoBefore tacticInfo i.context?
+      let mvarIds ← MetaTranslate.translateMVarFromTacticInfoBefore tacticInfo i.context?
+      let range := stxByteRange tacticInfo.stx
+      return mvarIds.map (·, range)
     | _ => panic! "Invalid info"
-  let goals := List.join (← goalsM.run {} |>.run' {})
+  let annotatedGoals := List.join (← goalsM.run {} |>.run' {})
+  let goals := annotatedGoals.map Prod.fst
+  let srcBoundaries := annotatedGoals.map Prod.snd
   let root := match goals with
     | [] => panic! "No MVars generated"
     | [g] => g
     | _ => { name := .anonymous }
-  GoalState.createFromMVars goals root
+  let state ← GoalState.createFromMVars goals root
+  return { state, srcBoundaries }
 
 
+@[export pantograph_frontend_collect_new_defined_constants_m]
+def collectNewDefinedConstants (step : CompilationStep) : IO (List Name) := do
+  step.after.constants.map₂.foldlM (λ acc name _ => do
+    if step.before.contains name then
+      return acc
+    let coreM : CoreM Bool := Option.isSome <$> findDeclarationRanges? name
+    let hasRange ← coreM.run' { fileName := step.fileName, fileMap := step.fileMap } { env := step.after } |>.toBaseIO
+    match hasRange with
+    | .ok true => return name :: acc
+    | .ok false => return acc
+    | .error e => throw $ IO.userError (← e.toMessageData.toString)
+    ) []
 
 end Pantograph.Frontend
