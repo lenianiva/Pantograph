@@ -72,7 +72,7 @@ def test_tactic : Test :=
      ({ stateId := 0, root := "_uniq.9" }: Protocol.GoalStartResult),
     step "goal.tactic" [("stateId", .num 0), ("goalId", .num 0), ("tactic", .str "intro x")]
      ({ nextStateId? := .some 1, goals? := #[goal1], }: Protocol.GoalTacticResult),
-    step "goal.print" [("stateId", .num 1)]
+    step "goal.print" [("stateId", .num 1), ("parentExpr", .bool true), ("rootExpr", .bool true)]
      ({ parent? := .some { pp? := .some "fun x => ?m.12 x" }, }: Protocol.GoalPrintResult),
     step "goal.tactic" [("stateId", .num 1), ("goalId", .num 0), ("tactic", .str "intro y")]
      ({ nextStateId? := .some 2, goals? := #[goal2], }: Protocol.GoalTacticResult),
