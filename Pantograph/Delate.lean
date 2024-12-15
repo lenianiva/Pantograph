@@ -384,9 +384,9 @@ partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM
   -- Elides all unhygenic names
   binderInfoSexp : Lean.BinderInfo → String
     | .default => ""
-    | .implicit => " :implicit"
-    | .strictImplicit => " :strictImplicit"
-    | .instImplicit => " :instImplicit"
+    | .implicit => " :i"
+    | .strictImplicit => " :si"
+    | .instImplicit => " :ii"
 
 def serializeExpression (options: @&Protocol.Options) (e: Expr): MetaM Protocol.Expression := do
   let pp?: Option String ← match options.printExprPretty with

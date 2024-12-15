@@ -35,7 +35,7 @@ def test_sexp_of_symbol (env: Environment): IO LSpec.TestSeq := do
     ("Nat.add", "(:forall a (:c Nat) (:forall a (:c Nat) (:c Nat)))"),
     -- These ones are normal and easy
     ("Nat.add_one", "(:forall n (:c Nat) ((:c Eq) (:c Nat) ((:c HAdd.hAdd) (:c Nat) (:c Nat) (:c Nat) ((:c instHAdd) (:c Nat) (:c instAddNat)) 0 ((:c OfNat.ofNat) (:c Nat) (:lit 1) ((:c instOfNatNat) (:lit 1)))) ((:c Nat.succ) 0)))"),
-    ("Nat.le_of_succ_le", "(:forall n (:c Nat) (:forall m (:c Nat) (:forall h ((:c LE.le) (:c Nat) (:c instLENat) ((:c Nat.succ) 1) 0) ((:c LE.le) (:c Nat) (:c instLENat) 2 1)) :implicit) :implicit)"),
+    ("Nat.le_of_succ_le", "(:forall n (:c Nat) (:forall m (:c Nat) (:forall h ((:c LE.le) (:c Nat) (:c instLENat) ((:c Nat.succ) 1) 0) ((:c LE.le) (:c Nat) (:c instLENat) 2 1)) :i) :i)"),
     -- Handling of higher order types
     ("Or", "(:forall a (:sort 0) (:forall b (:sort 0) (:sort 0)))"),
     ("List", "(:forall α (:sort (+ u 1)) (:sort (+ u 1)))")
@@ -50,8 +50,8 @@ def test_sexp_of_elab (env: Environment): IO LSpec.TestSeq := do
   let entries: List (String × (List Name) × String) := [
     ("λ x: Nat × Bool => x.1", [], "(:lambda x ((:c Prod) (:c Nat) (:c Bool)) ((:c Prod.fst) (:c Nat) (:c Bool) 0))"),
     ("λ x: Array Nat => x.data", [], "(:lambda x ((:c Array) (:c Nat)) ((:c Array.data) (:c Nat) 0))"),
-    ("λ {α: Sort (u + 1)} => List α", [`u], "(:lambda α (:sort (+ u 1)) ((:c List) 0) :implicit)"),
-    ("λ {α} => List α", [], "(:lambda α (:sort (+ (:mv _uniq.4) 1)) ((:c List) 0) :implicit)"),
+    ("λ {α: Sort (u + 1)} => List α", [`u], "(:lambda α (:sort (+ u 1)) ((:c List) 0) :i)"),
+    ("λ {α} => List α", [], "(:lambda α (:sort (+ (:mv _uniq.4) 1)) ((:c List) 0) :i)"),
     ("(2: Nat) <= (5: Nat)", [], "((:c LE.le) (:mv _uniq.18) (:mv _uniq.19) ((:c OfNat.ofNat) (:mv _uniq.4) (:lit 2) (:mv _uniq.5)) ((:c OfNat.ofNat) (:mv _uniq.14) (:lit 5) (:mv _uniq.15)))"),
   ]
   entries.foldlM (λ suites (source, levels, target) =>
@@ -77,7 +77,7 @@ def test_sexp_of_expr (env: Environment): IO LSpec.TestSeq := do
             .default)
         .implicit)
       .implicit,
-      "(:lambda p (:sort 0) (:lambda q (:sort 0) (:lambda k ((:c And) 1 0) ((:c And.right) _ _ 0)) :implicit) :implicit)"
+      "(:lambda p (:sort 0) (:lambda q (:sort 0) (:lambda k ((:c And) 1 0) ((:c And.right) _ _ 0)) :i) :i)"
     ),
   ]
   let termElabM: Elab.TermElabM LSpec.TestSeq := entries.foldlM (λ suites (expr, target) => do
