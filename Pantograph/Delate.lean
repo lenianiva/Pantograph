@@ -369,7 +369,7 @@ partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM
       -- is wrapped in a :lit sexp.
       let v' := match v with
         | .natVal val => toString val
-        | .strVal val => s!"\"{val}\""
+        | .strVal val => IR.EmitC.quoteString val
       pure s!"(:lit {v'})"
     | .mdata _ inner =>
       -- NOTE: Equivalent to expr itself, but mdata influences the prettyprinter
