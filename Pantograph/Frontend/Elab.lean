@@ -106,7 +106,7 @@ structure InfoWithContext where
 
 private def collectSorrysInTree (t : Elab.InfoTree) : IO (List InfoWithContext) := do
   let infos ← t.findAllInfoM none fun i ctx? => match i with
-    | .ofTermInfo { expectedType?, expr, stx, lctx, .. } => do
+    | .ofTermInfo { expectedType?, expr, stx, lctx, isBinder := false, .. } => do
       let .some ctx := ctx? | return (false, true)
       if expr.isSorry ∧ stx.isOfKind `Lean.Parser.Term.sorry then
         if expectedType?.isNone then
