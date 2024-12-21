@@ -193,6 +193,15 @@ def mystery (k: Nat) : Nat := true
     }
   ]
 
+def test_capture_type_mismatch_in_binder : TestT MetaM Unit := do
+  let input := "
+example (p: Prop) (h: (∀ (x: Prop), Nat) → p): p := h (λ (y: Nat) => 5)
+  "
+  let goalStates ← (collectSorrysFromSource input).run' {}
+  let [goalState] := goalStates | panic! s!"Incorrect number of states: {goalStates.length}"
+  checkEq "goals" ((← goalState.serializeGoals (options := {})).map (·.devolatilize)) #[
+  ]
+
 def collectNewConstants (source: String) : MetaM (List (List Name)) := do
   let filename := "<anonymous>"
   let (context, state) ← do Frontend.createContextStateFromFile source filename (← getEnv) {}
@@ -227,6 +236,7 @@ def suite (env : Environment): List (String × IO LSpec.TestSeq) :=
     ("sorry_in_coupled", test_sorry_in_coupled),
     ("environment_capture", test_environment_capture),
     ("capture_type_mismatch", test_capture_type_mismatch),
+    ("capture_type_mismatch_in_binder", test_capture_type_mismatch_in_binder),
     ("collect_one_constant", test_collect_one_constant),
     ("collect_one_theorem", test_collect_one_theorem),
   ]
