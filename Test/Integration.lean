@@ -171,10 +171,11 @@ def test_frontend_process : Test :=
     let goal1 := "p q : Prop\nh : p\n⊢ p ∨ q"
     step "frontend.process"
       [
-        ("file", .str file),
-        ("invocations", .bool true),
-        ("sorrys", .bool false),
-        ("newConstants", .bool false),
+        ("file",              .str file),
+        ("invocations",       .bool true),
+        ("sorrys",            .bool false),
+        ("typeErrorsAsGoals", .bool false),
+        ("newConstants",      .bool false),
       ]
      ({
        units := [{
@@ -215,6 +216,7 @@ def test_frontend_process_sorry : Test :=
         ("file", .str file),
         ("invocations", .bool false),
         ("sorrys", .bool true),
+        ("typeErrorsAsGoals", .bool false),
         ("newConstants", .bool false),
       ]
      ({

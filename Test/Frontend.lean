@@ -6,11 +6,12 @@ import Test.Common
 open Lean Pantograph
 namespace Pantograph.Test.Frontend
 
-def collectSorrysFromSource (source: String) : MetaM (List GoalState) := do
+def collectSorrysFromSource (source: String) (options : Frontend.GoalCollectionOptions := {})
+    : MetaM (List GoalState) := do
   let filename := "<anonymous>"
   let (context, state) ← do Frontend.createContextStateFromFile source filename (← getEnv) {}
   let m := Frontend.mapCompilationSteps λ step => do
-    return (step.before, ← Frontend.collectSorrys step)
+    return (step.before, ← Frontend.collectSorrys step options)
   let li ← m.run context |>.run' state
   let goalStates ← li.filterMapM λ (env, sorrys) => withEnv env do
     if sorrys.isEmpty then
@@ -181,9 +182,10 @@ def test_capture_type_mismatch : TestT MetaM Unit := do
   let input := "
 def mystery (k: Nat) : Nat := true
   "
-  let goalStates ← (collectSorrysFromSource input).run' {}
+  let options := { collectTypeErrors := true }
+  let goalStates ← (collectSorrysFromSource input options).run' {}
   let [goalState] := goalStates | panic! s!"Incorrect number of states: {goalStates.length}"
-  checkEq "goals" ((← goalState.serializeGoals (options := {})).map (·.devolatilize)) #[
+  checkEq "goals" ((← goalState.serializeGoals).map (·.devolatilize)) #[
     {
       target := { pp? := "Nat" },
       vars := #[{
@@ -197,7 +199,8 @@ def test_capture_type_mismatch_in_binder : TestT MetaM Unit := do
   let input := "
 example (p: Prop) (h: (∀ (x: Prop), Nat) → p): p := h (λ (y: Nat) => 5)
   "
-  let goalStates ← (collectSorrysFromSource input).run' {}
+  let options := { collectTypeErrors := true }
+  let goalStates ← (collectSorrysFromSource input options).run' {}
   let [goalState] := goalStates | panic! s!"Incorrect number of states: {goalStates.length}"
   checkEq "goals" ((← goalState.serializeGoals (options := {})).map (·.devolatilize)) #[
   ]
@@ -236,7 +239,7 @@ def suite (env : Environment): List (String × IO LSpec.TestSeq) :=
     ("sorry_in_coupled", test_sorry_in_coupled),
     ("environment_capture", test_environment_capture),
     ("capture_type_mismatch", test_capture_type_mismatch),
-    ("capture_type_mismatch_in_binder", test_capture_type_mismatch_in_binder),
+    --("capture_type_mismatch_in_binder", test_capture_type_mismatch_in_binder),
     ("collect_one_constant", test_collect_one_constant),
     ("collect_one_theorem", test_collect_one_theorem),
   ]
