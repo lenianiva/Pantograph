@@ -237,25 +237,34 @@ inductive TacticResult where
   -- The given action cannot be executed in the state
   | invalidAction (message: String)
 
+private def dumpMessageLog (prevMessageLength : Nat) : CoreM (Array String) := do
+  let newMessages ← (← Core.getMessageLog).toList.drop prevMessageLength
+    |>.filterMapM λ m => do
+      if m.severity == .error then
+        return .some $ ← m.toString
+      else
+        return .none
+  Core.resetMessageLog
+  return newMessages.toArray
+
 /-- Executes a `TacticM` monad on this `GoalState`, collecting the errors as necessary -/
-protected def GoalState.tryTacticM (state: GoalState) (goal: MVarId) (tacticM: Elab.Tactic.TacticM Unit) (guardMVarErrors : Bool := false):
-      Elab.TermElabM TacticResult := do
+protected def GoalState.tryTacticM
+    (state: GoalState) (goal: MVarId) (tacticM: Elab.Tactic.TacticM Unit)
+    (guardMVarErrors : Bool := false)
+    : Elab.TermElabM TacticResult := do
+  let prevMessageLength := state.coreState.messages.toList.length
   try
     let nextState ← state.step goal tacticM guardMVarErrors
 
     -- Check if error messages have been generated in the core.
-    let newMessages ← (← Core.getMessageLog).toList.drop state.coreState.messages.toList.length
-      |>.filterMapM λ m => do
-        if m.severity == .error then
-          return .some $ ← m.toString
-        else
-          return .none
-    Core.resetMessageLog
+    let newMessages ← dumpMessageLog prevMessageLength
     if ¬ newMessages.isEmpty then
-      return .failure newMessages.toArray
+      return .failure newMessages
     return .success nextState
   catch exception =>
-    return .failure #[← exception.toMessageData.toString]
+    match exception with
+    | .internal _ => return .failure $ ← dumpMessageLog prevMessageLength
+    | _ => return .failure #[← exception.toMessageData.toString]
 
 /-- Execute a string tactic on given state. Restores TermElabM -/
 @[export pantograph_goal_state_try_tactic_m]

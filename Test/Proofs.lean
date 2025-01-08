@@ -720,7 +720,6 @@ def test_tactic_failure_unresolved_goals : TestM Unit := do
   let .failure messages ← state1.tacticOn 0 tactic | addTest $ assertUnreachable s!"{tactic} should fail"
   checkEq s!"{tactic} fails" messages #[s!"{← getFileName}:0:12: error: unsolved goals\np : Nat → Prop\n⊢ p 0\n"]
 
-
 def test_tactic_failure_synthesize_placeholder : TestM Unit := do
   let state? ← startProof (.expr "∀ (p q r : Prop) (h : p → q), q ∧ r")
   let state0 ← match state? with
@@ -736,20 +735,24 @@ def test_tactic_failure_synthesize_placeholder : TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
 
+  let iex : InternalExceptionId := { idx := 4 }
+  IO.println s!"{← iex.getName}"
   let tactic := "simpa [h] using And.imp_left h _"
-  let state2 ← match ← state1.tacticOn 0 tactic with
-    | .success state => pure state
-    | other => do
-      addTest $ assertUnreachable $ other.toString
-      return ()
+  --let state2 ← match ← state1.tacticOn 0 tactic with
+  --  | .success state => pure state
+  --  | other => do
+  --    addTest $ assertUnreachable $ other.toString
+  --    return ()
 
-  checkEq tactic ((← state2.serializeGoals).map (·.devolatilize))  #[
-    buildGoal [("p", "Prop"), ("q", "Prop"), ("r", "Prop"), ("h", "p → q")] "p ∧ r"
-  ]
+  -- Volatile behaviour. This easily changes across Lean versions
 
-  --let .failure messages ← state1.tacticOn 0 tactic | addTest $ assertUnreachable s!"{tactic} should fail"
-  --let message := s!"<Pantograph>:0:31: error: don't know how to synthesize placeholder\ncontext:\np q r : Prop\nh : p → q\n⊢ p ∧ r\n"
-  --checkEq s!"{tactic} fails" messages #[message]
+  --checkEq tactic ((← state2.serializeGoals).map (·.devolatilize))  #[
+  --  buildGoal [("p", "Prop"), ("q", "Prop"), ("r", "Prop"), ("h", "p → q")] "p ∧ r"
+  --]
+
+  let .failure messages ← state1.tacticOn 0 tactic | addTest $ assertUnreachable s!"{tactic} should fail"
+  let message := s!"<Pantograph>:0:31: error: don't know how to synthesize placeholder\ncontext:\np q r : Prop\nh : p → q\n⊢ p ∧ r\n"
+  checkEq s!"{tactic} fails" messages #[message]
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
