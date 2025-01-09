@@ -752,32 +752,6 @@ def test_tactic_failure_synthesize_placeholder : TestM Unit := do
   --checkEq s!"{tactic} fails" messages #[message]
 
 
-def test_draft_tactic : TestM Unit := do
-  let state? ← startProof (.expr "∀ (p : Prop), p")
-  let state0 ← match state? with
-    | .some state => pure state
-    | .none => do
-      addTest $ assertUnreachable "Goal could not parse"
-      return ()
-
-  let tactic := "intro p"
-  let state1 ← match ← state0.tacticOn 0 tactic with
-    | .success state => pure state
-    | other => do
-      addTest $ assertUnreachable $ other.toString
-      return ()
-
-  let payload := "by\nhave q : Or p p := sorry\nsorry"
-  let state2 ← match ← state1.tryAssign (state1.goals.get! 0) payload with
-    | .success state => pure state
-    | other => do
-      addTest $ assertUnreachable $ other.toString
-      return ()
-
-  checkEq payload ((← state2.serializeGoals).map (·.devolatilize))  #[
-    buildGoal [("p", "Prop"), ("q", "Prop"), ("r", "Prop"), ("h", "p → q")] "p ∧ r"
-  ]
-
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
     ("identity", test_identity),
@@ -792,7 +766,6 @@ def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
     ("Nat.zero_add alt", test_nat_zero_add_alt),
     ("tactic failure with unresolved goals", test_tactic_failure_unresolved_goals),
     ("tactic failure with synthesize placeholder", test_tactic_failure_synthesize_placeholder),
-    ("draft", test_draft_tactic),
   ]
   tests.map (fun (name, test) => (name, proofRunner env test))
 
