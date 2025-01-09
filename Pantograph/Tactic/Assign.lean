@@ -30,6 +30,7 @@ def evalAssign : Elab.Tactic.Tactic := fun stx => Elab.Tactic.withMainContext do
 def sorryToHole (src : Expr) : StateRefT (List MVarId) MetaM Expr := do
   Meta.transform src λ
     | .app (.app (.const ``sorryAx ..) type) .. => do
+      -- FIXME: Handle cases of coupled goals
       let mvar ← Meta.mkFreshExprSyntheticOpaqueMVar type
       modify (mvar.mvarId! :: .)
       pure $ .done mvar
@@ -52,7 +53,7 @@ def evalDraft : Elab.Tactic.Tactic := fun stx ↦ Elab.Tactic.withMainContext do
   let goal ← Elab.Tactic.getMainGoal
   let (expr, holeGoals) ← Elab.Tactic.elabTermWithHoles stx
     (expectedType? := .some target)
-    (tagSuffix := .anonymous )
+    (tagSuffix := .anonymous)
     (allowNaturalHoles := true)
   let draftGoals ← draft goal expr
   Elab.Tactic.replaceMainGoal $ holeGoals ++ draftGoals
