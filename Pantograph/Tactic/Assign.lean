@@ -27,5 +27,35 @@ def evalAssign : Elab.Tactic.Tactic := fun stx => Elab.Tactic.withMainContext do
   goal.assign expr
   Elab.Tactic.replaceMainGoal nextGoals
 
+def sorryToHole (src : Expr) : StateRefT (List MVarId) MetaM Expr := do
+  Meta.transform src λ
+    | .app (.app (.const ``sorryAx ..) type) .. => do
+      let mvar ← Meta.mkFreshExprSyntheticOpaqueMVar type
+      modify (mvar.mvarId! :: .)
+      pure $ .done mvar
+    | _ => pure .continue
+
+-- Given a complete (no holes) expression, extract the sorry's from it and convert them into goals.
+def draft (goal : MVarId) (expr : Expr) : MetaM (List MVarId) := do
+  goal.checkNotAssigned `Pantograph.Tactic.draft
+  let exprType ← Meta.inferType expr
+  let goalType ← goal.getType
+  unless ← Meta.isDefEq goalType exprType do
+    throwError s!"{← Meta.ppExpr expr} : {← Meta.ppExpr exprType} ≠ {← Meta.ppExpr goalType}"
+
+  let (expr', holes) ← sorryToHole expr |>.run []
+  goal.assign expr'
+  return holes.reverse
+
+def evalDraft : Elab.Tactic.Tactic := fun stx ↦ Elab.Tactic.withMainContext do
+  let target ← Elab.Tactic.getMainTarget
+  let goal ← Elab.Tactic.getMainGoal
+  let (expr, holeGoals) ← Elab.Tactic.elabTermWithHoles stx
+    (expectedType? := .some target)
+    (tagSuffix := .anonymous )
+    (allowNaturalHoles := true)
+  let draftGoals ← draft goal expr
+  Elab.Tactic.replaceMainGoal $ holeGoals ++ draftGoals
+
 
 end Pantograph.Tactic
