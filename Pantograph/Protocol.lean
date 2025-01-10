@@ -176,6 +176,7 @@ structure EnvInspectResult where
   constructorInfo?: Option ConstructorInfo := .none
   recursorInfo?:    Option RecursorInfo    := .none
 
+  -- Location in source
   sourceUri?: Option String := .none
   sourceStart?: Option Lean.Position := .none
   sourceEnd?: Option Lean.Position := .none

@@ -114,8 +114,8 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): CoreM (Pr
       } }
     | _ => pure core
   let result ← if args.source?.getD false then
-      let searchPath ← searchPathRef.get
-      let sourceUri? ← module?.bindM (Server.documentUriFromModule searchPath ·)
+      let srcSearchPath ← initSrcSearchPath
+      let sourceUri? ← module?.bindM (Server.documentUriFromModule srcSearchPath ·)
       let declRange? ← findDeclarationRanges? name
       let sourceStart? := declRange?.map (·.range.pos)
       let sourceEnd? := declRange?.map (·.range.endPos)
