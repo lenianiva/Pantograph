@@ -327,11 +327,13 @@ structure FrontendProcess where
   -- One of these two must be supplied: Either supply the file name or the content.
   fileName?: Option String := .none
   file?: Option String := .none
-  -- If set to true, collect tactic invocations
+  -- collect tactic invocations
   invocations: Bool := false
-  -- If set to true, collect `sorry`s
+  -- collect `sorry`s
   sorrys: Bool := false
-  -- If set to true, extract new constants
+  -- collect type errors
+  typeErrorsAsGoals: Bool := false
+  -- list new constants from each compilation step
   newConstants: Bool := false
   deriving Lean.FromJson
 structure InvokedTactic where

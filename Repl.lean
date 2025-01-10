@@ -265,7 +265,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
           else
             pure .none
         let sorrys ← if args.sorrys then
-            Frontend.collectSorrys step
+            Frontend.collectSorrys step (options := { collectTypeErrors := args.typeErrorsAsGoals })
           else
             pure []
         let messages ← step.messageStrings
