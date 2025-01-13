@@ -264,25 +264,24 @@ def serializeName (name: Name) (sanitize: Bool := true): String :=
     if n.contains Lean.idBeginEscape then s!"{quote}{n}{quote}" else n
 
 /-- serialize a sort level. Expression is optimized to be compact e.g. `(+ u 2)` -/
-partial def serializeSortLevel (level: Level) (sanitize: Bool): String :=
+partial def serializeSortLevel (level: Level) : String :=
   let k := level.getOffset
   let u := level.getLevelOffset
   let u_str := match u with
     | .zero => "0"
     | .succ _ => panic! "getLevelOffset should not return .succ"
     | .max v w =>
-      let v := serializeSortLevel v sanitize
-      let w := serializeSortLevel w sanitize
+      let v := serializeSortLevel v
+      let w := serializeSortLevel w
       s!"(:max {v} {w})"
     | .imax v w =>
-      let v := serializeSortLevel v sanitize
-      let w := serializeSortLevel w sanitize
+      let v := serializeSortLevel v
+      let w := serializeSortLevel w
       s!"(:imax {v} {w})"
     | .param name =>
-      let name := serializeName name sanitize
       s!"{name}"
     | .mvar id =>
-      let name := serializeName id.name sanitize
+      let name := id.name
       s!"(:mv {name})"
   match k, u with
   | 0, _ => u_str
@@ -295,7 +294,7 @@ partial def serializeSortLevel (level: Level) (sanitize: Bool): String :=
 
 A `_` symbol in the AST indicates automatic deductions not present in the original expression.
 -/
-partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM String := do
+partial def serializeExpressionSexp (expr: Expr) : MetaM String := do
   self expr
   where
   delayedMVarToSexp (e: Expr): MetaM (Option String) := do
@@ -334,9 +333,10 @@ partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM
         let name := mvarId.name
         pure s!"(:{pref} {name})"
     | .sort level =>
-      let level := serializeSortLevel level sanitize
+      let level := serializeSortLevel level
       pure s!"(:sort {level})"
     | .const declName _ =>
+      let declName := serializeName declName (sanitize := false)
       -- The universe level of the const expression is elided since it should be
       -- inferrable from surrounding expression
       pure s!"(:c {declName})"
@@ -369,7 +369,7 @@ partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM
       -- is wrapped in a :lit sexp.
       let v' := match v with
         | .natVal val => toString val
-        | .strVal val => s!"\"{val}\""
+        | .strVal val => IR.EmitC.quoteString val
       pure s!"(:lit {v'})"
     | .mdata _ inner =>
       -- NOTE: Equivalent to expr itself, but mdata influences the prettyprinter
@@ -384,9 +384,9 @@ partial def serializeExpressionSexp (expr: Expr) (sanitize: Bool := true): MetaM
   -- Elides all unhygenic names
   binderInfoSexp : Lean.BinderInfo → String
     | .default => ""
-    | .implicit => " :implicit"
-    | .strictImplicit => " :strictImplicit"
-    | .instImplicit => " :instImplicit"
+    | .implicit => " :i"
+    | .strictImplicit => " :si"
+    | .instImplicit => " :ii"
 
 def serializeExpression (options: @&Protocol.Options) (e: Expr): MetaM Protocol.Expression := do
   let pp?: Option String ← match options.printExprPretty with
@@ -532,7 +532,7 @@ protected def GoalState.diag (goalState: GoalState) (parent?: Option GoalState :
         then instantiateAll decl.type
         else pure $ decl.type
       let type_sexp ← if options.printSexp then
-          let sexp ← serializeExpressionSexp type (sanitize := false)
+          let sexp ← serializeExpressionSexp type
           pure <| " " ++ sexp
         else
           pure ""

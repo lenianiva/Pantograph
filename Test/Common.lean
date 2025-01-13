@@ -143,6 +143,8 @@ def runTest (t: TestT m Unit): m LSpec.TestSeq :=
   Prod.snd <$> t.run LSpec.TestSeq.done
 def runTestWithResult { α } (t: TestT m α): m (α × LSpec.TestSeq) :=
   t.run LSpec.TestSeq.done
+def runTestCoreM (env: Environment) (coreM: TestT CoreM Unit) (options: Array String := #[]): IO LSpec.TestSeq := do
+  runCoreMSeq env (runTest coreM) options
 
 end Monadic
 
