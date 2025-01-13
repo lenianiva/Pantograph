@@ -4,7 +4,7 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-24.05";
     flake-parts.url = "github:hercules-ci/flake-parts";
-    lean4-nix.url = "github:lenianiva/lean4-nix?ref=157c85903f668fadeb79f330961b7bbe5ee596de";
+    lean4-nix.url = "github:lenianiva/lean4-nix";
     lspec = {
       url = "github:argumentcomputer/LSpec?ref=504a8cecf8da601b9466ac727aebb6b511aae4ab";
       flake = false;
@@ -18,19 +18,9 @@
     lean4-nix,
     lspec,
     ...
-  } : flake-parts.lib.mkFlake { inherit inputs; } {
-    flake = {
-    };
-    systems = [
-      "aarch64-linux"
-      "aarch64-darwin"
-      "x86_64-linux"
-      "x86_64-darwin"
-    ];
-    perSystem = { system, pkgs, ... }: let
-      pkgs = import nixpkgs {
-        inherit system;
-        overlays = [ (lean4-nix.readToolchainFile ./lean-toolchain) ];
+  }:
+    flake-parts.lib.mkFlake {inherit inputs;} {
+      flake = {
       };
       systems = [
         "aarch64-linux"
@@ -94,7 +84,6 @@
           inherit (repl) executable;
           default = repl.executable;
         };
-        formatter = pkgs.alejandra;
         legacyPackages = {
           inherit project;
           leanPkgs = pkgs.lean;
@@ -108,6 +97,7 @@
               ${test.executable}/bin/test > $out
             '';
         };
+        formatter = pkgs.alejandra;
         devShells.default = pkgs.mkShell {
           buildInputs = [pkgs.lean.lean-all pkgs.lean.lean];
         };

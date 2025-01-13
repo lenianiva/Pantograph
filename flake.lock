@@ -42,16 +42,15 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1733351931,
-        "narHash": "sha256-ngMjY/ci6490G2gofaS9CODtpnmFoYzfaI13U14TkFM=",
+        "lastModified": 1736388194,
+        "narHash": "sha256-ymSrd/A8Pw+9FzbxUbR7CkFHLJK1b4SnFFWg/1e0JeE=",
         "owner": "lenianiva",
         "repo": "lean4-nix",
-        "rev": "157c85903f668fadeb79f330961b7bbe5ee596de",
+        "rev": "90f496bc0694fb97bdfa6adedfc2dc2c841a4cf2",
         "type": "github"
       },
       "original": {
         "owner": "lenianiva",
-        "ref": "157c85903f668fadeb79f330961b7bbe5ee596de",
         "repo": "lean4-nix",
         "type": "github"
       }
