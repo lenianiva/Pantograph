@@ -30,7 +30,9 @@ def evalAssign : Elab.Tactic.Tactic := fun stx => Elab.Tactic.withMainContext do
 def sorryToHole (src : Expr) : StateRefT (List MVarId) MetaM Expr := do
   Meta.transform src λ
     | .app (.app (.const ``sorryAx ..) type) .. => do
-      -- FIXME: Handle cases of coupled goals
+      let type ← instantiateMVars type
+      if type.hasSorry then
+        throwError s!"Coupling is not allowed in draft tactic: {← Meta.ppExpr type}"
       let mvar ← Meta.mkFreshExprSyntheticOpaqueMVar type
       modify (mvar.mvarId! :: .)
       pure $ .done mvar
