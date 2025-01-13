@@ -145,24 +145,27 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     let .some goal := goalState.goals.get? args.goalId |
       return .error $ errorIndex s!"Invalid goal index {args.goalId}"
     let nextGoalState?: Except _ TacticResult ← runTermElabInMainM do
-      match args.tactic?, args.expr?, args.have?, args.let?, args.calc?, args.conv?  with
-      | .some tactic, .none, .none, .none, .none, .none => do
+      -- NOTE: Should probably use a macro to handle this...
+      match args.tactic?, args.expr?, args.have?, args.let?, args.calc?, args.conv?, args.draft?  with
+      | .some tactic, .none, .none, .none, .none, .none, .none => do
         pure <| Except.ok <| ← goalState.tryTactic goal tactic
-      | .none, .some expr, .none, .none, .none, .none => do
+      | .none, .some expr, .none, .none, .none, .none, .none => do
         pure <| Except.ok <| ← goalState.tryAssign goal expr
-      | .none, .none, .some type, .none, .none, .none => do
+      | .none, .none, .some type, .none, .none, .none, .none => do
         let binderName := args.binderName?.getD ""
         pure <| Except.ok <| ← goalState.tryHave goal binderName type
-      | .none, .none, .none, .some type, .none, .none => do
+      | .none, .none, .none, .some type, .none, .none, .none => do
         let binderName := args.binderName?.getD ""
         pure <| Except.ok <| ← goalState.tryLet goal binderName type
-      | .none, .none, .none, .none, .some pred, .none => do
+      | .none, .none, .none, .none, .some pred, .none, .none => do
         pure <| Except.ok <| ← goalState.tryCalc goal pred
-      | .none, .none, .none, .none, .none, .some true => do
+      | .none, .none, .none, .none, .none, .some true, .none => do
         pure <| Except.ok <| ← goalState.conv goal
-      | .none, .none, .none, .none, .none, .some false => do
+      | .none, .none, .none, .none, .none, .some false, .none => do
         pure <| Except.ok <| ← goalState.convExit
-      | _, _, _, _, _, _ =>
+      | .none, .none, .none, .none, .none, .none, .some draft => do
+        pure <| Except.ok <| ← goalState.tryDraft goal draft
+      | _, _, _, _, _, _, _ =>
         let error := errorI "arguments" "Exactly one of {tactic, expr, have, calc, conv} must be supplied"
         pure $ Except.error $ error
     match nextGoalState? with
