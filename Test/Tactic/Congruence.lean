@@ -28,7 +28,7 @@ def test_congr_arg_list : TestT Elab.TermElabM Unit := do
     let results ← Meta.withAssignableSyntheticOpaque do f.apply (← parseSentence "List.reverse")
     addTest $ LSpec.check "apply" (results.length = 0)
     addTest $ LSpec.check "h" ((← exprToStr $ ← h.getType) = "?a₁ = ?a₂")
-    addTest $ LSpec.check "conduit" ((← exprToStr $ ← c.getType) = "(?a₁.reverse = ?a₂.reverse) = (l1.reverse = l2.reverse)")
+    addTest $ LSpec.check "conduit" ((← exprToStr $ ← c.getType) = "(List.reverse ?a₁ = List.reverse ?a₂) = (l1.reverse = l2.reverse)")
 def test_congr_arg : TestT Elab.TermElabM Unit := do
   let expr := "λ (n m: Nat) (h: n = m) => n * n = m * m"
   let expr ← parseSentence expr
@@ -37,7 +37,7 @@ def test_congr_arg : TestT Elab.TermElabM Unit := do
     let newGoals ← runTacticOnMVar Tactic.evalCongruenceArg target.mvarId!
     addTest $  LSpec.check "goals" ((← newGoals.mapM (λ x => mvarUserNameAndType x)) =
       [
-        (`α, "Sort ?u.70"),
+        (`α, "Sort ?u.73"),
         (`a₁, "?α"),
         (`a₂, "?α"),
         (`f, "?α → Nat"),
@@ -52,7 +52,7 @@ def test_congr_fun : TestT Elab.TermElabM Unit := do
     let newGoals ← runTacticOnMVar Tactic.evalCongruenceFun target.mvarId!
     addTest $ LSpec.check "goals" ((← newGoals.mapM (λ x => mvarUserNameAndType x)) =
       [
-        (`α, "Sort ?u.159"),
+        (`α, "Sort ?u.165"),
         (`f₁, "?α → Nat"),
         (`f₂, "?α → Nat"),
         (`h, "?f₁ = ?f₂"),

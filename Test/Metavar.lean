@@ -239,7 +239,7 @@ def test_partial_continuation: TestM Unit := do
       return ()
     | .ok state => pure state
   addTest $ LSpec.check "(continue)" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
-    #[.some "2 ≤ ?m.succ", .some "?m.succ ≤ 5", .some "Nat"])
+    #[.some "2 ≤ Nat.succ ?m", .some "Nat.succ ?m ≤ 5", .some "Nat"])
   addTest $ LSpec.test "(2 root)" state1b.rootExpr?.isNone
 
   -- Roundtrip
@@ -253,7 +253,7 @@ def test_partial_continuation: TestM Unit := do
       return ()
     | .ok state => pure state
   addTest $ LSpec.check "(continue)" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
-    #[.some "2 ≤ ?m.succ", .some "?m.succ ≤ 5", .some "Nat"])
+    #[.some "2 ≤ Nat.succ ?m", .some "Nat.succ ?m ≤ 5", .some "Nat"])
   addTest $ LSpec.test "(2 root)" state1b.rootExpr?.isNone
 
   -- Continuation should fail if the state does not exist:
