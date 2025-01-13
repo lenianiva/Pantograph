@@ -241,13 +241,15 @@ def test_or_comm: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  let fvP := "_uniq.10"
-  let fvQ := "_uniq.13"
-  let fvH := "_uniq.16"
-  let state1g0 := "_uniq.17"
+  let [state1g0] := state1.goals | fail "Should have 1 goal"
+  let (fvP, fvQ, fvH) ← state1.withContext state1g0 do
+    let lctx ← getLCtx
+    let #[fvP, fvQ, fvH] := lctx.getFVarIds.map (toString ·.name) |
+      panic! "Incorrect number of decls"
+    pure (fvP, fvQ, fvH)
   addTest $ LSpec.check tactic ((← state1.serializeGoals (options := ← read)) =
     #[{
-      name := state1g0,
+      name := state1g0.name.toString,
       target := { pp? := .some "q ∨ p" },
       vars := #[
         { name := fvP, userName := "p", type? := .some { pp? := .some "Prop" } },
@@ -269,7 +271,9 @@ def test_or_comm: TestM Unit := do
       return ()
   addTest $ LSpec.check tactic ((← state2.serializeGoals (options := ← read)).map (·.devolatilize) =
     #[branchGoal "inl" "p", branchGoal "inr" "q"])
-  let (caseL, caseR) := ("_uniq.64", "_uniq.77")
+  let [state2g0, state2g1] := state2.goals |
+    fail s!"Should have 2 goals, but it has {state2.goals.length}"
+  let (caseL, caseR) := (state2g0.name.toString, state2g1.name.toString)
   addTest $ LSpec.check tactic ((← state2.serializeGoals (options := ← read)).map (·.name) =
     #[caseL, caseR])
   addTest $ LSpec.check "(2 parent exists)" state2.parentExpr?.isSome
@@ -293,7 +297,8 @@ def test_or_comm: TestM Unit := do
       return ()
   let state3_1parent ← state3_1.withParentContext do
     serializeExpressionSexp (← instantiateAll state3_1.parentExpr?.get!)
-  addTest $ LSpec.test "(3_1 parent)" (state3_1parent == s!"((:c Or.inr) (:fv {fvQ}) (:fv {fvP}) (:mv _uniq.91))")
+  let [state3_1goal0] := state3_1.goals | fail "Should have 1 goal"
+  addTest $ LSpec.test "(3_1 parent)" (state3_1parent == s!"((:c Or.inr) (:fv {fvQ}) (:fv {fvP}) (:mv {state3_1goal0}))")
   addTest $ LSpec.check "· apply Or.inr" (state3_1.goals.length = 1)
   let state4_1 ← match ← state3_1.tacticOn (goalId := 0) (tactic := "assumption") with
     | .success state => pure state
@@ -559,12 +564,15 @@ def test_nat_zero_add: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
+  let [mvarMotive, mvarMajor, mvarInduct, mvarConduit] := state2.goals |
+      fail "Incorrect number of goals"
+  let .num _ major := mvarMajor.name | fail "Incorrect form of mvar id"
   addTest $ LSpec.check s!"mapply {recursor}" ((← state2.serializeGoals (options := ← read)).map (·.devolatilizeVars) =
     #[
-      buildNamedGoal "_uniq.67" [("n", "Nat")] "Nat → Prop" (.some "motive"),
-      buildNamedGoal "_uniq.68" [("n", "Nat")] "Nat",
-      buildNamedGoal "_uniq.69" [("n", "Nat")] "∀ (t : Nat), Nat.below t → ?motive t",
-      buildNamedGoal "_uniq.70" [("n", "Nat")] "?motive ?m.68 = (n + 0 = n)" (.some "conduit")
+      buildNamedGoal mvarMotive.name.toString  [("n", "Nat")] "Nat → Prop" (.some "motive"),
+      buildNamedGoal mvarMajor.name.toString   [("n", "Nat")] "Nat",
+      buildNamedGoal mvarInduct.name.toString  [("n", "Nat")] "∀ (t : Nat), Nat.below t → ?motive t",
+      buildNamedGoal mvarConduit.name.toString [("n", "Nat")] s!"?motive ?m.{major} = (n + 0 = n)" (.some "conduit")
     ])
 
   let tactic := "exact n"
@@ -647,13 +655,15 @@ def test_nat_zero_add_alt: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  let major := "_uniq.68"
+  let [mvarMotive, mvarMajor, mvarInduct, mvarConduit] := state2.goals |
+      fail "Incorrect number of goals"
+  let .num _ major := mvarMajor.name | fail "Incorrect form of mvar id"
   addTest $ LSpec.check s!"mapply {recursor}" ((← state2.serializeGoals (options := ← read)).map (·.devolatilizeVars) =
     #[
-      buildNamedGoal "_uniq.67" [("n", "Nat")] "Nat → Prop" (.some "motive"),
-      buildNamedGoal major [("n", "Nat")] "Nat",
-      buildNamedGoal "_uniq.69" [("n", "Nat")] "∀ (t : Nat), Nat.below t → ?motive t",
-      buildNamedGoal "_uniq.70" [("n", "Nat")] "?motive ?m.68 = (n + 0 = n)" (.some "conduit")
+      buildNamedGoal mvarMotive.name.toString [("n", "Nat")] "Nat → Prop" (.some "motive"),
+      buildNamedGoal mvarMajor.name.toString [("n", "Nat")] "Nat",
+      buildNamedGoal mvarInduct.name.toString [("n", "Nat")] "∀ (t : Nat), Nat.below t → ?motive t",
+      buildNamedGoal mvarConduit.name.toString [("n", "Nat")] s!"?motive ?m.{major} = (n + 0 = n)" (.some "conduit")
     ])
 
   let tactic := "intro x"
@@ -670,8 +680,7 @@ def test_nat_zero_add_alt: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  let (eqL, eqR, eqT) := ("_uniq.88", "_uniq.89", "_uniq.87")
-  addTest $ LSpec.check tactic $ state3m2.goals.map (·.name.toString) = [eqL, eqR, eqT]
+  let [eqL, eqR, eqT] := state3m2.goals | fail "Incorrect number of goals"
   let [_motive, _major, _step, conduit] := state2.goals | panic! "Goals conflict"
   let state2b ← match state3m2.resume [conduit] with
     | .ok state => pure state
@@ -681,20 +690,26 @@ def test_nat_zero_add_alt: TestM Unit := do
 
   let cNatAdd := "(:c HAdd.hAdd) (:c Nat) (:c Nat) (:c Nat) ((:c instHAdd) (:c Nat) (:c instAddNat))"
   let cNat0 := "((:c OfNat.ofNat) (:c Nat) (:lit 0) ((:c instOfNatNat) (:lit 0)))"
-  let fvN := "_uniq.63"
+  let fvN ← state2b.withContext conduit do
+    let lctx ← getLCtx
+    pure $ lctx.getFVarIds.get! 0 |>.name
   let conduitRight := s!"((:c Eq) (:c Nat) ({cNatAdd} (:fv {fvN}) {cNat0}) (:fv {fvN}))"
-  let substOf (mv: String) := s!"(:subst (:mv {mv}) (:fv {fvN}) (:mv {major}))"
+  let substOf (mvarId: MVarId) := s!"(:subst (:mv {mvarId.name}) (:fv {fvN}) (:mv {mvarMajor}))"
+  let .num _ nL := eqL.name | fail "Incorrect form of mvar id"
+  let .num _ nR := eqR.name | fail "Incorrect form of mvar id"
+  let nL' := nL + 4
+  let nR' := nR + 5
   addTest $ LSpec.check "resume" ((← state2b.serializeGoals (options := { ← read with printExprAST := true })) =
     #[
       {
-        name := "_uniq.70",
+        name := mvarConduit.name.toString,
         userName? := .some "conduit",
         target := {
-          pp? := .some "(?m.92 ?m.68 = ?m.94 ?m.68) = (n + 0 = n)",
+          pp? := .some s!"(?m.{nL'} ?m.{major} = ?m.{nR'} ?m.{major}) = (n + 0 = n)",
           sexp? := .some s!"((:c Eq) (:sort 0) ((:c Eq) {substOf eqT} {substOf eqL} {substOf eqR}) {conduitRight})",
         },
         vars := #[{
-          name := fvN,
+          name := fvN.toString,
           userName := "n",
           type? := .some { pp? := .some "Nat", sexp? := .some "(:c Nat)" },
         }],
@@ -720,7 +735,6 @@ def test_tactic_failure_unresolved_goals : TestM Unit := do
   let .failure messages ← state1.tacticOn 0 tactic | addTest $ assertUnreachable s!"{tactic} should fail"
   checkEq s!"{tactic} fails" messages #[s!"{← getFileName}:0:12: error: unsolved goals\np : Nat → Prop\n⊢ p 0\n"]
 
-
 def test_tactic_failure_synthesize_placeholder : TestM Unit := do
   let state? ← startProof (.expr "∀ (p q r : Prop) (h : p → q), q ∧ r")
   let state0 ← match state? with
@@ -736,20 +750,24 @@ def test_tactic_failure_synthesize_placeholder : TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
 
+  let iex : InternalExceptionId := { idx := 4 }
+  IO.println s!"{← iex.getName}"
   let tactic := "simpa [h] using And.imp_left h _"
-  let state2 ← match ← state1.tacticOn 0 tactic with
-    | .success state => pure state
-    | other => do
-      addTest $ assertUnreachable $ other.toString
-      return ()
+  --let state2 ← match ← state1.tacticOn 0 tactic with
+  --  | .success state => pure state
+  --  | other => do
+  --    addTest $ assertUnreachable $ other.toString
+  --    return ()
 
-  checkEq tactic ((← state2.serializeGoals).map (·.devolatilize))  #[
-    buildGoal [("p", "Prop"), ("q", "Prop"), ("r", "Prop"), ("h", "p → q")] "p ∧ r"
-  ]
+  -- Volatile behaviour. This easily changes across Lean versions
 
-  --let .failure messages ← state1.tacticOn 0 tactic | addTest $ assertUnreachable s!"{tactic} should fail"
-  --let message := s!"<Pantograph>:0:31: error: don't know how to synthesize placeholder\ncontext:\np q r : Prop\nh : p → q\n⊢ p ∧ r\n"
-  --checkEq s!"{tactic} fails" messages #[message]
+  --checkEq tactic ((← state2.serializeGoals).map (·.devolatilize))  #[
+  --  buildGoal [("p", "Prop"), ("q", "Prop"), ("r", "Prop"), ("h", "p → q")] "p ∧ r"
+  --]
+
+  let .failure messages ← state1.tacticOn 0 tactic | addTest $ assertUnreachable s!"{tactic} should fail"
+  let message := s!"<Pantograph>:0:31: error: don't know how to synthesize placeholder\ncontext:\np q r : Prop\nh : p → q\n⊢ p ∧ r\n"
+  checkEq s!"{tactic} fails" messages #[message]
 
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=

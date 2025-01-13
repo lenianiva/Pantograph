@@ -73,7 +73,7 @@ def test_tactic : Test :=
     step "goal.tactic" [("stateId", .num 0), ("goalId", .num 0), ("tactic", .str "intro x")]
      ({ nextStateId? := .some 1, goals? := #[goal1], }: Protocol.GoalTacticResult),
     step "goal.print" [("stateId", .num 1), ("parentExpr", .bool true), ("rootExpr", .bool true)]
-     ({ parent? := .some { pp? := .some "fun x => ?m.12 x" }, }: Protocol.GoalPrintResult),
+     ({ parent? := .some { pp? := .some "fun x => ?m.11" }, }: Protocol.GoalPrintResult),
     step "goal.tactic" [("stateId", .num 1), ("goalId", .num 0), ("tactic", .str "intro y")]
      ({ nextStateId? := .some 2, goals? := #[goal2], }: Protocol.GoalTacticResult),
   ]
@@ -90,27 +90,27 @@ def test_automatic_mode (automatic: Bool): Test :=
     ],
   }
   let goal2l: Protocol.Goal := {
-    name := "_uniq.59",
+    name := "_uniq.61",
     userName? := .some "inl",
     target := { pp? := .some "q ∨ p" },
     vars := varsPQ ++ #[
-      { name := "_uniq.47", userName := "h✝", type? := .some { pp? := .some "p" }, isInaccessible := true}
+      { name := "_uniq.49", userName := "h✝", type? := .some { pp? := .some "p" }, isInaccessible := true}
     ],
   }
   let goal2r: Protocol.Goal := {
-    name := "_uniq.72",
+    name := "_uniq.74",
     userName? := .some "inr",
     target := { pp? := .some "q ∨ p" },
     vars := varsPQ ++ #[
-      { name := "_uniq.60", userName := "h✝", type? := .some { pp? := .some "q" }, isInaccessible := true}
+      { name := "_uniq.62", userName := "h✝", type? := .some { pp? := .some "q" }, isInaccessible := true}
     ],
   }
   let goal3l: Protocol.Goal := {
-    name := "_uniq.78",
+    name := "_uniq.80",
     userName? := .some "inl.h",
     target := { pp? := .some "p" },
     vars := varsPQ ++ #[
-      { name := "_uniq.47", userName := "h✝", type? := .some { pp? := .some "p" }, isInaccessible := true}
+      { name := "_uniq.49", userName := "h✝", type? := .some { pp? := .some "p" }, isInaccessible := true}
     ],
   }
   [

@@ -48,6 +48,12 @@ namespace Condensed
 deriving instance BEq, Repr for LocalDecl
 deriving instance BEq, Repr for Goal
 
+-- Enable string interpolation
+instance : ToString FVarId where
+  toString id := id.name.toString
+instance : ToString MVarId where
+  toString id := id.name.toString
+
 protected def LocalDecl.devolatilize (decl: LocalDecl): LocalDecl :=
   {
     decl with fvarId := { name := .anonymous }

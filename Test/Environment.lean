@@ -106,10 +106,10 @@ def test_symbol_location : TestT IO Unit := do
     let .ok result ← Environment.inspect { name := "Nat.le_of_succ_le", source? := .some true } (options := {}) | fail "Inspect failed"
     checkEq "module" result.module? <| .some "Init.Data.Nat.Basic"
 
-    -- Doesn't work for symbols in `Init` for some reason
-    --checkEq "file" result.sourceUri? <| .some "??"
-    checkEq "pos" result.sourceStart? <| .some { line := 344, column := 0 }
-    checkEq "pos" result.sourceEnd? <| .some { line := 344, column := 88 }
+    -- Extraction of source doesn't work for symbols in `Init` for some reason
+    checkTrue "file" result.sourceUri?.isNone
+    checkEq "pos" (result.sourceStart?.map (·.column)) <| .some 0
+    checkEq "pos" (result.sourceEnd?.map (·.column)) <| .some 88
 
 def suite: List (String × IO LSpec.TestSeq) :=
   [

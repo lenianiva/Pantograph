@@ -80,10 +80,10 @@ def collectTactics (t : Elab.InfoTree) : List TacticInvocation :=
 
 @[export pantograph_frontend_collect_tactics_from_compilation_step_m]
 def collectTacticsFromCompilationStep (step : CompilationStep) : IO (List Protocol.InvokedTactic) := do
-  let tacticInfoTrees := step.trees.bind λ tree => tree.filter λ
+  let tacticInfoTrees := step.trees.flatMap λ tree => tree.filter λ
     | info@(.ofTacticInfo _) => info.isOriginal
     | _ => false
-  let tactics := tacticInfoTrees.bind collectTactics
+  let tactics := tacticInfoTrees.flatMap collectTactics
   tactics.mapM λ invocation => do
     let goalBefore := (Format.joinSep (← invocation.goalState) "\n").pretty
     let goalAfter := (Format.joinSep (← invocation.goalStateAfter) "\n").pretty
@@ -138,7 +138,7 @@ private def collectSorrysInTree (t : Elab.InfoTree) (options : GoalCollectionOpt
 @[export pantograph_frontend_collect_sorrys_m]
 def collectSorrys (step: CompilationStep) (options : GoalCollectionOptions := {})
     : IO (List InfoWithContext) := do
-  return (← step.trees.mapM $ λ tree => collectSorrysInTree tree options).join
+  return (← step.trees.mapM $ λ tree => collectSorrysInTree tree options).flatten
 
 structure AnnotatedGoalState where
   state : GoalState
@@ -167,7 +167,7 @@ def sorrysToGoalState (sorrys : List InfoWithContext) : MetaM AnnotatedGoalState
       let range := stxByteRange tacticInfo.stx
       return mvarIds.map (·, range)
     | _ => panic! "Invalid info"
-  let annotatedGoals := List.join (← goalsM.run {} |>.run' {})
+  let annotatedGoals := List.flatten (← goalsM.run {} |>.run' {})
   let goals := annotatedGoals.map Prod.fst
   let srcBoundaries := annotatedGoals.map Prod.snd
   let root := match goals with

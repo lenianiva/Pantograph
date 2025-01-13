@@ -40,7 +40,7 @@ def «have» (mvarId: MVarId) (binderName: Name) (type: Expr): MetaM BranchResul
   let fvarId ← mkFreshFVarId
   let lctxUpstream := lctx.mkLocalDecl fvarId binderName type
   let mvarUpstream ←
-    withTheReader Meta.Context (fun ctx => { ctx with lctx := lctxUpstream }) do
+    Meta.withLCtx lctxUpstream #[] do
       Meta.withNewLocalInstances #[.fvar fvarId] 0 do
         let mvarUpstream ← mkUpstreamMVar mvarId
         --let expr: Expr := .app (.lam binderName type mvarBranch .default) mvarUpstream
