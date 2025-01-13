@@ -58,7 +58,7 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): CoreM (Pr
     | none => return .error $ Protocol.errorIndex s!"Symbol not found {args.name}"
     | some info => pure info
   let module? := env.getModuleIdxFor? name >>=
-    (λ idx => env.allImportedModuleNames.get? idx.toNat) |>.map toString
+    (λ idx => env.allImportedModuleNames.get? idx.toNat)
   let value? := match args.value?, info with
     | .some true, _ => info.value?
     | .some false, _ => .none
@@ -80,7 +80,7 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): CoreM (Pr
       then value?.map (λ e =>
         e.getUsedConstants.filter (!isNameInternal ·) |>.map (λ n => serializeName n) )
       else .none,
-    module? := module?
+    module? := module?.map (·.toString)
   }
   let result ← match info with
     | .inductInfo induct => pure { core with inductInfo? := .some {
@@ -113,6 +113,20 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): CoreM (Pr
           k := r.k,
       } }
     | _ => pure core
+  let result ← if args.source?.getD false then
+      let srcSearchPath ← initSrcSearchPath
+      let sourceUri? ← module?.bindM (Server.documentUriFromModule srcSearchPath ·)
+      let declRange? ← findDeclarationRanges? name
+      let sourceStart? := declRange?.map (·.range.pos)
+      let sourceEnd? := declRange?.map (·.range.endPos)
+      .pure {
+        result with
+        sourceUri?,
+        sourceStart?,
+        sourceEnd?,
+      }
+    else
+      .pure result
   return .ok result
 def addDecl (args: Protocol.EnvAdd): CoreM (Protocol.CR Protocol.EnvAddResult) := do
   let env ← Lean.MonadEnv.getEnv

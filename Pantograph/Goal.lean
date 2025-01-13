@@ -183,7 +183,8 @@ private def collectAllErroredMVars (src : MVarId) : Elab.TermElabM (List MVarId)
   -- to one of these seed mvars, it means an error has occurred when a tactic
   -- was executing on `src`. `evalTactic`, will not capture these mvars, so we
   -- need to manually find them and save them into the goal list.
-  let descendants ←  Meta.getMVars $ ← instantiateMVars (.mvar src)
+
+  let descendants ←  Meta.getMVars (.mvar src)
   --let _ ← Elab.Term.logUnassignedUsingErrorInfos descendants
   let mut alreadyVisited : MVarIdSet := {}
   let mut result : MVarIdSet := {}

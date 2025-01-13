@@ -97,11 +97,26 @@ def test_inspect: IO LSpec.TestSeq := do
     ) LSpec.TestSeq.done
   runCoreMSeq env inner
 
+def test_symbol_location : TestT IO Unit := do
+  let env: Environment ← importModules
+    (imports := #[`Init])
+    (opts := {})
+    (trustLevel := 1)
+  addTest $ ← runTestCoreM env do
+    let .ok result ← Environment.inspect { name := "Nat.le_of_succ_le", source? := .some true } (options := {}) | fail "Inspect failed"
+    checkEq "module" result.module? <| .some "Init.Data.Nat.Basic"
+
+    -- Doesn't work for symbols in `Init` for some reason
+    --checkEq "file" result.sourceUri? <| .some "??"
+    checkEq "pos" (result.sourceStart?.map (·.column)) <| .some 0
+    checkEq "pos" (result.sourceEnd?.map (·.column)) <| .some 88
+
 def suite: List (String × IO LSpec.TestSeq) :=
   [
     ("Catalog", test_catalog),
     ("Symbol Visibility", test_symbol_visibility),
     ("Inspect", test_inspect),
+    ("Symbol Location", runTest test_symbol_location),
   ]
 
 end Pantograph.Test.Environment

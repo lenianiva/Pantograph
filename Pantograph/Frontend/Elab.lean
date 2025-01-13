@@ -104,14 +104,20 @@ structure InfoWithContext where
   info: Elab.Info
   context?: Option Elab.ContextInfo := .none
 
-private def collectSorrysInTree (t : Elab.InfoTree) : IO (List InfoWithContext) := do
+structure GoalCollectionOptions where
+  collectTypeErrors : Bool := false
+
+private def collectSorrysInTree (t : Elab.InfoTree) (options : GoalCollectionOptions := {})
+    : IO (List InfoWithContext) := do
   let infos ← t.findAllInfoM none fun i ctx? => match i with
-    | .ofTermInfo { expectedType?, expr, stx, lctx, .. } => do
+    | .ofTermInfo { expectedType?, expr, stx, lctx, isBinder := false, .. } => do
       let .some ctx := ctx? | return (false, true)
       if expr.isSorry ∧ stx.isOfKind `Lean.Parser.Term.sorry then
         if expectedType?.isNone then
           throw $ .userError "Sorry of indeterminant type is not allowed"
         return (true, false)
+      unless options.collectTypeErrors do
+        return (false, true)
       let .some expectedType := expectedType? | return (false, true)
       let typeMatch ← ctx.runMetaM lctx do
         let type ← Meta.inferType expr
@@ -130,8 +136,9 @@ private def collectSorrysInTree (t : Elab.InfoTree) : IO (List InfoWithContext) 
 
 -- NOTE: Plural deliberately not spelled "sorries"
 @[export pantograph_frontend_collect_sorrys_m]
-def collectSorrys (step: CompilationStep) : IO (List InfoWithContext) := do
-  return (← step.trees.mapM collectSorrysInTree).flatten
+def collectSorrys (step: CompilationStep) (options : GoalCollectionOptions := {})
+    : IO (List InfoWithContext) := do
+  return (← step.trees.mapM $ λ tree => collectSorrysInTree tree options).flatten
 
 structure AnnotatedGoalState where
   state : GoalState
@@ -149,9 +156,14 @@ def sorrysToGoalState (sorrys : List InfoWithContext) : MetaM AnnotatedGoalState
     match i.info with
     | .ofTermInfo termInfo  => do
       let mvarId ← MetaTranslate.translateMVarFromTermInfo termInfo i.context?
+      if (← mvarId.getType).hasSorry then
+        throwError s!"Coupling is not allowed in drafting"
       return [(mvarId, stxByteRange termInfo.stx)]
     | .ofTacticInfo tacticInfo => do
       let mvarIds ← MetaTranslate.translateMVarFromTacticInfoBefore tacticInfo i.context?
+      for mvarId in mvarIds do
+        if (← mvarId.getType).hasSorry then
+          throwError s!"Coupling is not allowed in drafting"
       let range := stxByteRange tacticInfo.stx
       return mvarIds.map (·, range)
     | _ => panic! "Invalid info"

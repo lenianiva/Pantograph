@@ -97,7 +97,7 @@ def test_identity: TestM Unit := do
   addTest $ LSpec.check tactic ((← state1.serializeGoals (options := ← read)).map (·.name) =
     #[inner])
   let state1parent ← state1.withParentContext do
-    serializeExpressionSexp (← instantiateAll state1.parentExpr?.get!) (sanitize := false)
+    serializeExpressionSexp (← instantiateAll state1.parentExpr?.get!)
   addTest $ LSpec.test "(1 parent)" (state1parent == s!"(:lambda p (:sort 0) (:lambda h 0 (:subst (:mv {inner}) 1 0)))")
 
 -- Individual test cases
@@ -259,7 +259,7 @@ def test_or_comm: TestM Unit := do
   addTest $ LSpec.check "(1 root)" state1.rootExpr?.isNone
 
   let state1parent ← state1.withParentContext do
-    serializeExpressionSexp (← instantiateAll state1.parentExpr?.get!) (sanitize := false)
+    serializeExpressionSexp (← instantiateAll state1.parentExpr?.get!)
   addTest $ LSpec.test "(1 parent)" (state1parent == s!"(:lambda p (:sort 0) (:lambda q (:sort 0) (:lambda h ((:c Or) 1 0) (:subst (:mv {state1g0}) 2 1 0))))")
   let tactic := "cases h"
   let state2 ← match ← state1.tacticOn (goalId := 0) (tactic := tactic) with
@@ -276,7 +276,7 @@ def test_or_comm: TestM Unit := do
   addTest $ LSpec.check "(2 root)" state2.rootExpr?.isNone
 
   let state2parent ← state2.withParentContext do
-    serializeExpressionSexp (← instantiateAll state2.parentExpr?.get!) (sanitize := false)
+    serializeExpressionSexp (← instantiateAll state2.parentExpr?.get!)
   let orPQ := s!"((:c Or) (:fv {fvP}) (:fv {fvQ}))"
   let orQP := s!"((:c Or) (:fv {fvQ}) (:fv {fvP}))"
   let motive := s!"(:lambda t {orPQ} (:forall h ((:c Eq) ((:c Or) (:fv {fvP}) (:fv {fvQ})) (:fv {fvH}) 0) {orQP}))"
@@ -292,7 +292,7 @@ def test_or_comm: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   let state3_1parent ← state3_1.withParentContext do
-    serializeExpressionSexp (← instantiateAll state3_1.parentExpr?.get!) (sanitize := false)
+    serializeExpressionSexp (← instantiateAll state3_1.parentExpr?.get!)
   addTest $ LSpec.test "(3_1 parent)" (state3_1parent == s!"((:c Or.inr) (:fv {fvQ}) (:fv {fvP}) (:mv _uniq.91))")
   addTest $ LSpec.check "· apply Or.inr" (state3_1.goals.length = 1)
   let state4_1 ← match ← state3_1.tacticOn (goalId := 0) (tactic := "assumption") with
@@ -753,6 +753,7 @@ def test_tactic_failure_synthesize_placeholder : TestM Unit := do
   let .failure messages ← state1.tacticOn 0 tactic | addTest $ assertUnreachable s!"{tactic} should fail"
   let message := s!"<Pantograph>:0:31: error: don't know how to synthesize placeholder\ncontext:\np q r : Prop\nh : p → q\n⊢ p ∧ r\n"
   checkEq s!"{tactic} fails" messages #[message]
+
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
