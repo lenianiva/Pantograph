@@ -156,9 +156,14 @@ def sorrysToGoalState (sorrys : List InfoWithContext) : MetaM AnnotatedGoalState
     match i.info with
     | .ofTermInfo termInfo  => do
       let mvarId ← MetaTranslate.translateMVarFromTermInfo termInfo i.context?
+      if (← mvarId.getType).hasSorry then
+        throwError s!"Coupling is not allowed in drafting"
       return [(mvarId, stxByteRange termInfo.stx)]
     | .ofTacticInfo tacticInfo => do
       let mvarIds ← MetaTranslate.translateMVarFromTacticInfoBefore tacticInfo i.context?
+      for mvarId in mvarIds do
+        if (← mvarId.getType).hasSorry then
+          throwError s!"Coupling is not allowed in drafting"
       let range := stxByteRange tacticInfo.stx
       return mvarIds.map (·, range)
     | _ => panic! "Invalid info"

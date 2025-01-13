@@ -751,6 +751,7 @@ def test_tactic_failure_synthesize_placeholder : TestM Unit := do
   --let message := s!"<Pantograph>:0:31: error: don't know how to synthesize placeholder\ncontext:\np q r : Prop\nh : p → q\n⊢ p ∧ r\n"
   --checkEq s!"{tactic} fails" messages #[message]
 
+
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
     ("identity", test_identity),
