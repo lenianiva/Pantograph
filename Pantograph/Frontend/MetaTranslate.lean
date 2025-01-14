@@ -68,7 +68,8 @@ private partial def translateExpr (srcExpr: Expr) : MetaTranslateM Expr := do
     match e with
     | .fvar fvarId =>
       let .some fvarId' := state.fvarMap[fvarId]? | panic! s!"FVar id not registered: {fvarId.name}"
-      assert! (← getLCtx).contains fvarId'
+      -- Delegating this to `Meta.check` later
+      --assert! (← getLCtx).contains fvarId'
       return .done $ .fvar fvarId'
     | .mvar mvarId => do
       -- Must not be assigned
