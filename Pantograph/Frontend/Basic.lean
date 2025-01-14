@@ -67,7 +67,7 @@ def processOneCommand: FrontendM (CompilationStep × Bool) := do
   let s := (← get).commandState
   let before := s.env
   let done ← Elab.Frontend.processCommand
-  let stx := (← get).commands.back
+  let stx := (← get).commands.back!
   let src := (← read).inputCtx.input.toSubstring.extract (← get).cmdPos (← get).parserState.pos
   let s' := (← get).commandState
   let after := s'.env

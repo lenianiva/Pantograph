@@ -89,9 +89,9 @@ partial def InfoTree.filter (p : Info → Bool) (m : MVarId → Bool := fun _ =>
   | .context ctx tree => tree.filter p m |>.map (.context ctx)
   | .node info children =>
     if p info then
-      [.node info (children.toList.map (filter p m)).join.toPArray']
+      [.node info (children.toList.map (filter p m)).flatten.toPArray']
     else
-      (children.toList.map (filter p m)).join
+      (children.toList.map (filter p m)).flatten
   | .hole mvar => if m mvar then [.hole mvar] else []
 
 /-- Analogue of `Lean.Elab.InfoTree.findInfo?`, but that returns a list of all results. -/
@@ -105,7 +105,7 @@ partial def InfoTree.findAllInfo
   | .context inner t => findAllInfo t (inner.mergeIntoOuter? context?) haltOnMatch pred
   | .node i children  =>
     let head := if pred i then [(i, context?, children)] else []
-    let tail := if haltOnMatch ∧ !head.isEmpty then [] else children.toList.bind (fun t => findAllInfo t context? haltOnMatch pred)
+    let tail := if haltOnMatch ∧ !head.isEmpty then [] else children.toList.flatMap (fun t => findAllInfo t context? haltOnMatch pred)
     head ++ tail
   | _ => []
 
@@ -121,7 +121,7 @@ partial def InfoTree.findAllInfoM [Monad m]
     let (flagCollect, flagRecurse) ← pred i context?
     let head := if flagCollect then [(i, context?, children)] else []
     let tail := if ¬ flagRecurse then pure [] else children.toList.mapM (fun t => t.findAllInfoM context? pred)
-    return head ++ (← tail).join
+    return head ++ (← tail).flatten
   | _ => return []
 
 @[export pantograph_infotree_to_string_m]
@@ -143,8 +143,8 @@ partial def InfoTree.toString (t : InfoTree) (ctx?: Option Elab.ContextInfo := .
       | .ofFVarAliasInfo _ => pure "[fvar]"
       | .ofFieldRedeclInfo _ => pure "[field_redecl]"
       | .ofChoiceInfo      _ => pure "[choice]"
-      | .ofDelabTermInfo   _ => pure "[delab_term]"
-      | .ofPartialTermInfo _ => pure "[partial_term]"
+      | .ofDelabTermInfo    _ => pure "[delab_term]"
+      | .ofPartialTermInfo  _ => pure "[partial_term]"
       let children := "\n".intercalate (← children.toList.mapM λ t' => do pure $ indent $ ← t'.toString ctx)
       return s!"{node}\n{children}"
     else throw <| IO.userError "No `ContextInfo` available."
