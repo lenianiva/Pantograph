@@ -192,7 +192,7 @@ def test_proposition_generation: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check ":= λ (x: Nat), _" ((← state2.serializeGoals (options := ← read)).map (·.target.pp?) =
-    #[.some "?m.29 x"])
+    #[.some "?m.30 x"])
   addTest $ LSpec.test "(2 root)" state2.rootExpr?.isNone
 
   let assign := "Eq.refl x"
