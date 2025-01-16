@@ -48,6 +48,8 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     | "reset"         => run reset
     | "stat"          => run stat
     | "expr.echo"     => run expr_echo
+    | "env.describe"  => run env_describe
+    | "env.module_read" => run env_module_read
     | "env.catalog"   => run env_catalog
     | "env.inspect"   => run env_inspect
     | "env.add"       => run env_add
@@ -85,6 +87,11 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     let state ← get
     let nGoals := state.goalStates.size
     return .ok { nGoals }
+  env_describe (args: Protocol.EnvDescribe): MainM (CR Protocol.EnvDescribeResult) := do
+    let result ← Environment.describe args
+    return .ok result
+  env_module_read (args: Protocol.EnvModuleRead): MainM (CR Protocol.EnvModuleReadResult) := do
+    Environment.moduleRead args
   env_catalog (args: Protocol.EnvCatalog): MainM (CR Protocol.EnvCatalogResult) := do
     let result ← Environment.catalog args
     return .ok result
