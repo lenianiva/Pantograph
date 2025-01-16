@@ -28,15 +28,16 @@ def evalAssign : Elab.Tactic.Tactic := fun stx => Elab.Tactic.withMainContext do
   Elab.Tactic.replaceMainGoal nextGoals
 
 def sorryToHole (src : Expr) : StateRefT (List MVarId) MetaM Expr := do
-  Meta.transform src λ
-    | .app (.app (.const ``sorryAx ..) type) .. => do
-      let type ← instantiateMVars type
+  Meta.transform src λ expr =>
+    if expr.isSorry then do
+      let type ← instantiateMVars (expr.getArg! 0 |>.bindingBody!)
       if type.hasSorry then
         throwError s!"Coupling is not allowed in draft tactic: {← Meta.ppExpr type}"
       let mvar ← Meta.mkFreshExprSyntheticOpaqueMVar type
       modify (mvar.mvarId! :: .)
       pure $ .done mvar
-    | _ => pure .continue
+    else
+      pure .continue
 
 -- Given a complete (no holes) expression, extract the sorry's from it and convert them into goals.
 def draft (goal : MVarId) (expr : Expr) : MetaM (List MVarId) := do
