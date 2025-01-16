@@ -121,10 +121,10 @@ structure EnvDescribeResult where
   deriving Lean.ToJson
 
 -- Describe a module
-structure EnvModule where
+structure EnvModuleRead where
   module : String
   deriving Lean.FromJson
-structure EnvModuleResult where
+structure EnvModuleReadResult where
   imports: Array String
   constNames: Array String
   extraConstNames: Array String
