@@ -77,7 +77,7 @@ def test_sexp_of_expr (env: Environment): IO LSpec.TestSeq := do
             .default)
         .implicit)
       .implicit,
-      "(:lambda p (:sort 0) (:lambda q (:sort 0) (:lambda k ((:c And) 1 0) ((:c And.right) _ _ 0)) :i) :i)"
+      "(:lambda p (:sort 0) (:lambda q (:sort 0) (:lambda k ((:c And) 1 0) (:proj And 1 0)) :i) :i)"
     ),
   ]
   let termElabM: Elab.TermElabM LSpec.TestSeq := entries.foldlM (λ suites (expr, target) => do
@@ -96,6 +96,18 @@ def test_instance (env: Environment): IO LSpec.TestSeq :=
     let _expr := (← runTermElabMInMeta <| elabTerm s) |>.toOption |>.get!
     return LSpec.TestSeq.done
 
+def test_projection (env: Environment) : IO LSpec.TestSeq:= runTest do
+  let prod := .app (.bvar 1) (.bvar 0)
+  let expr := .proj `Prod 1 prod
+  let .some { projector, numParams, inner }:= exprProjToApp env expr |
+    fail "`Prod should have projection function"
+  checkEq "projector" projector `Prod.snd
+  checkEq "numParams" numParams 2
+  checkTrue "inner" $ inner.equal prod
+
+  let expr := .proj `Exists 1 prod
+  checkTrue "Exists" (exprProjToApp env expr).isNone
+
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   [
     ("serializeName", do pure test_serializeName),
@@ -104,6 +116,7 @@ def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
     ("Sexp from elaborated expr", test_sexp_of_elab env),
     ("Sexp from expr", test_sexp_of_expr env),
     ("Instance", test_instance env),
+    ("Projection", test_projection env),
   ]
 
 end Pantograph.Test.Delate

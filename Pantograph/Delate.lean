@@ -17,15 +17,18 @@ structure ProjectionApplication where
   numParams: Nat
   inner: Expr
 
+/-- Converts a `.proj` expression to a function application if possible. Not all
+such expressions are convertible. -/
 @[export pantograph_expr_proj_to_app]
-def exprProjToApp (env: Environment) (e: Expr): ProjectionApplication :=
+def exprProjToApp (env: Environment) (e: Expr): Option ProjectionApplication := do
   let (typeName, idx, inner) := match e with
     | .proj typeName idx inner => (typeName, idx, inner)
     | _ => panic! "Argument must be proj"
+  let _ ← getStructureInfo? env typeName
   let ctor := getStructureCtor env typeName
   let fieldName := getStructureFields env typeName |>.get! idx
   let projector := getProjFnForField? env typeName fieldName |>.get!
-  {
+  return {
     projector,
     numParams := ctor.numParams,
     inner,
@@ -375,12 +378,10 @@ partial def serializeExpressionSexp (expr: Expr) : MetaM String := do
       -- NOTE: Equivalent to expr itself, but mdata influences the prettyprinter
       -- It may become necessary to incorporate the metadata.
       self inner
-    | .proj _ _ _ => do
-      let env ← getEnv
-      let projApp := exprProjToApp env e
-      let autos := String.intercalate " " (List.replicate projApp.numParams "_")
-      let inner ← self projApp.inner
-      pure s!"((:c {projApp.projector}) {autos} {inner})"
+    | .proj typeName idx e => do
+      let typeName' := serializeName typeName (sanitize := false)
+      let e' ← self e
+      pure s!"(:proj {typeName'} {idx} {e'})"
   -- Elides all unhygenic names
   binderInfoSexp : Lean.BinderInfo → String
     | .default => ""
