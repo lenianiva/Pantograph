@@ -12,27 +12,27 @@ open Lean
 
 namespace Pantograph
 
-structure ProjectionApplication where
-  projector: Name
-  numParams: Nat
-  inner: Expr
+inductive Projection where
+  -- Normal field case
+  | field (projector : Name) (numParams : Nat) (struct : Expr)
+  -- Singular inductive case
+  | singular (recursor : Name) (numParams : Nat) (struct : Expr)
 
-/-- Converts a `.proj` expression to a function application if possible. Not all
-such expressions are convertible. -/
-@[export pantograph_expr_proj_to_app]
-def exprProjToApp (env: Environment) (e: Expr): Option ProjectionApplication := do
-  let (typeName, idx, inner) := match e with
-    | .proj typeName idx inner => (typeName, idx, inner)
+/-- Converts a `.proj` expression to a form suitable for exporting/transpilation -/
+@[export pantograph_analyze_projection]
+def analyzeProjection (env: Environment) (e: Expr): Projection :=
+  let (typeName, idx, struct) := match e with
+    | .proj typeName idx struct => (typeName, idx, struct)
     | _ => panic! "Argument must be proj"
-  let _ ← getStructureInfo? env typeName
-  let ctor := getStructureCtor env typeName
-  let fieldName := getStructureFields env typeName |>.get! idx
-  let projector := getProjFnForField? env typeName fieldName |>.get!
-  return {
-    projector,
-    numParams := ctor.numParams,
-    inner,
-  }
+  if (getStructureInfo? env typeName).isSome then
+    let ctor := getStructureCtor env typeName
+    let fieldName := getStructureFields env typeName |>.get! idx
+    let projector := getProjFnForField? env typeName fieldName |>.get!
+    .field projector ctor.numParams struct
+  else
+    let recursor := mkRecOnName typeName
+    let ctor := getStructureCtor env typeName
+    .singular recursor ctor.numParams struct
 
 def _root_.Lean.Name.isAuxLemma (n : Lean.Name) : Bool := n matches .num (.str _ "_auxLemma") _
 

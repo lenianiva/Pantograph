@@ -96,17 +96,23 @@ def test_instance (env: Environment): IO LSpec.TestSeq :=
     let _expr := (← runTermElabMInMeta <| elabTerm s) |>.toOption |>.get!
     return LSpec.TestSeq.done
 
-def test_projection (env: Environment) : IO LSpec.TestSeq:= runTest do
-  let prod := .app (.bvar 1) (.bvar 0)
-  let expr := .proj `Prod 1 prod
-  let .some { projector, numParams, inner }:= exprProjToApp env expr |
-    fail "`Prod should have projection function"
+def test_projection_prod (env: Environment) : IO LSpec.TestSeq:= runTest do
+  let struct := .app (.bvar 1) (.bvar 0)
+  let expr := .proj `Prod 1 struct
+  let .field projector numParams struct' := analyzeProjection env expr |
+    fail "`Prod has fields"
   checkEq "projector" projector `Prod.snd
   checkEq "numParams" numParams 2
-  checkTrue "inner" $ inner.equal prod
+  checkTrue "struct" $ struct.equal struct'
 
-  let expr := .proj `Exists 1 prod
-  checkTrue "Exists" (exprProjToApp env expr).isNone
+def test_projection_exists (env: Environment) : IO LSpec.TestSeq:= runTest do
+  let struct := .app (.bvar 1) (.bvar 0)
+  let expr := .proj `Exists 1 struct
+  let .singular recursor numParams struct' := analyzeProjection env expr |
+    fail "`Exists has no projectors"
+  checkEq "recursor" recursor `Exists.recOn
+  checkEq "numParams" numParams 2
+  checkTrue "struct" $ struct.equal struct'
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   [
@@ -116,7 +122,8 @@ def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
     ("Sexp from elaborated expr", test_sexp_of_elab env),
     ("Sexp from expr", test_sexp_of_expr env),
     ("Instance", test_instance env),
-    ("Projection", test_projection env),
+    ("Projection Prod", test_projection_prod env),
+    ("Projection Exists", test_projection_exists env),
   ]
 
 end Pantograph.Test.Delate
