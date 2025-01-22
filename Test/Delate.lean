@@ -77,7 +77,7 @@ def test_sexp_of_expr (env: Environment): IO LSpec.TestSeq := do
             .default)
         .implicit)
       .implicit,
-      "(:lambda p (:sort 0) (:lambda q (:sort 0) (:lambda k ((:c And) 1 0) (:proj And 1 0)) :i) :i)"
+      "(:lambda p (:sort 0) (:lambda q (:sort 0) (:lambda k ((:c And) 1 0) ((:c And.right) _ _ 0)) :i) :i)"
     ),
   ]
   let termElabM: Elab.TermElabM LSpec.TestSeq := entries.foldlM (λ suites (expr, target) => do
@@ -99,20 +99,18 @@ def test_instance (env: Environment): IO LSpec.TestSeq :=
 def test_projection_prod (env: Environment) : IO LSpec.TestSeq:= runTest do
   let struct := .app (.bvar 1) (.bvar 0)
   let expr := .proj `Prod 1 struct
-  let .field projector numParams struct' := analyzeProjection env expr |
+  let .field projector numParams := analyzeProjection env expr |
     fail "`Prod has fields"
   checkEq "projector" projector `Prod.snd
   checkEq "numParams" numParams 2
-  checkTrue "struct" $ struct.equal struct'
 
 def test_projection_exists (env: Environment) : IO LSpec.TestSeq:= runTest do
   let struct := .app (.bvar 1) (.bvar 0)
   let expr := .proj `Exists 1 struct
-  let .singular recursor numParams struct' := analyzeProjection env expr |
+  let .singular recursor numParams := analyzeProjection env expr |
     fail "`Exists has no projectors"
   checkEq "recursor" recursor `Exists.recOn
   checkEq "numParams" numParams 2
-  checkTrue "struct" $ struct.equal struct'
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   [

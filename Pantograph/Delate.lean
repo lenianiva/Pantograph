@@ -14,25 +14,25 @@ namespace Pantograph
 
 inductive Projection where
   -- Normal field case
-  | field (projector : Name) (numParams : Nat) (struct : Expr)
+  | field (projector : Name) (numParams : Nat)
   -- Singular inductive case
-  | singular (recursor : Name) (numParams : Nat) (struct : Expr)
+  | singular (recursor : Name) (numParams : Nat)
 
 /-- Converts a `.proj` expression to a form suitable for exporting/transpilation -/
 @[export pantograph_analyze_projection]
 def analyzeProjection (env: Environment) (e: Expr): Projection :=
-  let (typeName, idx, struct) := match e with
+  let (typeName, idx, _) := match e with
     | .proj typeName idx struct => (typeName, idx, struct)
     | _ => panic! "Argument must be proj"
   if (getStructureInfo? env typeName).isSome then
     let ctor := getStructureCtor env typeName
     let fieldName := getStructureFields env typeName |>.get! idx
     let projector := getProjFnForField? env typeName fieldName |>.get!
-    .field projector ctor.numParams struct
+    .field projector ctor.numParams
   else
     let recursor := mkRecOnName typeName
     let ctor := getStructureCtor env typeName
-    .singular recursor ctor.numParams struct
+    .singular recursor ctor.numParams
 
 def _root_.Lean.Name.isAuxLemma (n : Lean.Name) : Bool := n matches .num (.str _ "_auxLemma") _
 
@@ -291,7 +291,7 @@ partial def serializeSortLevel (level: Level) : String :=
   | _, .zero => s!"{k}"
   | _, _ => s!"(+ {u_str} {k})"
 
-
+#check Exists.recOn
 /--
  Completely serializes an expression tree. Json not used due to compactness
 
@@ -378,10 +378,17 @@ partial def serializeExpressionSexp (expr: Expr) : MetaM String := do
       -- NOTE: Equivalent to expr itself, but mdata influences the prettyprinter
       -- It may become necessary to incorporate the metadata.
       self inner
-    | .proj typeName idx e => do
-      let typeName' := serializeName typeName (sanitize := false)
-      let e' ← self e
-      pure s!"(:proj {typeName'} {idx} {e'})"
+    | .proj typeName idx inner => do
+      let env ← getEnv
+      match analyzeProjection env e with
+      | .field projector numParams =>
+        let autos := String.intercalate " " (List.replicate numParams "_")
+        let inner' ← self inner
+        pure s!"((:c {projector}) {autos} {inner'})"
+      | .singular _ _ =>
+        let typeName' := serializeName typeName (sanitize := false)
+        let e' ← self e
+        pure s!"(:proj {typeName'} {idx} {e'})"
   -- Elides all unhygenic names
   binderInfoSexp : Lean.BinderInfo → String
     | .default => ""
