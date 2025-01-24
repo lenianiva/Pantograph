@@ -112,6 +112,24 @@ structure ExprEchoResult where
   type: Expression
   deriving Lean.ToJson
 
+-- Describe the current state of the environment
+structure EnvDescribe where
+  deriving Lean.FromJson
+structure EnvDescribeResult where
+  imports : Array String
+  modules : Array String
+  deriving Lean.ToJson
+
+-- Describe a module
+structure EnvModuleRead where
+  module : String
+  deriving Lean.FromJson
+structure EnvModuleReadResult where
+  imports: Array String
+  constNames: Array String
+  extraConstNames: Array String
+  deriving Lean.ToJson
+
 -- Print all symbols in environment
 structure EnvCatalog where
   deriving Lean.FromJson
