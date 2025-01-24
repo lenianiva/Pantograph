@@ -207,6 +207,14 @@ protected def GoalState.tryNoConfuse (state: GoalState) (goal: MVarId) (eq: Stri
     | .ok syn => pure syn
     | .error error => return .parseError error
   state.tryTacticM goal (tacticM := Tactic.evalNoConfuse eq)
+@[export pantograph_goal_try_draft_m]
+protected def GoalState.tryDraft (state: GoalState) (goal: MVarId) (expr: String): CoreM TacticResult := do
+  let expr ← match (← parseTermM expr) with
+    | .ok syn => pure syn
+    | .error error => return .parseError error
+  runTermElabM do
+    state.restoreElabM
+    state.tryTacticM goal (Tactic.evalDraft expr)
 @[export pantograph_goal_let_m]
 def goalLet (state: GoalState) (goal: MVarId) (binderName: String) (type: String): CoreM TacticResult :=
   runTermElabM <| state.tryLet goal binderName type

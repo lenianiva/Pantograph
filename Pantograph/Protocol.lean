@@ -255,6 +255,7 @@ structure GoalTactic where
   calc?: Option String := .none
   -- true to enter `conv`, `false` to exit. In case of exit the `goalId` is ignored.
   conv?: Option Bool := .none
+  draft?: Option String := .none
 
   -- In case of the `have` tactic, the new free variable name is provided here
   binderName?: Option String := .none
