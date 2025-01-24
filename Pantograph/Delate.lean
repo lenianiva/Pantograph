@@ -16,7 +16,7 @@ inductive Projection where
   -- Normal field case
   | field (projector : Name) (numParams : Nat)
   -- Singular inductive case
-  | singular (recursor : Name) (numParams : Nat)
+  | singular (recursor : Name) (numParams : Nat) (numFields : Nat)
 
 /-- Converts a `.proj` expression to a form suitable for exporting/transpilation -/
 @[export pantograph_analyze_projection]
@@ -32,7 +32,36 @@ def analyzeProjection (env: Environment) (e: Expr): Projection :=
   else
     let recursor := mkRecOnName typeName
     let ctor := getStructureCtor env typeName
-    .singular recursor ctor.numParams
+    .singular recursor ctor.numParams ctor.numFields
+
+def anonymousLevel : Level := .mvar ⟨.anonymous⟩
+
+@[export pantograph_expr_proj_to_app]
+def exprProjToApp (env: Environment) (e: Expr): Expr :=
+  let anon : Expr := .mvar ⟨.anonymous⟩
+  match analyzeProjection env e with
+  | .field projector numParams =>
+    let info := match env.find? projector with
+      | .some info => info
+      | _ => panic! "Illegal projector"
+    let callee := .const projector $ List.replicate info.numLevelParams anonymousLevel
+    let args := (List.replicate numParams anon) ++ [e.projExpr!]
+    mkAppN callee args.toArray
+  | .singular recursor numParams numFields =>
+    let info := match env.find? recursor with
+      | .some info => info
+      | _ => panic! "Illegal recursor"
+    let callee := .const recursor $ List.replicate info.numLevelParams anonymousLevel
+    let typeArgs := List.replicate numParams anon
+    -- Motive type can be inferred directly
+    let motive := .lam .anonymous anon anon .default
+    let major := e.projExpr!
+    -- Generate a lambda of `numFields` parameters, and returns the `e.projIdx!` one.
+    let induct := List.foldl
+      (λ acc _ => .lam .anonymous anon acc .default)
+      (.bvar $ (numFields - e.projIdx! - 1))
+      (List.range numFields)
+    mkAppN callee (typeArgs ++ [motive, major, induct]).toArray
 
 def _root_.Lean.Name.isAuxLemma (n : Lean.Name) : Bool := n matches .num (.str _ "_auxLemma") _
 
@@ -291,7 +320,6 @@ partial def serializeSortLevel (level: Level) : String :=
   | _, .zero => s!"{k}"
   | _, _ => s!"(+ {u_str} {k})"
 
-#check Exists.recOn
 /--
  Completely serializes an expression tree. Json not used due to compactness
 
@@ -385,7 +413,7 @@ partial def serializeExpressionSexp (expr: Expr) : MetaM String := do
         let autos := String.intercalate " " (List.replicate numParams "_")
         let inner' ← self inner
         pure s!"((:c {projector}) {autos} {inner'})"
-      | .singular _ _ =>
+      | .singular _ _ _ =>
         let typeName' := serializeName typeName (sanitize := false)
         let e' ← self e
         pure s!"(:proj {typeName'} {idx} {e'})"

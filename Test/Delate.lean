@@ -107,10 +107,11 @@ def test_projection_prod (env: Environment) : IO LSpec.TestSeq:= runTest do
 def test_projection_exists (env: Environment) : IO LSpec.TestSeq:= runTest do
   let struct := .app (.bvar 1) (.bvar 0)
   let expr := .proj `Exists 1 struct
-  let .singular recursor numParams := analyzeProjection env expr |
+  let .singular recursor numParams numFields := analyzeProjection env expr |
     fail "`Exists has no projectors"
   checkEq "recursor" recursor `Exists.recOn
   checkEq "numParams" numParams 2
+  checkEq "numFields" numFields 2
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   [
