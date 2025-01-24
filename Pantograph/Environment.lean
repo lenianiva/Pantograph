@@ -43,6 +43,22 @@ def toFilteredSymbol (n: Lean.Name) (info: Lean.ConstantInfo): Option String :=
   if isNameInternal n || info.isUnsafe
   then Option.none
   else Option.some <| toCompactSymbolName n info
+def describe (_: Protocol.EnvDescribe): CoreM Protocol.EnvDescribeResult := do
+  let env ← Lean.MonadEnv.getEnv
+  return {
+    imports := env.header.imports.map toString,
+    modules := env.header.moduleNames.map (·.toString),
+  }
+def moduleRead (args: Protocol.EnvModuleRead): CoreM (Protocol.CR Protocol.EnvModuleReadResult) := do
+  let env ← Lean.MonadEnv.getEnv
+  let .some i := env.header.moduleNames.findIdx? (· == args.module.toName) |
+    return .error $ Protocol.errorIndex s!"Module not found {args.module}"
+  let data := env.header.moduleData[i]!
+  return .ok {
+    imports := data.imports.map toString,
+    constNames := data.constNames.map (·.toString),
+    extraConstNames := data.extraConstNames.map (·.toString),
+  }
 def catalog (_: Protocol.EnvCatalog): CoreM Protocol.EnvCatalogResult := do
   let env ← Lean.MonadEnv.getEnv
   let names := env.constants.fold (init := #[]) (λ acc name info =>
