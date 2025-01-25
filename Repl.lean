@@ -4,7 +4,6 @@ import Pantograph
 namespace Pantograph.Repl
 
 structure Context where
-  imports: List String
 
 /-- Stores state of the REPL -/
 structure State where
