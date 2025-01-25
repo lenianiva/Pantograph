@@ -750,8 +750,6 @@ def test_tactic_failure_synthesize_placeholder : TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
 
-  let iex : InternalExceptionId := { idx := 4 }
-  IO.println s!"{← iex.getName}"
   let tactic := "simpa [h] using And.imp_left h _"
   --let state2 ← match ← state1.tacticOn 0 tactic with
   --  | .success state => pure state
