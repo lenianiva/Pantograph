@@ -59,6 +59,12 @@ and then add the new constants.
 def environmentPickle (env : Environment) (path : System.FilePath) : IO Unit :=
   Pantograph.pickle path (env.header.imports, env.constants.map₂)
 
+def resurrectEnvironment
+  (imports : Array Import)
+  (map₂ : PHashMap Name ConstantInfo)
+  : IO Environment := do
+  let env ← importModules imports {} 0
+  env.replay (Std.HashMap.ofList map₂.toList)
 /--
 Unpickle an `Environment` from disk.
 
@@ -68,8 +74,7 @@ and then replace the new constants.
 @[export pantograph_env_unpickle_m]
 def environmentUnpickle (path : System.FilePath) : IO (Environment × CompactedRegion) := unsafe do
   let ((imports, map₂), region) ← Pantograph.unpickle (Array Import × PHashMap Name ConstantInfo) path
-  let env ← importModules imports {} 0
-  return (← env.replay (Std.HashMap.ofList map₂.toList), region)
+  return (← resurrectEnvironment imports map₂, region)
 
 
 open Lean.Core in
@@ -88,7 +93,9 @@ def goalStatePickle (goalState : GoalState) (path : System.FilePath) : IO Unit :
     savedState := {
       term := {
         meta := {
-          core,
+          core := {
+            env, nextMacroScope, ngen, ..
+          },
           meta,
         }
         «elab»,
@@ -100,9 +107,10 @@ def goalStatePickle (goalState : GoalState) (path : System.FilePath) : IO Unit :
     convMVar?,
     calcPrevRhs?,
   } := goalState
-  --let env := core.env
   Pantograph.pickle path (
-    ({ core with } : CompactCoreState),
+    env.constants.map₂,
+
+    ({ nextMacroScope, ngen } : CompactCoreState),
     meta,
     «elab»,
     tactic,
@@ -117,6 +125,8 @@ def goalStatePickle (goalState : GoalState) (path : System.FilePath) : IO Unit :
 def goalStateUnpickle (path : System.FilePath) (env : Environment)
     : IO (GoalState × CompactedRegion) := unsafe do
   let ((
+    map₂,
+
     compactCore,
     meta,
     «elab»,
@@ -127,6 +137,8 @@ def goalStateUnpickle (path : System.FilePath) (env : Environment)
     convMVar?,
     calcPrevRhs?,
   ), region) ← Pantograph.unpickle (
+    PHashMap Name ConstantInfo ×
+
     CompactCoreState ×
     Meta.State ×
     Elab.Term.State ×
@@ -137,6 +149,7 @@ def goalStateUnpickle (path : System.FilePath) (env : Environment)
     Option (MVarId × MVarId × List MVarId) ×
     Option (MVarId × Expr)
   ) path
+  let env ← env.replay (Std.HashMap.ofList map₂.toList)
   let goalState := {
     savedState := {
       term := {
