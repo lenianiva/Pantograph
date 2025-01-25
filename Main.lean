@@ -23,10 +23,10 @@ def parseCommand (s: String): Except String Command := do
       return { cmd := s.take offset, payload := payload }
   | .none => throw "Command is empty"
 
-partial def loop : MainM Unit := do
+partial def loop : MainM Unit := do repeat do
   let state ← get
   let command ← (← IO.getStdin).getLine
-  if command.trim.length = 0 then return ()
+  if command.trim.length = 0 then break
   match parseCommand command with
   | .error error =>
     let error  := Lean.toJson ({ error := "command", desc := error }: InteractionError)
@@ -43,7 +43,6 @@ partial def loop : MainM Unit := do
       let message ← e.toMessageData.toString
       let error  := Lean.toJson ({ error := "main", desc := message }: InteractionError)
       IO.println error.compress
-  loop
 
 
 unsafe def main (args: List String): IO Unit := do
