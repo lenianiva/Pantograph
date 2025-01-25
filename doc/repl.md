@@ -13,6 +13,8 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
   only the values of definitions are printed.
 * `env.save { "path": <fileName> }`, `env.load { "path": <fileName> }`: Save/Load the
   current environment to/from a file
+* `env.module_read { "module": <name }`: Reads a list of symbols from a module
+* `env.describe {}`: Describes the imports and modules in the current environment
 * `options.set { key: value, ... }`: Set one or more options (not Lean options; those
   have to be set via command line arguments.), for options, see `Pantograph/Protocol.lean`
 
