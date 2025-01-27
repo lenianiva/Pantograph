@@ -110,7 +110,7 @@ def test_symbol_location : TestT IO Unit := do
     checkTrue "file" result.sourceUri?.isNone
     checkEq "pos" (result.sourceStart?.map (·.column)) <| .some 0
     checkEq "pos" (result.sourceEnd?.map (·.column)) <| .some 88
-    let .ok { imports, constNames, extraConstNames } ← Environment.moduleRead ⟨"Init.Data.Nat.Basic"⟩ | fail "Module read failed"
+    let .ok { imports, constNames, .. } ← Environment.moduleRead ⟨"Init.Data.Nat.Basic"⟩ | fail "Module read failed"
     checkEq "imports" imports #["Init.SimpLemmas", "Init.Data.NeZero"]
     checkTrue "constNames" $ constNames.contains "Nat.succ_add"
 

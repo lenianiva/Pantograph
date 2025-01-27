@@ -4,7 +4,6 @@ import Pantograph
 namespace Pantograph.Repl
 
 structure Context where
-  imports: List String
 
 /-- Stores state of the REPL -/
 structure State where
@@ -13,7 +12,9 @@ structure State where
   goalStates: Std.HashMap Nat GoalState := Std.HashMap.empty
 
 /-- Main state monad for executing commands -/
-abbrev MainM := ReaderT Context (StateT State Lean.CoreM)
+abbrev MainM := ReaderT Context $ StateRefT State Lean.CoreM
+/-- Fallible subroutine return type -/
+abbrev CR α := Except Protocol.InteractionError α
 
 def newGoalState (goalState: GoalState) : MainM Nat := do
   let state ← get
@@ -24,10 +25,6 @@ def newGoalState (goalState: GoalState) : MainM Nat := do
   }
   return stateId
 
-
--- HACK: For some reason writing `CommandM α := MainM (Except ... α)` disables
--- certain monadic features in `MainM`
-abbrev CR α := Except Protocol.InteractionError α
 
 def runMetaInMainM { α } (metaM: Lean.MetaM α): MainM α :=
   metaM.run'

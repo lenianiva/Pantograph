@@ -235,9 +235,7 @@ def test_frontend_process_sorry : Test :=
 
 def runTest (env: Lean.Environment) (steps: Test): IO LSpec.TestSeq := do
   -- Setup the environment for execution
-  let context: Context := {
-    imports := ["Init"]
-  }
+  let context: Context := {}
   let commands: MainM LSpec.TestSeq :=
     steps.foldlM (λ suite step => do
       let result ← step
