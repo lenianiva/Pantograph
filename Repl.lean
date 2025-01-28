@@ -3,6 +3,8 @@ import Pantograph
 
 namespace Pantograph.Repl
 
+open Lean
+
 structure Context where
 
 /-- Stores state of the REPL -/
@@ -12,7 +14,7 @@ structure State where
   goalStates: Std.HashMap Nat GoalState := Std.HashMap.empty
 
 /-- Main state monad for executing commands -/
-abbrev MainM := ReaderT Context $ StateRefT State Lean.CoreM
+abbrev MainM := ReaderT Context $ StateRefT State CoreM
 /-- Fallible subroutine return type -/
 abbrev CR α := Except Protocol.InteractionError α
 
@@ -26,20 +28,100 @@ def newGoalState (goalState: GoalState) : MainM Nat := do
   return stateId
 
 
-def runMetaInMainM { α } (metaM: Lean.MetaM α): MainM α :=
+def runMetaInMainM { α } (metaM: MetaM α): MainM α :=
   metaM.run'
-def runTermElabInMainM { α } (termElabM: Lean.Elab.TermElabM α) : MainM α :=
+def runTermElabInMainM { α } (termElabM: Elab.TermElabM α) : MainM α :=
   termElabM.run' (ctx := defaultElabContext) |>.run'
 
+section Frontend
+
+structure CompilationUnit where
+  -- Should be the penultimate environment, but this is ok
+  env : Environment
+  boundary : Nat × Nat
+  invocations : List Protocol.InvokedTactic
+  sorrys : List Frontend.InfoWithContext
+  messages : Array String
+  newConstants : List Name
+
+
+
+def frontend_process_inner (args: Protocol.FrontendProcess): MainM (CR Protocol.FrontendProcessResult) := do
+  let options := (← get).options
+  let (fileName, file) ← match args.fileName?, args.file? with
+    | .some fileName, .none => do
+      let file ← IO.FS.readFile fileName
+      pure (fileName, file)
+    | .none, .some file =>
+      pure ("<anonymous>", file)
+    | _, _ => return .error <| errorI "arguments" "Exactly one of {fileName, file} must be supplied"
+  let env?: Option Environment ← if args.fileName?.isSome then
+      pure .none
+    else do
+      let env ← getEnv
+      pure <| .some env
+  let (context, state) ← do Frontend.createContextStateFromFile file fileName env? {}
+  let frontendM: Elab.Frontend.FrontendM (List CompilationUnit) :=
+    Frontend.mapCompilationSteps λ step => do
+    let boundary := (step.src.startPos.byteIdx, step.src.stopPos.byteIdx)
+    let invocations: Option (List Protocol.InvokedTactic) ← if args.invocations then
+        Frontend.collectTacticsFromCompilationStep step
+      else
+        pure []
+    let sorrys ← if args.sorrys then
+        Frontend.collectSorrys step (options := { collectTypeErrors := args.typeErrorsAsGoals })
+      else
+        pure []
+    let messages ← step.messageStrings
+    let newConstants ← if args.newConstants then
+        Frontend.collectNewDefinedConstants step
+      else
+        pure []
+    return {
+      env := step.after,
+      boundary,
+      invocations,
+      sorrys,
+      messages,
+      newConstants
+    }
+  let li ← frontendM.run context |>.run' state
+  let units ← li.mapM λ step => withEnv step.env do
+    let newConstants? := if args.newConstants then
+        .some $ step.newConstants.toArray.map λ name => name.toString
+      else
+        .none
+    let (goalStateId?, goals?, goalSrcBoundaries?) ← if step.sorrys.isEmpty then do
+        pure (.none, .none, .none)
+      else do
+        let { state, srcBoundaries } ← runMetaInMainM $ Frontend.sorrysToGoalState step.sorrys
+        let stateId ← newGoalState state
+        let goals ← goalSerialize state options
+        let srcBoundaries := srcBoundaries.toArray.map (λ (b, e) => (b.byteIdx, e.byteIdx))
+        pure (.some stateId, .some goals, .some srcBoundaries)
+    let invocations? := if args.invocations then .some step.invocations else .none
+    return {
+      boundary := step.boundary,
+      messages := step.messages,
+      invocations?,
+      goalStateId?,
+      goals?,
+      goalSrcBoundaries?,
+      newConstants?,
+    }
+  return .ok { units }
+
+end Frontend
+
 /-- Main loop command of the REPL -/
-def execute (command: Protocol.Command): MainM Lean.Json := do
-  let run { α β: Type } [Lean.FromJson α] [Lean.ToJson β] (comm: α → MainM (CR β)): MainM Lean.Json :=
-    match Lean.fromJson? command.payload with
+def execute (command: Protocol.Command): MainM Json := do
+  let run { α β: Type } [FromJson α] [ToJson β] (comm: α → MainM (CR β)): MainM Json :=
+    match fromJson? command.payload with
     | .ok args => do
       match (← comm args) with
-      | .ok result =>  return Lean.toJson result
-      | .error ierror => return Lean.toJson ierror
-    | .error error => return Lean.toJson $ errorCommand s!"Unable to parse json: {error}"
+      | .ok result =>  return toJson result
+      | .error ierror => return toJson ierror
+    | .error error => return toJson $ errorCommand s!"Unable to parse json: {error}"
   try
     match command.cmd with
     | "reset"         => run reset
@@ -65,10 +147,10 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     | cmd =>
       let error: Protocol.InteractionError :=
         errorCommand s!"Unknown command {cmd}"
-      return Lean.toJson error
+      return toJson error
   catch ex => do
     let error ← ex.toMessageData.toString
-    return Lean.toJson $ errorIO error
+    return toJson $ errorIO error
   where
   errorCommand := errorI "command"
   errorIndex := errorI "index"
@@ -78,7 +160,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     let state ← get
     let nGoals := state.goalStates.size
     set { state with nextId := 0, goalStates := .empty }
-    Lean.Core.resetMessageLog
+    Core.resetMessageLog
     return .ok { nGoals }
   stat (_: Protocol.Stat): MainM (CR Protocol.StatResult) := do
     let state ← get
@@ -98,12 +180,12 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   env_add (args: Protocol.EnvAdd): MainM (CR Protocol.EnvAddResult) := do
     Environment.addDecl args
   env_save (args: Protocol.EnvSaveLoad): MainM (CR Protocol.EnvSaveLoadResult) := do
-    let env ← Lean.MonadEnv.getEnv
+    let env ← MonadEnv.getEnv
     environmentPickle env args.path
     return .ok {}
   env_load (args: Protocol.EnvSaveLoad): MainM (CR Protocol.EnvSaveLoadResult) := do
     let (env, _) ← environmentUnpickle args.path
-    Lean.setEnv env
+    setEnv env
     return .ok {}
   expr_echo (args: Protocol.ExprEcho): MainM (CR Protocol.ExprEchoResult) := do
     let state ← get
@@ -128,7 +210,7 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
   options_print (_: Protocol.OptionsPrint): MainM (CR Protocol.Options) := do
     return .ok (← get).options
   goal_start (args: Protocol.GoalStart): MainM (CR Protocol.GoalStartResult) := do
-    let env ← Lean.MonadEnv.getEnv
+    let env ← MonadEnv.getEnv
     let expr?: Except _ GoalState ← runTermElabInMainM (match args.expr, args.copyFrom with
       | .some expr, .none => goalStartExpr expr (args.levels.getD #[])
       | .none, .some copyFrom =>
@@ -245,66 +327,12 @@ def execute (command: Protocol.Command): MainM Lean.Json := do
     goalStatePickle goalState args.path
     return .ok {}
   goal_load (args: Protocol.GoalLoad): MainM (CR Protocol.GoalLoadResult) := do
-    let (goalState, _) ← goalStateUnpickle args.path (← Lean.MonadEnv.getEnv)
+    let (goalState, _) ← goalStateUnpickle args.path (← MonadEnv.getEnv)
     let id ← newGoalState goalState
     return .ok { id }
   frontend_process (args: Protocol.FrontendProcess): MainM (CR Protocol.FrontendProcessResult) := do
-    let options := (← get).options
     try
-      let (fileName, file) ← match args.fileName?, args.file? with
-        | .some fileName, .none => do
-          let file ← IO.FS.readFile fileName
-          pure (fileName, file)
-        | .none, .some file =>
-          pure ("<anonymous>", file)
-        | _, _ => return .error <| errorI "arguments" "Exactly one of {fileName, file} must be supplied"
-      let env?: Option Lean.Environment ← if args.fileName?.isSome then
-          pure .none
-        else do
-          let env ← Lean.MonadEnv.getEnv
-          pure <| .some env
-      let (context, state) ← do Frontend.createContextStateFromFile file fileName env? {}
-      let frontendM := Frontend.mapCompilationSteps λ step => do
-        let boundary := (step.src.startPos.byteIdx, step.src.stopPos.byteIdx)
-        let invocations?: Option (List Protocol.InvokedTactic) ← if args.invocations then
-            let invocations ← Frontend.collectTacticsFromCompilationStep step
-            pure $ .some invocations
-          else
-            pure .none
-        let sorrys ← if args.sorrys then
-            Frontend.collectSorrys step (options := { collectTypeErrors := args.typeErrorsAsGoals })
-          else
-            pure []
-        let messages ← step.messageStrings
-        let newConstants ← if args.newConstants then
-            Frontend.collectNewDefinedConstants step
-          else
-            pure []
-        return (step.before, boundary, invocations?, sorrys, messages, newConstants)
-      let li ← frontendM.run context |>.run' state
-      let units ← li.mapM λ (env, boundary, invocations?, sorrys, messages, newConstants) => Lean.withEnv env do
-        let newConstants? := if args.newConstants then
-            .some $ newConstants.toArray.map λ name => name.toString
-          else
-            .none
-        let (goalStateId?, goals?, goalSrcBoundaries?) ← if sorrys.isEmpty then do
-            pure (.none, .none, .none)
-          else do
-            let { state, srcBoundaries } ← runMetaInMainM $ Frontend.sorrysToGoalState sorrys
-            let stateId ← newGoalState state
-            let goals ← goalSerialize state options
-            let srcBoundaries := srcBoundaries.toArray.map (λ (b, e) => (b.byteIdx, e.byteIdx))
-            pure (.some stateId, .some goals, .some srcBoundaries)
-        return {
-          boundary,
-          messages,
-          invocations?,
-          goalStateId?,
-          goals?,
-          goalSrcBoundaries?,
-          newConstants?,
-        }
-      return .ok { units }
+      frontend_process_inner args
     catch e =>
       return .error $ errorI "frontend" (← e.toMessageData.toString)
 
