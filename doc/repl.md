@@ -52,7 +52,8 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
   (`"invocations": true`), the sorrys and type errors into goal states
   (`"sorrys": true`), and new constants (`"newConstants": true`). In the case of
   `sorrys`, this command additionally outputs the position of each captured
-  `sorry`.
+  `sorry`. Warning: Behaviour is unstable in case of multiple `sorry`s. Use the
+  draft tactic if possible.
 
 ## Errors
 
