@@ -44,8 +44,6 @@ structure CompilationUnit where
   messages : Array String
   newConstants : List Name
 
-
-
 def frontend_process_inner (args: Protocol.FrontendProcess): MainM (CR Protocol.FrontendProcessResult) := do
   let options := (← get).options
   let (fileName, file) ← match args.fileName?, args.file? with
@@ -78,7 +76,7 @@ def frontend_process_inner (args: Protocol.FrontendProcess): MainM (CR Protocol.
       else
         pure []
     return {
-      env := step.after,
+      env := step.before,
       boundary,
       invocations,
       sorrys,
