@@ -100,7 +100,7 @@ def test_partial_motive_instantiation : TestT Elab.TermElabM Unit := do
 
     addTest $ ← conduit.withContext do
       let t := toString (← Meta.ppExpr $ ← conduit.getType)
-      return LSpec.check "conduit" (t = s!"(Nat.add ?m.{majorId} + 0 = ?m.149 ?m.{majorId}) = (n + 0 = n)")
+      return LSpec.check "conduit" (t = s!"(Nat.add ?m.{majorId} + 0 = ?m.150 ?m.{majorId}) = (n + 0 = n)")
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   [
