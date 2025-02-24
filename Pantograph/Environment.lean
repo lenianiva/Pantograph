@@ -24,8 +24,11 @@ def env_catalog (env: Environment): Array Name := env.constants.fold (init := #[
 
 @[export pantograph_environment_module_of_name]
 def module_of_name (env: Environment) (name: Name): Option Name := do
-  let moduleId ←  env.getModuleIdxFor? name
-  return env.allImportedModuleNames.get! moduleId.toNat
+  let moduleId ← env.getModuleIdxFor? name
+  if h : moduleId.toNat < env.allImportedModuleNames.size then
+    return env.allImportedModuleNames.get moduleId.toNat h
+  else
+    .none
 
 def toCompactSymbolName (n: Name) (info: ConstantInfo): String :=
   let pref := match info with
