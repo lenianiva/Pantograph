@@ -191,22 +191,6 @@ protected def GoalState.tryDefine (state: GoalState) (goal: MVarId) (binderName:
   runTermElabM do
     state.restoreElabM
     state.tryTacticM goal (Tactic.evalDefine binderName.toName expr)
-@[export pantograph_goal_try_motivated_apply_m]
-protected def GoalState.tryMotivatedApply (state: GoalState) (goal: MVarId) (recursor: String):
-      Elab.TermElabM TacticResult := do
-  state.restoreElabM
-  let recursor ← match (← parseTermM recursor) with
-    | .ok syn => pure syn
-    | .error error => return .parseError error
-  state.tryTacticM goal (tacticM := Tactic.evalMotivatedApply recursor)
-@[export pantograph_goal_try_no_confuse_m]
-protected def GoalState.tryNoConfuse (state: GoalState) (goal: MVarId) (eq: String):
-      Elab.TermElabM TacticResult := do
-  state.restoreElabM
-  let eq ← match (← parseTermM eq) with
-    | .ok syn => pure syn
-    | .error error => return .parseError error
-  state.tryTacticM goal (tacticM := Tactic.evalNoConfuse eq)
 @[export pantograph_goal_try_draft_m]
 protected def GoalState.tryDraft (state: GoalState) (goal: MVarId) (expr: String): CoreM TacticResult := do
   let expr ← match (← parseTermM expr) with
