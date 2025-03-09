@@ -2,12 +2,11 @@
   description = "Pantograph";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-24.05";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-24.11";
     flake-parts.url = "github:hercules-ci/flake-parts";
-    lean4-nix.url = "github:lenianiva/lean4-nix";
-    lspec = {
-      url = "github:argumentcomputer/LSpec?ref=504a8cecf8da601b9466ac727aebb6b511aae4ab";
-      flake = false;
+    lean4-nix = {
+      url = "github:lenianiva/lean4-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
@@ -16,7 +15,6 @@
     nixpkgs,
     flake-parts,
     lean4-nix,
-    lspec,
     ...
   }:
     flake-parts.lib.mkFlake {inherit inputs;} {
@@ -37,10 +35,12 @@
           inherit system;
           overlays = [(lean4-nix.readToolchainFile ./lean-toolchain)];
         };
+        manifest = pkgs.lib.importJSON ./lake-manifest.json;
+        manifest-lspec = builtins.head manifest;
         lspecLib = pkgs.lean.buildLeanPackage {
           name = "LSpec";
-          roots = ["Main" "LSpec"];
-          src = "${lspec}";
+          roots = ["LSpec"];
+          src = builtins.fetchGit { inherit (manifest-lspec) url rev; };
         };
         project = pkgs.lean.buildLeanPackage {
           name = "Pantograph";
