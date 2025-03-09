@@ -36,7 +36,7 @@
           overlays = [(lean4-nix.readToolchainFile ./lean-toolchain)];
         };
         manifest = pkgs.lib.importJSON ./lake-manifest.json;
-        manifest-lspec = builtins.head manifest;
+        manifest-lspec = builtins.head manifest.packages;
         lspecLib = pkgs.lean.buildLeanPackage {
           name = "LSpec";
           roots = ["LSpec"];
