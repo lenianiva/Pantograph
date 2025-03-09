@@ -35,13 +35,12 @@
           inherit system;
           overlays = [(lean4-nix.readToolchainFile ./lean-toolchain)];
         };
+        manifest = pkgs.lib.importJSON ./lake-manifest.json;
+        manifest-lspec = builtins.head manifest;
         lspecLib = pkgs.lean.buildLeanPackage {
           name = "LSpec";
           roots = ["LSpec"];
-          src = builtins.fetchGit {
-            url = "https://github.com/argumentcomputer/LSpec.git";
-            rev = "ca8e2803f89f0c12bf9743ae7abbfb2ea6b0eeec";
-          };
+          src = builtins.fetchGit { inherit (manifest-lspec) url rev; };
         };
         project = pkgs.lean.buildLeanPackage {
           name = "Pantograph";
