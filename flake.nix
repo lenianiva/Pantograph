@@ -40,29 +40,52 @@
         lspecLib = pkgs.lean.buildLeanPackage {
           name = "LSpec";
           roots = ["LSpec"];
-          src = builtins.fetchGit { inherit (manifest-lspec) url rev; };
+          src = builtins.fetchGit {inherit (manifest-lspec) url rev;};
+        };
+        inherit (pkgs.lib.fileset) unions toSource fileFilter;
+        src = ./.;
+        set-project = unions [
+          ./Pantograph.lean
+          (fileFilter (file: file.hasExt "lean") ./Pantograph)
+        ];
+        set-repl = unions [
+          ./Main.lean
+          ./Repl.lean
+        ];
+        set-test = unions [
+          (fileFilter (file: file.hasExt "lean") ./Test)
+        ];
+        src-project = toSource {
+          root = src;
+          fileset = unions [
+            set-project
+          ];
+        };
+        src-repl = toSource {
+          root = src;
+          fileset = unions [
+            set-project
+            set-repl
+          ];
+        };
+        src-test = toSource {
+          root = src;
+          fileset = unions [
+            set-project
+            set-repl
+            set-test
+          ];
         };
         project = pkgs.lean.buildLeanPackage {
           name = "Pantograph";
           roots = ["Pantograph"];
-          src = pkgs.lib.cleanSource (pkgs.lib.cleanSourceWith {
-            src = ./.;
-            filter = path: type:
-              !(pkgs.lib.hasInfix "/Test/" path)
-              && !(pkgs.lib.hasSuffix ".md" path)
-              && !(pkgs.lib.hasSuffix "Repl.lean" path);
-          });
+          src = src-project;
         };
         repl = pkgs.lean.buildLeanPackage {
           name = "Repl";
           roots = ["Main" "Repl"];
           deps = [project];
-          src = pkgs.lib.cleanSource (pkgs.lib.cleanSourceWith {
-            src = ./.;
-            filter = path: type:
-              !(pkgs.lib.hasInfix "/Test/" path)
-              && !(pkgs.lib.hasSuffix ".md" path);
-          });
+          src = src-repl;
         };
         test = pkgs.lean.buildLeanPackage {
           name = "Test";
@@ -71,11 +94,7 @@
           # Environment`) and thats where `lakefile.lean` resides.
           roots = ["Test.Main"];
           deps = [lspecLib repl];
-          src = pkgs.lib.cleanSource (pkgs.lib.cleanSourceWith {
-            src = ./.;
-            filter = path: type:
-              !(pkgs.lib.hasInfix "Pantograph" path);
-          });
+          src = src-test;
         };
       in rec {
         packages = {
