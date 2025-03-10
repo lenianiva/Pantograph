@@ -1,10 +1,26 @@
-import LSpec
 import Pantograph
 import Repl
 import Test.Common
 
+import LSpec
+
 open Lean Pantograph
 namespace Pantograph.Test.Frontend
+
+def runFrontend { α } (source: String) (f : Frontend.CompilationStep → IO α) : MetaM (List α) := do
+  let filename := "<anonymous>"
+  let (context, state) ← do Frontend.createContextStateFromFile source filename (← getEnv) {}
+  let m := Frontend.mapCompilationSteps f
+  m.run context |>.run' state
+
+def test_open : TestT MetaM Unit := do
+  let sketch := "
+open Nat
+example : ∀ (n m: Nat), n + m = m + n := by
+  apply add_comm
+  "
+  let errors ← runFrontend sketch λ step => step.msgs.mapM (·.toString)
+  checkEq "errors" errors [[]]
 
 def collectSorrysFromSource (source: String) (options : Frontend.GoalCollectionOptions := {})
     : MetaM (List GoalState) := do
@@ -233,6 +249,7 @@ theorem mystery [SizeOf α] (as : List α) (i : Fin as.length) : sizeOf (as.get 
 
 def suite (env : Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
+    ("open", test_open),
     ("multiple_sorrys_in_proof", test_multiple_sorrys_in_proof),
     ("sorry_in_middle", test_sorry_in_middle),
     ("sorry_in_induction", test_sorry_in_induction),
