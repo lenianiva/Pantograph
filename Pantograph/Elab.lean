@@ -6,7 +6,8 @@ namespace Pantograph
 -- Functions for creating contexts and states
 @[export pantograph_default_elab_context]
 def defaultElabContext: Elab.Term.Context := {
-    errToSorry := false
+    declName? := .some `mystery,
+    errToSorry := false,
   }
 
 /-- Read syntax object from string -/

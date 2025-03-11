@@ -594,6 +594,25 @@ def test_tactic_failure_synthesize_placeholder : TestM Unit := do
   let message := s!"<Pantograph>:0:31: error: don't know how to synthesize placeholder\ncontext:\np q r : Prop\nh : p → q\n⊢ p ∧ r\n"
   checkEq s!"{tactic} fails" messages #[message]
 
+def test_deconstruct : TestM Unit := do
+  let state? ← startProof (.expr "∀ (p q : Prop) (h : And p q), And q p")
+  let state0 ← match state? with
+    | .some state => pure state
+    | .none => do
+      addTest $ assertUnreachable "Goal could not parse"
+      return ()
+
+  let tactic := "intro p q ⟨hp, hq⟩"
+  let state1 ← match ← state0.tacticOn 0 tactic with
+    | .success state => pure state
+    | other => do
+      fail other.toString
+      return ()
+  checkEq tactic ((← state1.serializeGoals (options := ← read)).map (·.devolatilize))
+    #[
+      buildGoal [("p", "Prop"), ("q", "Prop"), ("hp", "p"), ("hq", "q")] "q ∧ p"
+    ]
+
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
@@ -607,6 +626,7 @@ def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
     ("calc", test_calc),
     ("tactic failure with unresolved goals", test_tactic_failure_unresolved_goals),
     ("tactic failure with synthesize placeholder", test_tactic_failure_synthesize_placeholder),
+    ("deconstruct", test_deconstruct),
   ]
   tests.map (fun (name, test) => (name, proofRunner env test))
 
