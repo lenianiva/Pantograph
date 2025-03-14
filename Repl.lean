@@ -53,11 +53,10 @@ def frontend_process_inner (args: Protocol.FrontendProcess): MainM (CR Protocol.
     | .none, .some file =>
       pure ("<anonymous>", file)
     | _, _ => return .error <| errorI "arguments" "Exactly one of {fileName, file} must be supplied"
-  let env?: Option Environment ← if args.fileName?.isSome then
+  let env?: Option Environment ← if args.readHeader then
       pure .none
     else do
-      let env ← getEnv
-      pure <| .some env
+      .some <$> getEnv
   let (context, state) ← do Frontend.createContextStateFromFile file fileName env? {}
   let frontendM: Elab.Frontend.FrontendM (List CompilationUnit) :=
     Frontend.mapCompilationSteps λ step => do
@@ -83,7 +82,9 @@ def frontend_process_inner (args: Protocol.FrontendProcess): MainM (CR Protocol.
       messages,
       newConstants
     }
-  let li ← frontendM.run context |>.run' state
+  let (li, state') ← frontendM.run context |>.run state
+  if args.inheritEnv then
+    setEnv state'.commandState.env
   let units ← li.mapM λ step => withEnv step.env do
     let newConstants? := if args.newConstants then
         .some $ step.newConstants.toArray.map λ name => name.toString
@@ -141,7 +142,7 @@ def execute (command: Protocol.Command): MainM Json := do
     | "goal.print"    => run goal_print
     | "goal.save"     => run goal_save
     | "goal.load"     => run goal_load
-    | "frontend.process"  => run frontend_process
+    | "frontend.process" => run frontend_process
     | cmd =>
       let error: Protocol.InteractionError :=
         errorCommand s!"Unknown command {cmd}"

@@ -40,6 +40,7 @@ def stxByteRange (stx : Syntax) : String.Pos × String.Pos :=
 abbrev FrontendM := Elab.Frontend.FrontendM
 
 structure CompilationStep where
+  scope : Elab.Command.Scope
   fileName : String
   fileMap : FileMap
   src : Substring
@@ -74,7 +75,7 @@ def processOneCommand: FrontendM (CompilationStep × Bool) := do
   let msgs := s'.messages.toList.drop s.messages.toList.length
   let trees := s'.infoState.trees.drop s.infoState.trees.size
   let ⟨_, fileName, fileMap⟩  := (← read).inputCtx
-  return ({ fileName, fileMap, src, stx, before, after, msgs, trees }, done)
+  return ({ scope := s.scopes.head!, fileName, fileMap, src, stx, before, after, msgs, trees }, done)
 
 partial def mapCompilationSteps { α } (f: CompilationStep → IO α) : FrontendM (List α) := do
   let (cmd, done) ← processOneCommand
