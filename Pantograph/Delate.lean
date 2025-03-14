@@ -85,13 +85,13 @@ This function ensures any metavariable in the result is either
 1. Delayed assigned with its pending mvar not assigned in any form
 2. Not assigned (delay or not)
  -/
-partial def instantiateDelayedMVars (eOrig: Expr) : MetaM Expr := do
+partial def instantiateDelayedMVars (eOrig: Expr) : MetaM Expr :=
   --let padding := String.join $ List.replicate level "│ "
-  --IO.println s!"{padding}Starting {toString eOrig}"
+  withTraceNode `Pantograph.Delate (λ _ex => return m!":= {← Meta.ppExpr eOrig}") do
   let mut result ← Meta.transform (← instantiateMVars eOrig)
     (pre := fun e => e.withApp fun f args => do
       let .mvar mvarId := f | return .continue
-      --IO.println s!"{padding}├V {e}"
+      trace[Pantograph.Delate] "V {e}"
       let mvarDecl ← mvarId.getDecl
 
       -- This is critical to maintaining the interdependency of metavariables.
@@ -109,12 +109,13 @@ partial def instantiateDelayedMVars (eOrig: Expr) : MetaM Expr := do
           panic! s!"In the context of {mvarId.name}, there are local context variable violations: {violations}"
 
         if let .some assign ← getExprMVarAssignment? mvarId then
-          --IO.println s!"{padding}├A ?{mvarId.name}"
+          trace[Pantograph.Delate] "A ?{mvarId.name}"
           assert! !(← mvarId.isDelayedAssigned)
           return .visit (mkAppN assign args)
         else if let some { fvars, mvarIdPending } ← getDelayedMVarAssignment? mvarId then
-          --let substTableStr := String.intercalate ", " $ Array.zipWith fvars args (λ fvar assign => s!"{fvar.fvarId!.name} := {assign}") |>.toList
-          --IO.println s!"{padding}├MD ?{mvarId.name} := ?{mvarIdPending.name} [{substTableStr}]"
+          if ← isTracingEnabledFor `Pantograph.Delate then
+            let substTableStr := String.intercalate ", " $ Array.zipWith fvars args (λ fvar assign => s!"{fvar.fvarId!.name} := {assign}") |>.toList
+            trace[Pantograph.Delate]"MD ?{mvarId.name} := ?{mvarIdPending.name} [{substTableStr}]"
 
           if args.size < fvars.size then
             throwError "Not enough arguments to instantiate a delay assigned mvar. This is due to bad implementations of a tactic: {args.size} < {fvars.size}. Expr: {toString e}; Origin: {toString eOrig}"
@@ -124,18 +125,18 @@ partial def instantiateDelayedMVars (eOrig: Expr) : MetaM Expr := do
           --if !args.isEmpty then
             --IO.println s!"{padding}├── Arguments End"
           if !(← mvarIdPending.isAssignedOrDelayedAssigned) then
-            --IO.println s!"{padding}├T1"
+            trace[Pantograph.Delate] "T1"
             let result := mkAppN f args
             return .done result
 
           let pending ← mvarIdPending.withContext do
             let inner ← instantiateDelayedMVars (.mvar mvarIdPending) --(level := level + 1)
-            --IO.println s!"{padding}├Pre: {inner}"
+            trace[Pantograph.Delate] "Pre: {inner}"
             pure <| (← inner.abstractM fvars).instantiateRev args
 
           -- Tail arguments
           let result := mkAppRange pending fvars.size args.size args
-          --IO.println s!"{padding}├MD {result}"
+          trace[Pantograph.Delate] "MD {result}"
           return .done result
         else
           assert! !(← mvarId.isAssigned)
@@ -146,9 +147,9 @@ partial def instantiateDelayedMVars (eOrig: Expr) : MetaM Expr := do
           --if !args.isEmpty then
           --  IO.println s!"{padding}├── Arguments End"
 
-          --IO.println s!"{padding}├M ?{mvarId.name}"
+          trace[Pantograph.Delate] "M ?{mvarId.name}"
           return .done (mkAppN f args))
-  --IO.println s!"{padding}└Result {result}"
+  trace[Pantoraph.Delate] "Result {result}"
   return result
   where
   self e := instantiateDelayedMVars e --(level := level + 1)
@@ -593,5 +594,8 @@ protected def GoalState.diag (goalState: GoalState) (parent?: Option GoalState :
       | .anonymous => ""
       | other => s!"[{other}]"
     parentHasMVar (mvarId: MVarId): Bool := parent?.map (λ state => state.mctx.decls.contains mvarId) |>.getD true
+
+initialize
+  registerTraceClass `Pantograph.Delate
 
 end Pantograph
