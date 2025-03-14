@@ -173,6 +173,8 @@ def test_frontend_process : Test :=
       [
         ("file",              .str file),
         ("invocations",       .bool true),
+        ("readHeader",        .bool false),
+        ("inheritEnv",        .bool false),
         ("sorrys",            .bool false),
         ("typeErrorsAsGoals", .bool false),
         ("newConstants",      .bool false),
@@ -214,6 +216,8 @@ def test_frontend_process_sorry : Test :=
     step "frontend.process"
       [
         ("file", .str file),
+        ("readHeader",        .bool false),
+        ("inheritEnv",        .bool false),
         ("invocations", .bool false),
         ("sorrys", .bool true),
         ("typeErrorsAsGoals", .bool false),
