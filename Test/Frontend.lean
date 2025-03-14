@@ -16,11 +16,12 @@ def runFrontend { α } (source: String) (f : Frontend.CompilationStep → IO α)
 def test_open : TestT MetaM Unit := do
   let sketch := "
 open Nat
-example : ∀ (n m: Nat), n + m = m + n := by
-  apply add_comm
+example : ∀ (n : Nat), n + 1 = Nat.succ n := by
+  intro
+  apply add_one
   "
   let errors ← runFrontend sketch λ step => step.msgs.mapM (·.toString)
-  checkEq "errors" errors [[]]
+  checkEq "errors" errors [[], []]
 
 def collectSorrysFromSource (source: String) (options : Frontend.GoalCollectionOptions := {})
     : MetaM (List GoalState) := do
