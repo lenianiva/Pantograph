@@ -346,10 +346,9 @@ structure FrontendProcess where
   -- One of these two must be supplied: Either supply the file name or the content.
   fileName?: Option String := .none
   file?: Option String := .none
-  -- If set to true, read the header (otherwise discards the header)
+  -- Whether to read the header
   readHeader : Bool := false
-  -- If set to true, Pantograph's environment will be altered to whatever is
-  -- after the compilation units.
+  -- Alter the REPL environment after the compilation units.
   inheritEnv : Bool := false
   -- collect tactic invocations
   invocations: Bool := false

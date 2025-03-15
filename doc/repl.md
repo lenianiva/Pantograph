@@ -46,14 +46,15 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
   Save/Load a goal state to/from a file. The environment is not carried with the
   state. The user is responsible to ensure the sender/receiver instances share
   the same environment.
-* `frontend.process { ["fileName": <fileName>,] ["file": <str>], invocations:
+* `frontend.process { ["fileName": <fileName>,] ["file": <str>], readHeader: <bool>, inheritEnv: <bool>, invocations:
   <bool>, sorrys: <bool>, typeErrorsAsGoals: <bool>, newConstants: <bool> }`:
   Executes the Lean frontend on a file, collecting the tactic invocations
   (`"invocations": true`), the sorrys and type errors into goal states
   (`"sorrys": true`), and new constants (`"newConstants": true`). In the case of
   `sorrys`, this command additionally outputs the position of each captured
-  `sorry`. Warning: Behaviour is unstable in case of multiple `sorry`s. Use the
-  draft tactic if possible.
+  `sorry`. Conditionally inherit the environment from executing the file.
+  Warning: Behaviour is unstable in case of multiple `sorry`s. Use the draft
+  tactic if possible.
 
 ## Errors
 
