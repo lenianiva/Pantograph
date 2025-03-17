@@ -66,7 +66,7 @@ def exprProjToApp (env: Environment) (e: Expr): Expr :=
 def _root_.Lean.Name.isAuxLemma (n : Lean.Name) : Bool := n matches .num (.str _ "_auxLemma") _
 
 /-- Unfold all lemmas created by `Lean.Meta.mkAuxLemma`. These end in `_auxLemma.nn` where `nn` is a number. -/
-@[export pantograph_unfold_aux_lemmas]
+@[export pantograph_unfold_aux_lemmas_m]
 def unfoldAuxLemmas (e : Expr) : CoreM Expr := do
   Lean.Meta.deltaExpand e Lean.Name.isAuxLemma
 
@@ -164,6 +164,13 @@ Convert an expression to an equiavlent form with
 def instantiateAll (e: Expr): MetaM Expr := do
   let e ← instantiateDelayedMVars e
   let e ← unfoldAuxLemmas e
+  let e ← Core.transform e λ e' => do
+    match ← Meta.matchMatcherApp? e' with
+    | .none => return .continue e'
+    | .some mapp =>
+      let .some matcherInfo := (← getEnv).find? mapp.matcherName | panic! "Matcher must exist"
+      let f ← Meta.instantiateValueLevelParams matcherInfo mapp.matcherLevels.toList
+      return .visit (f.betaRev e'.getAppRevArgs (useZeta := true))
   return e
 
 structure DelayedMVarInvocation where
