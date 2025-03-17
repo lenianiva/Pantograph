@@ -67,8 +67,17 @@ def _root_.Lean.Name.isAuxLemma (n : Lean.Name) : Bool := n matches .num (.str _
 
 /-- Unfold all lemmas created by `Lean.Meta.mkAuxLemma`. These end in `_auxLemma.nn` where `nn` is a number. -/
 @[export pantograph_unfold_aux_lemmas_m]
-def unfoldAuxLemmas (e : Expr) : CoreM Expr := do
-  Lean.Meta.deltaExpand e Lean.Name.isAuxLemma
+def unfoldAuxLemmas : Expr → CoreM Expr :=
+  (Lean.Meta.deltaExpand · Lean.Name.isAuxLemma)
+/-- Unfold all matcher applications -/
+@[export pantograph_unfold_matchers_m]
+def unfoldMatchers (expr : Expr) : CoreM Expr :=
+  Core.transform expr λ e' => do
+    let .some mapp ← Meta.matchMatcherApp? e' | return .continue e'
+    let .some matcherInfo := (← getEnv).find? mapp.matcherName | panic! "Matcher must exist"
+    let f ← Meta.instantiateValueLevelParams matcherInfo mapp.matcherLevels.toList
+    let mdata := KVMap.empty.insert `matcher (DataValue.ofName mapp.matcherName)
+    return .visit $ .mdata mdata (f.betaRev e'.getAppRevArgs (useZeta := true))
 
 /--
 Force the instantiation of delayed metavariables even if they cannot be fully
@@ -157,28 +166,21 @@ partial def instantiateDelayedMVars (eOrig: Expr) : MetaM Expr :=
 /--
 Convert an expression to an equiavlent form with
 1. No nested delayed assigned mvars
-2. No aux lemmas
+2. No aux lemmas or matchers
 3. No assigned mvars
  -/
 @[export pantograph_instantiate_all_m]
-def instantiateAll (e: Expr): MetaM Expr := do
+def instantiateAll (e : Expr) : MetaM Expr := do
   let e ← instantiateDelayedMVars e
   let e ← unfoldAuxLemmas e
-  let e ← Core.transform e λ e' => do
-    match ← Meta.matchMatcherApp? e' with
-    | .none => return .continue e'
-    | .some mapp =>
-      let .some matcherInfo := (← getEnv).find? mapp.matcherName | panic! "Matcher must exist"
-      let f ← Meta.instantiateValueLevelParams matcherInfo mapp.matcherLevels.toList
-      let mdata := KVMap.empty.insert `matcher (DataValue.ofName mapp.matcherName)
-      return .visit $ .mdata mdata (f.betaRev e'.getAppRevArgs (useZeta := true))
+  let e ← unfoldMatchers e
   return e
 
 structure DelayedMVarInvocation where
-  mvarIdPending: MVarId
-  args: Array (FVarId × (Option Expr))
+  mvarIdPending : MVarId
+  args : Array (FVarId × (Option Expr))
   -- Extra arguments applied to the result of this substitution
-  tail: Array Expr
+  tail : Array Expr
 
 -- The pending mvar of any delayed assigned mvar must not be assigned in any way.
 @[export pantograph_to_delayed_mvar_invocation_m]
