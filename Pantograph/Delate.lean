@@ -119,11 +119,11 @@ partial def instantiateDelayedMVars (eOrig: Expr) : MetaM Expr :=
 
           if args.size < fvars.size then
             throwError "Not enough arguments to instantiate a delay assigned mvar. This is due to bad implementations of a tactic: {args.size} < {fvars.size}. Expr: {toString e}; Origin: {toString eOrig}"
-          --if !args.isEmpty then
-            --IO.println s!"{padding}├── Arguments Begin"
+          if !args.isEmpty then
+            trace[Pantograph.Delate] "─ Arguments Begin"
           let args ← args.mapM self
-          --if !args.isEmpty then
-            --IO.println s!"{padding}├── Arguments End"
+          if !args.isEmpty then
+            trace[Pantograph.Delate] "─ Arguments End"
           if !(← mvarIdPending.isAssignedOrDelayedAssigned) then
             trace[Pantograph.Delate] "T1"
             let result := mkAppN f args
@@ -141,18 +141,18 @@ partial def instantiateDelayedMVars (eOrig: Expr) : MetaM Expr :=
         else
           assert! !(← mvarId.isAssigned)
           assert! !(← mvarId.isDelayedAssigned)
-          --if !args.isEmpty then
-          --  IO.println s!"{padding}├── Arguments Begin"
+          if !args.isEmpty then
+            trace[Pantograph.Delate] "─ Arguments Begin"
           let args ← args.mapM self
-          --if !args.isEmpty then
-          --  IO.println s!"{padding}├── Arguments End"
+          if !args.isEmpty then
+            trace[Pantograph.Delate] "─ Arguments End"
 
           trace[Pantograph.Delate] "M ?{mvarId.name}"
           return .done (mkAppN f args))
   trace[Pantoraph.Delate] "Result {result}"
   return result
   where
-  self e := instantiateDelayedMVars e --(level := level + 1)
+  self e := instantiateDelayedMVars e
 
 /--
 Convert an expression to an equiavlent form with

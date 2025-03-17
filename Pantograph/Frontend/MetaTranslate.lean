@@ -62,7 +62,7 @@ private partial def translateExpr (srcExpr: Expr) : MetaTranslateM Expr := do
   let sourceMCtx ← getSourceMCtx
   -- We want to create as few mvars as possible
   let (srcExpr, _) := instantiateMVarsCore (mctx := sourceMCtx) srcExpr
-  --IO.println s!"Transform src: {srcExpr}"
+  trace[Pantograph.Frontend.MetaTranslate] "Transform src: {srcExpr}"
   let result ← Core.transform srcExpr λ e => do
     let state ← get
     match e with
@@ -100,10 +100,10 @@ partial def translateLocalDecl (srcLocalDecl: LocalDecl) : MetaTranslateM LocalD
   addTranslatedFVar srcLocalDecl.fvarId fvarId
   match srcLocalDecl with
   | .cdecl index _ userName type bi kind => do
-    --IO.println s!"[CD] {userName} {toString type}"
+    trace[Pantograph.Frontend.MetaTranslate] "[CD] {userName} {toString type}"
     return .cdecl index fvarId userName (← translateExpr type) bi kind
   | .ldecl index _ userName type value nonDep kind => do
-    --IO.println s!"[LD] {toString type} := {toString value}"
+    trace[Pantograph.Frontend.MetaTranslate] "[LD] {toString type} := {toString value}"
     return .ldecl index fvarId userName (← translateExpr type) (← translateExpr value) nonDep kind
 
 partial def translateLCtx : MetaTranslateM LocalContext := do
@@ -161,5 +161,8 @@ def translateMVarFromTacticInfoBefore (tacticInfo : Elab.TacticInfo) (_context? 
 end MetaTranslate
 
 export MetaTranslate (MetaTranslateM)
+
+initialize
+  registerTraceClass `Pantograph.Frontend.MetaTranslate
 
 end Pantograph.Frontend
