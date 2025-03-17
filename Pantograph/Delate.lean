@@ -37,7 +37,7 @@ def analyzeProjection (env: Environment) (e: Expr): Projection :=
 def anonymousLevel : Level := .mvar ⟨.anonymous⟩
 
 @[export pantograph_expr_proj_to_app]
-def exprProjToApp (env: Environment) (e: Expr): Expr :=
+def exprProjToApp (env : Environment) (e : Expr) : Expr :=
   let anon : Expr := .mvar ⟨.anonymous⟩
   match analyzeProjection env e with
   | .field projector numParams =>
@@ -72,12 +72,12 @@ def unfoldAuxLemmas : Expr → CoreM Expr :=
 /-- Unfold all matcher applications -/
 @[export pantograph_unfold_matchers_m]
 def unfoldMatchers (expr : Expr) : CoreM Expr :=
-  Core.transform expr λ e' => do
-    let .some mapp ← Meta.matchMatcherApp? e' | return .continue e'
+  Core.transform expr λ e => do
+    let .some mapp ← Meta.matchMatcherApp? e | return .continue e
     let .some matcherInfo := (← getEnv).find? mapp.matcherName | panic! "Matcher must exist"
     let f ← Meta.instantiateValueLevelParams matcherInfo mapp.matcherLevels.toList
     let mdata := KVMap.empty.insert `matcher (DataValue.ofName mapp.matcherName)
-    return .visit $ .mdata mdata (f.betaRev e'.getAppRevArgs (useZeta := true))
+    return .visit $ .mdata mdata (f.betaRev e.getAppRevArgs (useZeta := true))
 
 /--
 Force the instantiation of delayed metavariables even if they cannot be fully
@@ -94,10 +94,9 @@ This function ensures any metavariable in the result is either
 1. Delayed assigned with its pending mvar not assigned in any form
 2. Not assigned (delay or not)
  -/
-partial def instantiateDelayedMVars (eOrig: Expr) : MetaM Expr :=
-  --let padding := String.join $ List.replicate level "│ "
-  withTraceNode `Pantograph.Delate (λ _ex => return m!":= {← Meta.ppExpr eOrig}") do
-  let mut result ← Meta.transform (← instantiateMVars eOrig)
+partial def instantiateDelayedMVars (expr : Expr) : MetaM Expr :=
+  withTraceNode `Pantograph.Delate (λ _ex => return m!":= {← Meta.ppExpr expr}") do
+  let mut result ← Meta.transform (← instantiateMVars expr)
     (pre := fun e => e.withApp fun f args => do
       let .mvar mvarId := f | return .continue
       trace[Pantograph.Delate] "V {e}"
@@ -127,7 +126,7 @@ partial def instantiateDelayedMVars (eOrig: Expr) : MetaM Expr :=
             trace[Pantograph.Delate]"MD ?{mvarId.name} := ?{mvarIdPending.name} [{substTableStr}]"
 
           if args.size < fvars.size then
-            throwError "Not enough arguments to instantiate a delay assigned mvar. This is due to bad implementations of a tactic: {args.size} < {fvars.size}. Expr: {toString e}; Origin: {toString eOrig}"
+            throwError "Not enough arguments to instantiate a delay assigned mvar. This is due to bad implementations of a tactic: {args.size} < {fvars.size}. Expr: {toString e}; Origin: {toString expr}"
           if !args.isEmpty then
             trace[Pantograph.Delate] "─ Arguments Begin"
           let args ← args.mapM self
@@ -139,7 +138,7 @@ partial def instantiateDelayedMVars (eOrig: Expr) : MetaM Expr :=
             return .done result
 
           let pending ← mvarIdPending.withContext do
-            let inner ← instantiateDelayedMVars (.mvar mvarIdPending) --(level := level + 1)
+            let inner ← instantiateDelayedMVars (.mvar mvarIdPending)
             trace[Pantograph.Delate] "Pre: {inner}"
             pure <| (← inner.abstractM fvars).instantiateRev args
 
