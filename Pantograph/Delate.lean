@@ -170,7 +170,8 @@ def instantiateAll (e: Expr): MetaM Expr := do
     | .some mapp =>
       let .some matcherInfo := (← getEnv).find? mapp.matcherName | panic! "Matcher must exist"
       let f ← Meta.instantiateValueLevelParams matcherInfo mapp.matcherLevels.toList
-      return .visit (f.betaRev e'.getAppRevArgs (useZeta := true))
+      let mdata := KVMap.empty.insert `matcher (DataValue.ofName mapp.matcherName)
+      return .visit $ .mdata mdata (f.betaRev e'.getAppRevArgs (useZeta := true))
   return e
 
 structure DelayedMVarInvocation where
