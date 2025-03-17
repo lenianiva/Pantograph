@@ -68,7 +68,7 @@ def _root_.Lean.Name.isAuxLemma (n : Lean.Name) : Bool := n matches .num (.str _
 /-- Unfold all lemmas created by `Lean.Meta.mkAuxLemma`. These end in `_auxLemma.nn` where `nn` is a number. -/
 @[export pantograph_unfold_aux_lemmas_m]
 def unfoldAuxLemmas : Expr → CoreM Expr :=
-  (Lean.Meta.deltaExpand · Lean.Name.isAuxLemma)
+  (Meta.deltaExpand · Lean.Name.isAuxLemma)
 /-- Unfold all matcher applications -/
 @[export pantograph_unfold_matchers_m]
 def unfoldMatchers (expr : Expr) : CoreM Expr :=
@@ -97,66 +97,66 @@ This function ensures any metavariable in the result is either
 partial def instantiateDelayedMVars (expr : Expr) : MetaM Expr :=
   withTraceNode `Pantograph.Delate (λ _ex => return m!":= {← Meta.ppExpr expr}") do
   let mut result ← Meta.transform (← instantiateMVars expr)
-    (pre := fun e => e.withApp fun f args => do
-      let .mvar mvarId := f | return .continue
-      trace[Pantograph.Delate] "V {e}"
-      let mvarDecl ← mvarId.getDecl
+    λ e => e.withApp fun f args => do
+    let .mvar mvarId := f | return .continue
+    trace[Pantograph.Delate] "V {e}"
+    let mvarDecl ← mvarId.getDecl
 
-      -- This is critical to maintaining the interdependency of metavariables.
-      -- Without setting `.syntheticOpaque`, Lean's metavariable elimination
-      -- system will not make the necessary delayed assigned mvars in case of
-      -- nested mvars.
-      mvarId.setKind .syntheticOpaque
+    -- This is critical to maintaining the interdependency of metavariables.
+    -- Without setting `.syntheticOpaque`, Lean's metavariable elimination
+    -- system will not make the necessary delayed assigned mvars in case of
+    -- nested mvars.
+    mvarId.setKind .syntheticOpaque
 
-      mvarId.withContext do
-        let lctx ← MonadLCtx.getLCtx
-        if mvarDecl.lctx.any (λ decl => !lctx.contains decl.fvarId) then
-          let violations := mvarDecl.lctx.decls.foldl (λ acc decl? => match decl? with
-            | .some decl => if lctx.contains decl.fvarId then acc else acc ++ [decl.fvarId.name]
-            | .none => acc) []
-          panic! s!"In the context of {mvarId.name}, there are local context variable violations: {violations}"
+    mvarId.withContext do
+      let lctx ← MonadLCtx.getLCtx
+      if mvarDecl.lctx.any (λ decl => !lctx.contains decl.fvarId) then
+        let violations := mvarDecl.lctx.decls.foldl (λ acc decl? => match decl? with
+          | .some decl => if lctx.contains decl.fvarId then acc else acc ++ [decl.fvarId.name]
+          | .none => acc) []
+        panic! s!"In the context of {mvarId.name}, there are local context variable violations: {violations}"
 
-        if let .some assign ← getExprMVarAssignment? mvarId then
-          trace[Pantograph.Delate] "A ?{mvarId.name}"
-          assert! !(← mvarId.isDelayedAssigned)
-          return .visit (mkAppN assign args)
-        else if let some { fvars, mvarIdPending } ← getDelayedMVarAssignment? mvarId then
-          if ← isTracingEnabledFor `Pantograph.Delate then
-            let substTableStr := String.intercalate ", " $ Array.zipWith fvars args (λ fvar assign => s!"{fvar.fvarId!.name} := {assign}") |>.toList
-            trace[Pantograph.Delate]"MD ?{mvarId.name} := ?{mvarIdPending.name} [{substTableStr}]"
+      if let .some assign ← getExprMVarAssignment? mvarId then
+        trace[Pantograph.Delate] "A ?{mvarId.name}"
+        assert! !(← mvarId.isDelayedAssigned)
+        return .visit (mkAppN assign args)
+      else if let some { fvars, mvarIdPending } ← getDelayedMVarAssignment? mvarId then
+        if ← isTracingEnabledFor `Pantograph.Delate then
+          let substTableStr := String.intercalate ", " $ Array.zipWith fvars args (λ fvar assign => s!"{fvar.fvarId!.name} := {assign}") |>.toList
+          trace[Pantograph.Delate]"MD ?{mvarId.name} := ?{mvarIdPending.name} [{substTableStr}]"
 
-          if args.size < fvars.size then
-            throwError "Not enough arguments to instantiate a delay assigned mvar. This is due to bad implementations of a tactic: {args.size} < {fvars.size}. Expr: {toString e}; Origin: {toString expr}"
-          if !args.isEmpty then
-            trace[Pantograph.Delate] "─ Arguments Begin"
-          let args ← args.mapM self
-          if !args.isEmpty then
-            trace[Pantograph.Delate] "─ Arguments End"
-          if !(← mvarIdPending.isAssignedOrDelayedAssigned) then
-            trace[Pantograph.Delate] "T1"
-            let result := mkAppN f args
-            return .done result
-
-          let pending ← mvarIdPending.withContext do
-            let inner ← instantiateDelayedMVars (.mvar mvarIdPending)
-            trace[Pantograph.Delate] "Pre: {inner}"
-            pure <| (← inner.abstractM fvars).instantiateRev args
-
-          -- Tail arguments
-          let result := mkAppRange pending fvars.size args.size args
-          trace[Pantograph.Delate] "MD {result}"
+        if args.size < fvars.size then
+          throwError "Not enough arguments to instantiate a delay assigned mvar. This is due to bad implementations of a tactic: {args.size} < {fvars.size}. Expr: {toString e}; Origin: {toString expr}"
+        if !args.isEmpty then
+          trace[Pantograph.Delate] "─ Arguments Begin"
+        let args ← args.mapM self
+        if !args.isEmpty then
+          trace[Pantograph.Delate] "─ Arguments End"
+        if !(← mvarIdPending.isAssignedOrDelayedAssigned) then
+          trace[Pantograph.Delate] "T1"
+          let result := mkAppN f args
           return .done result
-        else
-          assert! !(← mvarId.isAssigned)
-          assert! !(← mvarId.isDelayedAssigned)
-          if !args.isEmpty then
-            trace[Pantograph.Delate] "─ Arguments Begin"
-          let args ← args.mapM self
-          if !args.isEmpty then
-            trace[Pantograph.Delate] "─ Arguments End"
 
-          trace[Pantograph.Delate] "M ?{mvarId.name}"
-          return .done (mkAppN f args))
+        let pending ← mvarIdPending.withContext do
+          let inner ← instantiateDelayedMVars (.mvar mvarIdPending)
+          trace[Pantograph.Delate] "Pre: {inner}"
+          pure <| (← inner.abstractM fvars).instantiateRev args
+
+        -- Tail arguments
+        let result := mkAppRange pending fvars.size args.size args
+        trace[Pantograph.Delate] "MD {result}"
+        return .done result
+      else
+        assert! !(← mvarId.isAssigned)
+        assert! !(← mvarId.isDelayedAssigned)
+        if !args.isEmpty then
+          trace[Pantograph.Delate] "─ Arguments Begin"
+        let args ← args.mapM self
+        if !args.isEmpty then
+          trace[Pantograph.Delate] "─ Arguments End"
+
+        trace[Pantograph.Delate] "M ?{mvarId.name}"
+        return .done (mkAppN f args)
   trace[Pantoraph.Delate] "Result {result}"
   return result
   where
