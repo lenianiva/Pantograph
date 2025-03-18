@@ -3,10 +3,9 @@ import Pantograph.Delate
 import Test.Common
 import Lean
 
-open Lean
-namespace Pantograph.Test.Delate
+open Lean Pantograph
 
-open Pantograph
+namespace Pantograph.Test.Delate
 
 deriving instance Repr, DecidableEq for Protocol.BoundExpression
 
@@ -113,6 +112,13 @@ def test_projection_exists (env: Environment) : IO LSpec.TestSeq:= runTest do
   checkEq "numParams" numParams 2
   checkEq "numFields" numFields 2
 
+def test_matcher : TestT Elab.TermElabM Unit := do
+  let t ← parseSentence "Nat → Nat"
+  let e ← parseSentence "fun (n : Nat) => match n with | 0 => 0 | k => k" (.some t)
+  let .some _ ← Meta.matchMatcherApp? e.bindingBody! | fail "Must be a matcher app"
+  let e' ← instantiateAll e
+  checkTrue "ok" <| ← Meta.isTypeCorrect e'
+
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   [
     ("serializeName", do pure test_serializeName),
@@ -123,6 +129,7 @@ def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
     ("Instance", test_instance env),
     ("Projection Prod", test_projection_prod env),
     ("Projection Exists", test_projection_exists env),
+    ("Matcher", runTestTermElabM env test_matcher),
   ]
 
 end Pantograph.Test.Delate

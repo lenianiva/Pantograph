@@ -108,7 +108,7 @@ def strToTermSyntax (s: String): CoreM Syntax := do
     (input := s)
     (fileName := ← getFileName) | panic! s!"Failed to parse {s}"
   return stx
-def parseSentence (s: String): Elab.TermElabM Expr := do
+def parseSentence (s : String) (expectedType? : Option Expr := .none) : Elab.TermElabM Expr := do
   let stx ← match Parser.runParserCategory
     (env := ← MonadEnv.getEnv)
     (catName := `term)
@@ -116,7 +116,7 @@ def parseSentence (s: String): Elab.TermElabM Expr := do
     (fileName := ← getFileName) with
     | .ok syn => pure syn
     | .error error => throwError "Failed to parse: {error}"
-  Elab.Term.elabTerm (stx := stx) .none
+  Elab.Term.elabTerm (stx := stx) expectedType?
 
 def runTacticOnMVar (tacticM: Elab.Tactic.TacticM Unit) (goal: MVarId): Elab.TermElabM (List MVarId) := do
     let (_, newGoals) ← tacticM { elaborator := .anonymous } |>.run { goals := [goal] }
