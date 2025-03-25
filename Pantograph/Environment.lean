@@ -91,7 +91,6 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): CoreM (Pr
     isUnsafe := info.isUnsafe,
     value? := ← value?.mapM (λ v => serializeExpression options v |>.run'),
     publicName? := Lean.privateToUserName? name |>.map (·.toString),
-    -- BUG: Warning: getUsedConstants here will not include projections. This is a known bug.
     typeDependency? := if args.dependency?.getD false
       then .some <| type.getUsedConstants.map (λ n => serializeName n)
       else .none,
@@ -169,7 +168,7 @@ def addDecl (args: Protocol.EnvAdd): CoreM (Protocol.CR Protocol.EnvAddResult) :
   let (type, value) ← match ← tvM.run' (ctx := {}) |>.run' with
     | .ok t => pure t
     | .error e => return .error $ Protocol.errorExpr e
-  let constant := Lean.Declaration.defnDecl <| Lean.mkDefinitionValEx
+  let decl := Lean.Declaration.defnDecl <| Lean.mkDefinitionValEx
     (name := args.name.toName)
     (levelParams := [])
     (type := type)
@@ -177,13 +176,7 @@ def addDecl (args: Protocol.EnvAdd): CoreM (Protocol.CR Protocol.EnvAddResult) :
     (hints := Lean.mkReducibilityHintsRegularEx 1)
     (safety := Lean.DefinitionSafety.safe)
     (all := [])
-  let env' ← match env.addDecl (← getOptions) constant with
-    | .error e => do
-      let options ← Lean.MonadOptions.getOptions
-      let desc ← (e.toMessageData options).toString
-      return .error $ { error := "kernel", desc }
-    | .ok env' => pure env'
-  Lean.MonadEnv.modifyEnv (λ _ => env')
+  Lean.addDecl decl
   return .ok {}
 
 end Pantograph.Environment

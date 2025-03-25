@@ -47,12 +47,8 @@ def test_environment_pickling : TestM Unit := do
       (hints := Lean.mkReducibilityHintsRegularEx 1)
       (safety := Lean.DefinitionSafety.safe)
       (all := [])
-    let env' ← match (← getEnv).addDecl (← getOptions) c with
-      | .error e => do
-        let error ← (e.toMessageData (← getOptions)).toString
-        throwError error
-      | .ok env' => pure env'
-    environmentPickle env' envPicklePath
+    addDecl c
+    environmentPickle (← getEnv) envPicklePath
 
   let _ ← runCoreM coreDst do
     let (env', _) ← environmentUnpickle envPicklePath
