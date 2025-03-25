@@ -13,6 +13,9 @@ structure State where
   nextId: Nat := 0
   goalStates: Std.HashMap Nat GoalState := Std.HashMap.empty
 
+  -- Parser state
+  scope : Elab.Command.Scope := { header := "" }
+
 /-- Main state monad for executing commands -/
 abbrev MainM := ReaderT Context $ StateRefT State CoreM
 /-- Fallible subroutine return type -/
@@ -85,6 +88,9 @@ def frontend_process_inner (args: Protocol.FrontendProcess): MainM (CR Protocol.
   let (li, state') ← frontendM.run context |>.run state
   if args.inheritEnv then
     setEnv state'.commandState.env
+    if let .some scope := state'.commandState.scopes.head? then
+      -- modify the scope
+      set { (← get) with scope }
   let units ← li.mapM λ step => withEnv step.env do
     let newConstants? := if args.newConstants then
         .some $ step.newConstants.toArray.map λ name => name.toString
