@@ -122,7 +122,8 @@ partial def instantiateDelayedMVars (expr : Expr) : MetaM Expr :=
         return .visit (mkAppN assign args)
       else if let some { fvars, mvarIdPending } ← getDelayedMVarAssignment? mvarId then
         if ← isTracingEnabledFor `Pantograph.Delate then
-          let substTableStr := String.intercalate ", " $ Array.zipWith fvars args (λ fvar assign => s!"{fvar.fvarId!.name} := {assign}") |>.toList
+          let substTableStr := ",".intercalate $
+            Array.zipWith (λ fvar assign => s!"{fvar.fvarId!.name} := {assign}") fvars args |>.toList
           trace[Pantograph.Delate]"MD ?{mvarId.name} := ?{mvarIdPending.name} [{substTableStr}]"
 
         if args.size < fvars.size then
