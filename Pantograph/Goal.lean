@@ -85,12 +85,19 @@ protected def GoalState.withRootContext { n } [MonadControlT MetaM n] [Monad n] 
 
 private def GoalState.mvars (state: GoalState): SSet MVarId :=
   state.mctx.decls.foldl (init := .empty) fun acc k _ => acc.insert k
-protected def GoalState.restoreMetaM (state: GoalState): MetaM Unit :=
+-- Restore the name generator and macro scopes of the core state
+protected def GoalState.restoreCoreMExtra (state: GoalState): CoreM Unit := do
+  let savedCore := state.coreState
+  modifyGetThe Core.State (fun st => ((),
+    { st with nextMacroScope := savedCore.nextMacroScope, ngen := savedCore.ngen }))
+protected def GoalState.restoreMetaM (state: GoalState): MetaM Unit := do
+  state.restoreCoreMExtra
   state.savedState.term.meta.restore
-protected def GoalState.restoreElabM (state: GoalState): Elab.TermElabM Unit :=
+protected def GoalState.restoreElabM (state: GoalState): Elab.TermElabM Unit := do
+  state.restoreCoreMExtra
   state.savedState.term.restore
 private def GoalState.restoreTacticM (state: GoalState) (goal: MVarId): Elab.Tactic.TacticM Unit := do
-  state.savedState.restore
+  state.restoreElabM
   Elab.Tactic.setGoals [goal]
 
 @[export pantograph_goal_state_focus]
@@ -215,7 +222,7 @@ protected def GoalState.step (state: GoalState) (goal: MVarId) (tacticM: Elab.Ta
   goal.checkNotAssigned `GoalState.step
   let (_, { goals }) ← tacticM { elaborator := .anonymous } |>.run { goals := [goal] }
   let nextElabState ← MonadBacktrack.saveState
-  Elab.Term.synthesizeSyntheticMVarsNoPostponing
+  --Elab.Term.synthesizeSyntheticMVarsNoPostponing
 
   let goals ← if guardMVarErrors then
       pure $ mergeMVarLists goals (← collectAllErroredMVars goal)
@@ -280,6 +287,7 @@ protected def GoalState.tryTactic (state: GoalState) (goal: MVarId) (tactic: Str
     (fileName := ← getFileName) with
     | .ok stx => pure $ stx
     | .error error => return .parseError error
+  assert! ¬ (← goal.isAssigned)
   state.tryTacticM goal (Elab.Tactic.evalTactic tactic) true
 
 protected def GoalState.tryAssign (state: GoalState) (goal: MVarId) (expr: String):

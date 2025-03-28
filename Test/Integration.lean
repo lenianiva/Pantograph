@@ -13,7 +13,7 @@ def step { α } [Lean.ToJson α] (cmd: String) (payload: List (String × Lean.Js
   let payload := Lean.Json.mkObj payload
   let name := name?.getD s!"{cmd} {payload.compress}"
   let result ← Repl.execute { cmd, payload }
-  return LSpec.test name (toString result = toString (Lean.toJson expected))
+  return LSpec.test name (result.pretty = (Lean.toJson expected).pretty)
 
 abbrev Test := List (MainM LSpec.TestSeq)
 
@@ -54,17 +54,18 @@ def test_malformed_command : Test :=
     (name? := .some "JSON Deserialization")
   ]
 def test_tactic : Test :=
+  let varX := { name := "_uniq.10", userName := "x", type? := .some { pp? := .some "Prop" }}
   let goal1: Protocol.Goal := {
     name := "_uniq.11",
     target := { pp? := .some "∀ (q : Prop), x ∨ q → q ∨ x" },
-    vars := #[{ name := "_uniq.10", userName := "x", type? := .some { pp? := .some "Prop" }}],
+    vars := #[varX],
   }
   let goal2: Protocol.Goal := {
-    name := "_uniq.17",
+    name := "_uniq.14",
     target := { pp? := .some "x ∨ y → y ∨ x" },
     vars := #[
-      { name := "_uniq.10", userName := "x", type? := .some { pp? := .some "Prop" }},
-      { name := "_uniq.16", userName := "y", type? := .some { pp? := .some "Prop" }}
+      varX,
+      { name := "_uniq.13", userName := "y", type? := .some { pp? := .some "Prop" }}
     ],
   }
   [
@@ -236,16 +237,12 @@ def test_frontend_process_sorry : Test :=
     }: Protocol.FrontendProcessResult),
   ]
 
-
 def runTest (env: Lean.Environment) (steps: Test): IO LSpec.TestSeq := do
   -- Setup the environment for execution
-  let context: Context := {}
-  let commands: MainM LSpec.TestSeq :=
-    steps.foldlM (λ suite step => do
-      let result ← step
-      return suite ++ result) LSpec.TestSeq.done
-  runCoreMSeq env <| commands.run context |>.run' {}
-
+  let coreContext ← createCoreContext #[]
+  let mainM : MainM LSpec.TestSeq :=
+    steps.foldlM (λ suite step => do return suite ++ (← step)) LSpec.TestSeq.done
+  mainM.run { coreContext } |>.run' { env }
 
 def suite (env : Lean.Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
