@@ -3,7 +3,10 @@ import Pantograph.Goal
 import Pantograph.Protocol
 import Pantograph.Delate
 import Pantograph.Version
+
 import Lean
+import Std.Time
+import Std.Internal.Async
 
 namespace Lean
 
@@ -211,5 +214,13 @@ def goalConvExit (state: GoalState): CoreM TacticResult :=
 @[export pantograph_goal_calc_m]
 def goalCalc (state: GoalState) (goal: MVarId) (pred: String): CoreM TacticResult :=
   runTermElabM <| state.tryCalc goal pred
+
+-- Cancel the token after a timeout.
+@[export pantograph_run_cancel_token_with_timeout_m]
+def runCancelTokenWithTimeout (cancelToken : IO.CancelToken) (timeout : Std.Time.Millisecond.Offset) : IO Unit := do
+  let _ ← EIO.asTask do
+    let () ← (← Std.Internal.IO.Async.sleep timeout).block
+    cancelToken.set
+  return ()
 
 end Pantograph
