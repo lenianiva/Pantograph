@@ -30,6 +30,8 @@ structure Options where
   printImplementationDetailHyps: Bool := false
   -- If this is set to `true`, goals will never go dormant, so you don't have to manage resumption
   automaticMode: Bool := true
+  -- Timeout for tactics and operations that could potentially execute a tactic
+  timeout: Nat := 0
   deriving Lean.ToJson
 
 abbrev OptionsT := ReaderT Options
@@ -202,9 +204,10 @@ structure EnvInspectResult where
 
 structure EnvAdd where
   name: String
+  levels: Array String := #[]
   type: String
   value: String
-  isTheorem: Bool
+  isTheorem: Bool := false
   deriving Lean.FromJson
 structure EnvAddResult where
   deriving Lean.ToJson
@@ -225,6 +228,7 @@ structure OptionsSet where
   printAuxDecls?: Option Bool := .none
   printImplementationDetailHyps?: Option Bool := .none
   automaticMode?: Option Bool := .none
+  timeout?: Option Nat := .none
   deriving Lean.FromJson
 structure OptionsSetResult where
   deriving Lean.ToJson
@@ -386,6 +390,9 @@ structure FrontendProcessResult where
   units: List CompilationUnit
   deriving Lean.ToJson
 
-abbrev CR α := Except InteractionError α
+abbrev FallibleT := ExceptT InteractionError
+
+abbrev throw {m : Type v → Type w} [MonadExceptOf InteractionError m] {α : Type v} (e : InteractionError) : m α :=
+  throwThe InteractionError e
 
 end Pantograph.Protocol

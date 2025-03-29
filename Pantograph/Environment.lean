@@ -52,12 +52,12 @@ def describe (_: Protocol.EnvDescribe): CoreM Protocol.EnvDescribeResult := do
     imports := env.header.imports.map toString,
     modules := env.header.moduleNames.map (·.toString),
   }
-def moduleRead (args: Protocol.EnvModuleRead): CoreM (Protocol.CR Protocol.EnvModuleReadResult) := do
+def moduleRead (args: Protocol.EnvModuleRead): CoreM Protocol.EnvModuleReadResult := do
   let env ← Lean.MonadEnv.getEnv
   let .some i := env.header.moduleNames.findIdx? (· == args.module.toName) |
-    return .error $ Protocol.errorIndex s!"Module not found {args.module}"
+    throwError s!"Module not found {args.module}"
   let data := env.header.moduleData[i]!
-  return .ok {
+  return {
     imports := data.imports.map toString,
     constNames := data.constNames.map (·.toString),
     extraConstNames := data.extraConstNames.map (·.toString),
@@ -69,13 +69,11 @@ def catalog (_: Protocol.EnvCatalog): CoreM Protocol.EnvCatalogResult := do
     | .some x => acc.push x
     | .none => acc)
   return { symbols := names }
-def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): CoreM (Protocol.CR Protocol.EnvInspectResult) := do
+def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): Protocol.FallibleT CoreM Protocol.EnvInspectResult := do
   let env ← Lean.MonadEnv.getEnv
   let name :=  args.name.toName
   let info? := env.find? name
-  let info ← match info? with
-    | none => return .error $ Protocol.errorIndex s!"Symbol not found {args.name}"
-    | some info => pure info
+  let .some info := info? | Protocol.throw $ Protocol.errorIndex s!"Symbol not found {args.name}"
   let module? := env.getModuleIdxFor? name >>=
     (λ idx => env.allImportedModuleNames.get? idx.toNat)
   let value? := match args.value?, info with
@@ -145,17 +143,19 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): CoreM (Pr
       }
     else
       .pure result
-  return .ok result
-def addDecl (args: Protocol.EnvAdd): CoreM (Protocol.CR Protocol.EnvAddResult) := do
+  return result
+@[export pantograph_env_add_m]
+def addDecl (name: String) (levels: Array String := #[]) (type: String) (value: String) (isTheorem: Bool)
+    : Protocol.FallibleT CoreM Protocol.EnvAddResult := do
   let env ← Lean.MonadEnv.getEnv
   let tvM: Elab.TermElabM (Except String (Expr × Expr)) := do
-    let type ← match parseTerm env args.type with
+    let type ← match parseTerm env type with
       | .ok syn => do
         match ← elabTerm syn with
         | .error e => return .error e
         | .ok expr => pure expr
       | .error e => return .error e
-    let value ← match parseTerm env args.value with
+    let value ← match parseTerm env value with
       | .ok syn => do
         try
           let expr ← Elab.Term.elabTerm (stx := syn) (expectedType? := .some type)
@@ -167,16 +167,25 @@ def addDecl (args: Protocol.EnvAdd): CoreM (Protocol.CR Protocol.EnvAddResult) :
     pure $ .ok (type, value)
   let (type, value) ← match ← tvM.run' (ctx := {}) |>.run' with
     | .ok t => pure t
-    | .error e => return .error $ Protocol.errorExpr e
-  let decl := Lean.Declaration.defnDecl <| Lean.mkDefinitionValEx
-    (name := args.name.toName)
-    (levelParams := [])
-    (type := type)
-    (value := value)
-    (hints := Lean.mkReducibilityHintsRegularEx 1)
-    (safety := Lean.DefinitionSafety.safe)
-    (all := [])
+    | .error e => Protocol.throw $ Protocol.errorExpr e
+  let levelParams := levels.toList.map (·.toName)
+  let decl := if isTheorem then
+    Lean.Declaration.thmDecl <| Lean.mkTheoremValEx
+      (name := name.toName)
+      (levelParams := levelParams)
+      (type := type )
+      (value := value)
+      (all := [])
+  else
+    Lean.Declaration.defnDecl <| Lean.mkDefinitionValEx
+      (name := name.toName)
+      (levelParams := levelParams)
+      (type := type)
+      (value := value)
+      (hints := Lean.mkReducibilityHintsRegularEx 1)
+      (safety := Lean.DefinitionSafety.safe)
+      (all := [])
   Lean.addDecl decl
-  return .ok {}
+  return {}
 
 end Pantograph.Environment
