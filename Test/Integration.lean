@@ -8,23 +8,33 @@ import Test.Common
 namespace Pantograph.Test.Integration
 open Pantograph.Repl
 
-def step { α } [Lean.ToJson α] (cmd: String) (payload: List (String × Lean.Json))
-    (expected: α) (name? : Option String := .none): MainM LSpec.TestSeq := do
-  let payload := Lean.Json.mkObj payload
+deriving instance Lean.ToJson for Protocol.EnvInspect
+deriving instance Lean.ToJson for Protocol.EnvAdd
+deriving instance Lean.ToJson for Protocol.ExprEcho
+deriving instance Lean.ToJson for Protocol.OptionsSet
+deriving instance Lean.ToJson for Protocol.OptionsPrint
+deriving instance Lean.ToJson for Protocol.GoalStart
+deriving instance Lean.ToJson for Protocol.GoalPrint
+deriving instance Lean.ToJson for Protocol.GoalTactic
+deriving instance Lean.ToJson for Protocol.FrontendProcess
+
+def step { α β } [Lean.ToJson α] [Lean.ToJson β] (cmd: String) (payload: α)
+    (expected: β) (name? : Option String := .none): MainM LSpec.TestSeq := do
+  let payload := Lean.toJson payload
   let name := name?.getD s!"{cmd} {payload.compress}"
   let result ← Repl.execute { cmd, payload }
-  return LSpec.test name (toString result = toString (Lean.toJson expected))
+  return LSpec.test name (result.pretty = (Lean.toJson expected).pretty)
 
 abbrev Test := List (MainM LSpec.TestSeq)
 
-def test_elab : Test :=
+def test_expr_echo : Test :=
   [
     step "expr.echo"
-      [("expr", .str "λ {α : Sort (u + 1)} => List α"), ("levels", .arr #["u"])]
-     (Lean.toJson ({
+     ({ expr := "λ {α : Sort (u + 1)} => List α", levels := .some #["u"]}: Protocol.ExprEcho)
+     ({
        type := { pp? := .some "{α : Type u} → Type u" },
        expr := { pp? := .some "fun {α} => List α" }
-     }: Protocol.ExprEchoResult)),
+     }: Protocol.ExprEchoResult),
   ]
 
 def test_option_modify : Test :=
@@ -33,49 +43,53 @@ def test_option_modify : Test :=
   let module? := Option.some "Init.Data.Nat.Basic"
   let options: Protocol.Options := {}
   [
-    step "env.inspect" [("name", .str "Nat.add_one")]
+    step "env.inspect" ({ name := "Nat.add_one" } : Protocol.EnvInspect)
      ({ type := { pp? }, module? }: Protocol.EnvInspectResult),
-    step "options.set" [("printExprAST", .bool true)]
+    step "options.set" ({ printExprAST? := .some true } : Protocol.OptionsSet)
      ({ }: Protocol.OptionsSetResult),
-    step "env.inspect" [("name", .str "Nat.add_one")]
+    step "env.inspect" ({ name := "Nat.add_one" } : Protocol.EnvInspect)
      ({ type := { pp?, sexp? }, module? }: Protocol.EnvInspectResult),
-    step "options.print" []
+    step "options.print" ({} : Protocol.OptionsPrint)
      ({ options with printExprAST := true }: Protocol.Options),
   ]
 def test_malformed_command : Test :=
   let invalid := "invalid"
   [
-    step invalid [("name", .str "Nat.add_one")]
+    step invalid ({ name := "Nat.add_one" }: Protocol.EnvInspect)
      ({ error := "command", desc := s!"Unknown command {invalid}" }: Protocol.InteractionError)
      (name? := .some "Invalid Command"),
-    step "expr.echo" [(invalid, .str "Random garbage data")]
+    step "expr.echo" (Lean.Json.mkObj [(invalid, .str "Random garbage data")])
      ({ error := "command", desc := s!"Unable to parse json: Pantograph.Protocol.ExprEcho.expr: String expected" }:
       Protocol.InteractionError)
     (name? := .some "JSON Deserialization")
   ]
 def test_tactic : Test :=
+  let varX := { name := "_uniq.10", userName := "x", type? := .some { pp? := .some "Prop" }}
   let goal1: Protocol.Goal := {
     name := "_uniq.11",
     target := { pp? := .some "∀ (q : Prop), x ∨ q → q ∨ x" },
-    vars := #[{ name := "_uniq.10", userName := "x", type? := .some { pp? := .some "Prop" }}],
+    vars := #[varX],
   }
   let goal2: Protocol.Goal := {
-    name := "_uniq.17",
+    name := "_uniq.14",
     target := { pp? := .some "x ∨ y → y ∨ x" },
     vars := #[
-      { name := "_uniq.10", userName := "x", type? := .some { pp? := .some "Prop" }},
-      { name := "_uniq.16", userName := "y", type? := .some { pp? := .some "Prop" }}
+      varX,
+      { name := "_uniq.13", userName := "y", type? := .some { pp? := .some "Prop" }}
     ],
   }
   [
-    step "goal.start" [("expr", .str "∀ (p q: Prop), p ∨ q → q ∨ p")]
+    step "goal.start" ({ expr := "∀ (p q: Prop), p ∨ q → q ∨ p" }: Protocol.GoalStart)
      ({ stateId := 0, root := "_uniq.9" }: Protocol.GoalStartResult),
-    step "goal.tactic" [("stateId", .num 0), ("goalId", .num 0), ("tactic", .str "intro x")]
+    step "goal.tactic" ({ stateId := 0, tactic? := .some "intro x" }: Protocol.GoalTactic)
      ({ nextStateId? := .some 1, goals? := #[goal1], }: Protocol.GoalTacticResult),
-    step "goal.print" [("stateId", .num 1), ("parentExpr", .bool true), ("rootExpr", .bool true)]
+    step "goal.print" ({ stateId := 1, parentExpr? := .some true, rootExpr? := .some true }: Protocol.GoalPrint)
      ({ parent? := .some { pp? := .some "fun x => ?m.11" }, }: Protocol.GoalPrintResult),
-    step "goal.tactic" [("stateId", .num 1), ("goalId", .num 0), ("tactic", .str "intro y")]
+    step "goal.tactic" ({ stateId := 1, tactic? := .some "intro y" }: Protocol.GoalTactic)
      ({ nextStateId? := .some 2, goals? := #[goal2], }: Protocol.GoalTacticResult),
+    step "goal.tactic" ({ stateId := 1, tactic? := .some "apply Nat.le_of_succ_le" }: Protocol.GoalTactic)
+     ({ tacticErrors? := .some #["tactic 'apply' failed, failed to unify\n  ∀ {m : Nat}, Nat.succ ?n ≤ m → ?n ≤ m\nwith\n  ∀ (q : Prop), x ∨ q → q ∨ x\nx : Prop\n⊢ ∀ (q : Prop), x ∨ q → q ∨ x"] }:
+      Protocol.GoalTacticResult)
   ]
 def test_automatic_mode (automatic: Bool): Test :=
   let varsPQ := #[
@@ -114,16 +128,16 @@ def test_automatic_mode (automatic: Bool): Test :=
     ],
   }
   [
-    step "options.set" [("automaticMode", .bool automatic)]
+    step "options.set" ({automaticMode? := .some automatic}: Protocol.OptionsSet)
      ({}: Protocol.OptionsSetResult),
-    step "goal.start" [("expr", .str "∀ (p q: Prop), p ∨ q → q ∨ p")]
+    step "goal.start" ({ expr := "∀ (p q: Prop), p ∨ q → q ∨ p"} : Protocol.GoalStart)
      ({ stateId := 0, root := "_uniq.9" }: Protocol.GoalStartResult),
-    step "goal.tactic" [("stateId", .num 0), ("goalId", .num 0), ("tactic", .str "intro p q h")]
+    step "goal.tactic" ({ stateId := 0, tactic? := .some "intro p q h" }: Protocol.GoalTactic)
      ({ nextStateId? := .some 1, goals? := #[goal1], }: Protocol.GoalTacticResult),
-    step "goal.tactic" [("stateId", .num 1), ("goalId", .num 0), ("tactic", .str "cases h")]
+    step "goal.tactic" ({ stateId := 1, tactic? := .some "cases h" }: Protocol.GoalTactic)
      ({ nextStateId? := .some 2, goals? := #[goal2l, goal2r], }: Protocol.GoalTacticResult),
     let goals? := if automatic then #[goal3l, goal2r] else #[goal3l]
-    step "goal.tactic" [("stateId", .num 2), ("goalId", .num 0), ("tactic", .str "apply Or.inr")]
+    step "goal.tactic" ({ stateId := 2, tactic? := .some "apply Or.inr" }: Protocol.GoalTactic)
      ({ nextStateId? := .some 3, goals?, }: Protocol.GoalTacticResult),
   ]
 
@@ -132,28 +146,28 @@ def test_env_add_inspect : Test :=
   let name2 := "Pantograph.mystery2"
   [
     step "env.add"
-      [
-        ("name", .str name1),
-        ("type", .str "Prop → Prop → Prop"),
-        ("value", .str "λ (a b: Prop) => Or a b"),
-        ("isTheorem", .bool false)
-      ]
+      ({
+        name := name1,
+        type := "Prop → Prop → Prop",
+        value := "λ (a b: Prop) => Or a b",
+        isTheorem := false
+      }: Protocol.EnvAdd)
      ({}: Protocol.EnvAddResult),
-    step "env.inspect" [("name", .str name1)]
+    step "env.inspect" ({name := name1, value? := .some true} : Protocol.EnvInspect)
      ({
        value? := .some { pp? := .some "fun a b => a ∨ b" },
        type := { pp? := .some "Prop → Prop → Prop" },
      }:
       Protocol.EnvInspectResult),
     step "env.add"
-      [
-        ("name", .str name2),
-        ("type", .str "Nat → Int"),
-        ("value", .str "λ (a: Nat) => a + 1"),
-        ("isTheorem", .bool false)
-      ]
+      ({
+        name := name2,
+        type := "Nat → Int",
+        value := "λ (a: Nat) => a + 1",
+        isTheorem := false
+      }: Protocol.EnvAdd)
      ({}: Protocol.EnvAddResult),
-    step "env.inspect" [("name", .str name2)]
+    step "env.inspect" ({name := name2, value? := .some true} : Protocol.EnvInspect)
      ({
        value? := .some { pp? := .some "fun a => ↑a + 1" },
        type := { pp? := .some "Nat → Int" },
@@ -166,19 +180,14 @@ example : ∀ (p: Prop), p → p := by
   exact h
 
 def test_frontend_process : Test :=
+  let file := "example : ∀ (p q: Prop), p → p ∨ q := by\n  intro p q h\n  exact Or.inl h"
+  let goal1 := "p q : Prop\nh : p\n⊢ p ∨ q"
   [
-    let file := "example : ∀ (p q: Prop), p → p ∨ q := by\n  intro p q h\n  exact Or.inl h"
-    let goal1 := "p q : Prop\nh : p\n⊢ p ∨ q"
     step "frontend.process"
-      [
-        ("file",              .str file),
-        ("invocations",       .bool true),
-        ("readHeader",        .bool false),
-        ("inheritEnv",        .bool false),
-        ("sorrys",            .bool false),
-        ("typeErrorsAsGoals", .bool false),
-        ("newConstants",      .bool false),
-      ]
+      ({
+        file? := .some file,
+        invocations := true,
+      }: Protocol.FrontendProcess)
      ({
        units := [{
          boundary := (0, file.utf8ByteSize),
@@ -214,15 +223,10 @@ def test_frontend_process_sorry : Test :=
       vars := #[{ name := "_uniq.4", userName := "p", type? := .some { pp? := .some "Prop" }}],
     }
     step "frontend.process"
-      [
-        ("file", .str file),
-        ("readHeader",        .bool false),
-        ("inheritEnv",        .bool false),
-        ("invocations", .bool false),
-        ("sorrys", .bool true),
-        ("typeErrorsAsGoals", .bool false),
-        ("newConstants", .bool false),
-      ]
+      ({
+        file? := .some file,
+        sorrys := true,
+      }: Protocol.FrontendProcess)
      ({
        units := [{
          boundary := (0, solved.utf8ByteSize),
@@ -233,23 +237,46 @@ def test_frontend_process_sorry : Test :=
          goalSrcBoundaries? := .some #[(57, 62)],
          messages := #["<anonymous>:2:0: warning: declaration uses 'sorry'\n"],
        }],
-    }: Protocol.FrontendProcessResult),
+     }: Protocol.FrontendProcessResult),
   ]
 
+def test_import_open : Test :=
+  let header := "import Init\nopen Nat"
+  let goal1: Protocol.Goal := {
+    name := "_uniq.67",
+    target := { pp? := .some "n + 1 = n.succ" },
+    vars := #[{ name := "_uniq.66", userName := "n", type? := .some { pp? := .some "Nat" }}],
+  }
+  [
+    step "frontend.process"
+      ({
+        file? := .some header,
+        readHeader := true,
+        inheritEnv := true,
+      }: Protocol.FrontendProcess)
+     ({
+       units := [{
+         boundary := (12, header.utf8ByteSize),
+       }],
+     }: Protocol.FrontendProcessResult),
+    step "goal.start" ({ expr := "∀ (n : Nat), n + 1 = Nat.succ n"} : Protocol.GoalStart)
+     ({ stateId := 0, root := "_uniq.65" }: Protocol.GoalStartResult),
+    step "goal.tactic" ({ stateId := 0, tactic? := .some "intro n" }: Protocol.GoalTactic)
+     ({ nextStateId? := .some 1, goals? := #[goal1], }: Protocol.GoalTacticResult),
+    step "goal.tactic" ({ stateId := 1, tactic? := .some "apply add_one" }: Protocol.GoalTactic)
+     ({ nextStateId? := .some 2, goals? := .some #[], }: Protocol.GoalTacticResult),
+  ]
 
 def runTest (env: Lean.Environment) (steps: Test): IO LSpec.TestSeq := do
   -- Setup the environment for execution
-  let context: Context := {}
-  let commands: MainM LSpec.TestSeq :=
-    steps.foldlM (λ suite step => do
-      let result ← step
-      return suite ++ result) LSpec.TestSeq.done
-  runCoreMSeq env <| commands.run context |>.run' {}
-
+  let coreContext ← createCoreContext #[]
+  let mainM : MainM LSpec.TestSeq :=
+    steps.foldlM (λ suite step => do return suite ++ (← step)) LSpec.TestSeq.done
+  mainM.run { coreContext } |>.run' { env }
 
 def suite (env : Lean.Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
-    ("expr.echo", test_elab),
+    ("expr.echo", test_expr_echo),
     ("options.set options.print", test_option_modify),
     ("Malformed command", test_malformed_command),
     ("Tactic", test_tactic),
@@ -258,6 +285,7 @@ def suite (env : Lean.Environment): List (String × IO LSpec.TestSeq) :=
     ("env.add env.inspect", test_env_add_inspect),
     ("frontend.process invocation", test_frontend_process),
     ("frontend.process sorry", test_frontend_process_sorry),
+    ("frontend.process import", test_import_open),
   ]
   tests.map (fun (name, test) => (name, runTest env test))
 

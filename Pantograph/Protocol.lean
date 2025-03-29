@@ -103,7 +103,7 @@ structure StatResult where
 -- Return the type of an expression
 structure ExprEcho where
   expr: String
-  type?: Option String
+  type?: Option String := .none
   -- universe levels
   levels: Option (Array String) := .none
   deriving Lean.FromJson
@@ -217,14 +217,14 @@ structure EnvSaveLoadResult where
 
 /-- Set options; See `Options` struct above for meanings -/
 structure OptionsSet where
-  printJsonPretty?: Option Bool
-  printExprPretty?: Option Bool
-  printExprAST?: Option Bool
-  printDependentMVars?: Option Bool
-  noRepeat?: Option Bool
-  printAuxDecls?: Option Bool
-  printImplementationDetailHyps?: Option Bool
-  automaticMode?: Option Bool
+  printJsonPretty?: Option Bool := .none
+  printExprPretty?: Option Bool := .none
+  printExprAST?: Option Bool := .none
+  printDependentMVars?: Option Bool := .none
+  noRepeat?: Option Bool := .none
+  printAuxDecls?: Option Bool := .none
+  printImplementationDetailHyps?: Option Bool := .none
+  automaticMode?: Option Bool := .none
   deriving Lean.FromJson
 structure OptionsSetResult where
   deriving Lean.ToJson
@@ -236,7 +236,7 @@ structure GoalStart where
   expr: Option String     -- Directly parse in an expression
   -- universe levels
   levels: Option (Array String) := .none
-  copyFrom: Option String -- Copy the type from a theorem in the environment
+  copyFrom: Option String := .none -- Copy the type from a theorem in the environment
   deriving Lean.FromJson
 structure GoalStartResult where
   stateId: Nat := 0

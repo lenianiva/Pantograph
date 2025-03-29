@@ -87,7 +87,7 @@ def test_define_proof : TestT Elab.TermElabM Unit := do
         { userName := "q", type? := .some { pp? := .some "Prop" } },
         { userName := "h", type? := .some { pp? := .some "p" } },
         { userName := "y",
-          type? := .some { pp? := .some "p ∨ ?m.25" },
+          type? := .some { pp? := .some "p ∨ ?m.19" },
           value? := .some { pp? := .some "Or.inl h" },
         }
       ]

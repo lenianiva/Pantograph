@@ -43,7 +43,7 @@ partial def loop : MainM Unit := do repeat do
         | false => ret.compress
       IO.println str
     catch e =>
-      let message ← e.toMessageData.toString
+      let message := e.toString
       let error  := Lean.toJson ({ error := "main", desc := message }: InteractionError)
       IO.println error.compress
 
@@ -60,11 +60,10 @@ unsafe def main (args: List String): IO Unit := do
   let (options, imports) := args.partition (·.startsWith "--")
   let coreContext ← options.map (·.drop 2) |>.toArray |> Pantograph.createCoreContext
   let coreState ← Pantograph.createCoreState imports.toArray
-  let context: Context := {}
   try
-    let coreM := loop.run context |>.run' {}
+    let mainM := loop.run { coreContext } |>.run' { env := coreState.env }
     IO.println "ready."
-    discard <| coreM.toIO coreContext coreState
+    mainM
   catch ex =>
     let message := ex.toString
     let error  := Lean.toJson ({ error := "io", desc := message }: InteractionError)
