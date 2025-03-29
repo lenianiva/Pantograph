@@ -18,7 +18,7 @@ lean_exe repl {
 }
 
 require LSpec from git
-  "https://github.com/lenianiva/LSpec.git" @ "c492cecd0bc473e2f9c8b94d545d02cc0056034f"
+  "https://github.com/argumentcomputer/LSpec.git" @ "a6652a48b5c67b0d8dd3930fad6390a97d127e8d"
 lean_lib Test {
 }
 @[test_driver]

@@ -17,9 +17,9 @@ def addPrefix (pref: String) (tests: List (String × α)): List (String  × α) 
   tests.map (λ (name, x) => (pref ++ "/" ++ name, x))
 
 /-- Runs test in parallel. Filters test name if given -/
-def runTestGroup (filter: Option String) (tests: List (String × IO LSpec.TestSeq)): IO LSpec.TestSeq := do
-  let tests: List (String × IO LSpec.TestSeq) := match filter with
-    | .some filter => tests.filter (λ (name, _) => filter.isPrefixOf name)
+def runTestGroup (nameFilter?: Option String) (tests: List (String × IO LSpec.TestSeq)): IO LSpec.TestSeq := do
+  let tests: List (String × IO LSpec.TestSeq) := match nameFilter? with
+    | .some nameFilter => tests.filter (λ (name, _) => nameFilter.isPrefixOf name)
     | .none => tests
   let tasks: List (String × Task _) ← tests.mapM (λ (name, task) => do
     return (name, ← EIO.asTask task))
@@ -37,7 +37,7 @@ open Pantograph.Test
 
 /-- Main entry of tests; Provide an argument to filter tests by prefix -/
 def main (args: List String) := do
-  let name_filter := args.head?
+  let nameFilter? := args.head?
   Lean.initSearchPath (← Lean.findSysroot)
   let env_default: Lean.Environment ← Lean.importModules
     (imports := #[`Init])
@@ -57,4 +57,4 @@ def main (args: List String) := do
     ("Tactic/Prograde", Tactic.Prograde.suite env_default),
   ]
   let tests: List (String × IO LSpec.TestSeq) := suites.foldl (λ acc (name, suite) => acc ++ (addPrefix name suite)) []
-  LSpec.lspecIO (← runTestGroup name_filter tests)
+  LSpec.lspecEachIO [()] (λ () => runTestGroup nameFilter? tests)
