@@ -18,8 +18,9 @@ structure State where
   -- Parser state
   scope : Elab.Command.Scope := { header := "" }
 
-/-- Main state monad for executing commands -/
+/-- Main monad for executing commands -/
 abbrev MainM := ReaderT Context $ StateRefT State IO
+/-- Main with possible exception -/
 abbrev EMainM := Protocol.FallibleT $ ReaderT Context $ StateRefT State IO
 def getMainState : MainM State := get
 
@@ -54,13 +55,17 @@ def runCoreM { α } (coreM : CoreM α) : EMainM α := do
   }
   -- Remap the coreM to capture every exception
   let coreM' : CoreM _ :=
-    Core.tryCatchRuntimeEx (Except.ok <$> coreM) λ ex => do
+    try
+      Except.ok <$> coreM
+    catch ex =>
       let desc ← ex.toMessageData.toString
       return Except.error $ ({ error := "exception", desc } : Protocol.InteractionError)
-  let io := coreM'.toIO coreCtx coreState
   if let .some token := cancelTk? then
     runCancelTokenWithTimeout token (timeout := .mk options.timeout)
-  let (result, state') ← io
+  let (result, state') ← match ← (coreM'.run coreCtx coreState).toIO' with
+    | Except.error (Exception.error _ msg)   => Protocol.throw $ { error := "core", desc := ← msg.toString }
+    | Except.error (Exception.internal id _) => Protocol.throw $ { error := "internal", desc := (← id.getName).toString }
+    | Except.ok a                            => pure a
   if result matches .ok _ then
     modifyEnv λ _ => state'.env
   liftExcept result

@@ -101,7 +101,7 @@ def test_tactic_timeout : Test :=
     step "options.set" ({ timeout? := .some 10 } : Protocol.OptionsSet)
      ({ }: Protocol.OptionsSetResult),
     step "goal.tactic" ({ stateId := 0, expr? := .some "by\nsleep 1000; simp" }: Protocol.GoalTactic)
-     ({ error := "io", desc := "internal exception #6" }: Protocol.InteractionError),
+     ({ error := "internal", desc := "interrupt" }: Protocol.InteractionError),
     -- ensure graceful recovery
     step "options.set" ({ timeout? := .some 0 } : Protocol.OptionsSet)
      ({ }: Protocol.OptionsSetResult),
