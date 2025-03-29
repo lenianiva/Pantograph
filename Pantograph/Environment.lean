@@ -148,7 +148,9 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): Protocol.
 def addDecl (name: String) (levels: Array String := #[]) (type: String) (value: String) (isTheorem: Bool)
     : Protocol.FallibleT CoreM Protocol.EnvAddResult := do
   let env ← Lean.MonadEnv.getEnv
-  let tvM: Elab.TermElabM (Except String (Expr × Expr)) := do
+  let levelParams := levels.toList.map (·.toName)
+  let tvM: Elab.TermElabM (Except String (Expr × Expr)) :=
+    Elab.Term.withLevelNames levelParams do do
     let type ← match parseTerm env type with
       | .ok syn => do
         match ← elabTerm syn with
@@ -164,11 +166,11 @@ def addDecl (name: String) (levels: Array String := #[]) (type: String) (value: 
           pure $ expr
         catch ex => return .error (← ex.toMessageData.toString)
       | .error e => return .error e
-    pure $ .ok (type, value)
+    Elab.Term.synthesizeSyntheticMVarsNoPostponing
+    pure $ .ok (← instantiateMVars type, ← instantiateMVars value)
   let (type, value) ← match ← tvM.run' (ctx := {}) |>.run' with
     | .ok t => pure t
     | .error e => Protocol.throw $ Protocol.errorExpr e
-  let levelParams := levels.toList.map (·.toName)
   let decl := if isTheorem then
     Lean.Declaration.thmDecl <| Lean.mkTheoremValEx
       (name := name.toName)
