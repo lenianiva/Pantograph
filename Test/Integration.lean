@@ -162,11 +162,11 @@ def test_automatic_mode (automatic: Bool): Test :=
 def test_env_add_inspect : Test :=
   let name1 := "Pantograph.mystery"
   let name2 := "Pantograph.mystery2"
+  let name3 := "Pantograph.mystery3"
   [
     step "env.add"
       ({
         name := name1,
-        type := "Prop → Prop → Prop",
         value := "λ (a b: Prop) => Or a b",
         isTheorem := false
       }: Protocol.EnvAdd)
@@ -180,7 +180,7 @@ def test_env_add_inspect : Test :=
     step "env.add"
       ({
         name := name2,
-        type := "Nat → Int",
+        type? := "Nat → Int",
         value := "λ (a: Nat) => a + 1",
         isTheorem := false
       }: Protocol.EnvAdd)
@@ -190,7 +190,21 @@ def test_env_add_inspect : Test :=
        value? := .some { pp? := .some "fun a => ↑a + 1" },
        type := { pp? := .some "Nat → Int" },
      }:
-      Protocol.EnvInspectResult)
+      Protocol.EnvInspectResult),
+    step "env.add"
+      ({
+        name := name3,
+        levels := #["u"]
+        type? := "(α : Type u) → α → (α × α)",
+        value := "λ (α : Type u) (x : α) => (x, x)",
+        isTheorem := false
+      }: Protocol.EnvAdd)
+     ({}: Protocol.EnvAddResult),
+    step "env.inspect" ({name := name3} : Protocol.EnvInspect)
+     ({
+       type := { pp? := .some "(α : Type u) → α → α × α" },
+     }:
+      Protocol.EnvInspectResult),
   ]
 
 example : ∀ (p: Prop), p → p := by

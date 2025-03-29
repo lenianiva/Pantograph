@@ -205,7 +205,7 @@ structure EnvInspectResult where
 structure EnvAdd where
   name: String
   levels: Array String := #[]
-  type: String
+  type?: Option String := .none
   value: String
   isTheorem: Bool := false
   deriving Lean.FromJson

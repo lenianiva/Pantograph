@@ -227,7 +227,7 @@ def execute (command: Protocol.Command): MainM Json := do
     let state ← getMainState
     runCoreM' $ Environment.inspect args state.options
   env_add (args: Protocol.EnvAdd): EMainM Protocol.EnvAddResult := do
-    runCoreM' $ Environment.addDecl args.name args.levels args.type args.value args.isTheorem
+    runCoreM' $ Environment.addDecl args.name args.levels args.type? args.value args.isTheorem
   env_save (args: Protocol.EnvSaveLoad): EMainM Protocol.EnvSaveLoadResult := do
     let env ← MonadEnv.getEnv
     environmentPickle env args.path

@@ -144,31 +144,38 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): Protocol.
     else
       .pure result
   return result
+/-- Elaborates and adds a declaration to the `CoreM` environment. -/
 @[export pantograph_env_add_m]
-def addDecl (name: String) (levels: Array String := #[]) (type: String) (value: String) (isTheorem: Bool)
+def addDecl (name: String) (levels: Array String := #[]) (type?: Option String) (value: String) (isTheorem: Bool)
     : Protocol.FallibleT CoreM Protocol.EnvAddResult := do
   let env ← Lean.MonadEnv.getEnv
-  let tvM: Elab.TermElabM (Except String (Expr × Expr)) := do
-    let type ← match parseTerm env type with
-      | .ok syn => do
-        match ← elabTerm syn with
-        | .error e => return .error e
-        | .ok expr => pure expr
+  let levelParams := levels.toList.map (·.toName)
+  let tvM: Elab.TermElabM (Except String (Expr × Expr)) :=
+    Elab.Term.withLevelNames levelParams do do
+    let expectedType?? : Except String (Option Expr) ← ExceptT.run $ type?.mapM λ type => do
+      match parseTerm env type with
+      | .ok syn => elabTerm syn
+      | .error e => MonadExceptOf.throw e
+    let expectedType? ← match expectedType?? with
+      | .ok t? => pure t?
       | .error e => return .error e
     let value ← match parseTerm env value with
       | .ok syn => do
         try
-          let expr ← Elab.Term.elabTerm (stx := syn) (expectedType? := .some type)
+          let expr ← Elab.Term.elabTerm (stx := syn) (expectedType? := expectedType?)
           Lean.Elab.Term.synthesizeSyntheticMVarsNoPostponing
           let expr ← instantiateMVars expr
           pure $ expr
         catch ex => return .error (← ex.toMessageData.toString)
       | .error e => return .error e
-    pure $ .ok (type, value)
+    Elab.Term.synthesizeSyntheticMVarsNoPostponing
+    let type ← match expectedType? with
+      | .some t => pure t
+      | .none => Meta.inferType value
+    pure $ .ok (← instantiateMVars type, ← instantiateMVars value)
   let (type, value) ← match ← tvM.run' (ctx := {}) |>.run' with
     | .ok t => pure t
     | .error e => Protocol.throw $ Protocol.errorExpr e
-  let levelParams := levels.toList.map (·.toName)
   let decl := if isTheorem then
     Lean.Declaration.thmDecl <| Lean.mkTheoremValEx
       (name := name.toName)
