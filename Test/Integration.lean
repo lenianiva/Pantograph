@@ -207,8 +207,6 @@ def test_env_add_inspect : Test :=
       Protocol.EnvInspectResult),
   ]
 
-def f.{u} : (α : Type u) → α → (α × α) := λ (α : Type u) (x : α) => (x, x)
-
 example : ∀ (p: Prop), p → p := by
   intro p h
   exact h
