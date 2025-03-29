@@ -167,7 +167,6 @@ def test_env_add_inspect : Test :=
     step "env.add"
       ({
         name := name1,
-        type := "Prop → Prop → Prop",
         value := "λ (a b: Prop) => Or a b",
         isTheorem := false
       }: Protocol.EnvAdd)
@@ -181,7 +180,7 @@ def test_env_add_inspect : Test :=
     step "env.add"
       ({
         name := name2,
-        type := "Nat → Int",
+        type? := "Nat → Int",
         value := "λ (a: Nat) => a + 1",
         isTheorem := false
       }: Protocol.EnvAdd)
@@ -196,7 +195,7 @@ def test_env_add_inspect : Test :=
       ({
         name := name3,
         levels := #["u"]
-        type := "(α : Type u) → α → (α × α)",
+        type? := "(α : Type u) → α → (α × α)",
         value := "λ (α : Type u) (x : α) => (x, x)",
         isTheorem := false
       }: Protocol.EnvAdd)
