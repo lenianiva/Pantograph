@@ -22,6 +22,9 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
   automatic mode (flag: `"automaticMode"`).  By default it is turned on, with
   all goals automatically resuming. This makes Pantograph act like a gym,
   with no resumption necessary to manage your goals.
+
+  Set `timeout` to a non-zero number to specify timeout (milliseconds) for all `CoreM`
+  operations.
 * `options.print`: Display the current set of options
 * `goal.start {["name": <name>], ["expr": <expr>], ["levels": [<levels>]], ["copyFrom": <symbol>]}`:
   Start a new proof from a given expression or symbol

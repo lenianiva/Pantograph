@@ -18,11 +18,11 @@ structure State where
   -- Parser state
   scope : Elab.Command.Scope := { header := "" }
 
-/-- Main state monad for executing commands -/
+/-- Main monad for executing commands -/
 abbrev MainM := ReaderT Context $ StateRefT State IO
+/-- Main with possible exception -/
+abbrev EMainM := Protocol.FallibleT $ ReaderT Context $ StateRefT State IO
 def getMainState : MainM State := get
-/-- Fallible subroutine return type -/
-abbrev CR α := Except Protocol.InteractionError α
 
 instance : MonadEnv MainM where
   getEnv := return (← get).env
@@ -37,24 +37,46 @@ def newGoalState (goalState: GoalState) : MainM Nat := do
   }
   return stateId
 
-def runCoreM { α } (coreM : CoreM α) : MainM α := do
+def runCoreM { α } (coreM : CoreM α) : EMainM α := do
   let scope := (← get).scope
+  let options :=(← get).options
+  let cancelTk? ← match options.timeout with
+    | 0 => pure .none
+    | _ => .some <$> IO.CancelToken.new
   let coreCtx : Core.Context := {
     (← read).coreContext with
     currNamespace      := scope.currNamespace
     openDecls          := scope.openDecls
     options            := scope.opts
+    cancelTk?,
   }
   let coreState : Core.State := {
     env := (← get).env
   }
-  let (result, state') ← coreM.toIO coreCtx coreState
-  modifyEnv λ _ => state'.env
-  return result
+  -- Remap the coreM to capture every exception
+  let coreM' : CoreM _ :=
+    try
+      Except.ok <$> coreM
+    catch ex =>
+      let desc ← ex.toMessageData.toString
+      return Except.error $ ({ error := "exception", desc } : Protocol.InteractionError)
+  if let .some token := cancelTk? then
+    runCancelTokenWithTimeout token (timeout := .mk options.timeout)
+  let (result, state') ← match ← (coreM'.run coreCtx coreState).toIO' with
+    | Except.error (Exception.error _ msg)   => Protocol.throw $ { error := "core", desc := ← msg.toString }
+    | Except.error (Exception.internal id _) => Protocol.throw $ { error := "internal", desc := (← id.getName).toString }
+    | Except.ok a                            => pure a
+  if result matches .ok _ then
+    modifyEnv λ _ => state'.env
+  liftExcept result
 
-def liftMetaM { α } (metaM : MetaM α): MainM α :=
+def runCoreM' { α } (coreM : Protocol.FallibleT CoreM α) : EMainM α := do
+  liftExcept $ ← runCoreM coreM.run
+
+
+def liftMetaM { α } (metaM : MetaM α): EMainM α :=
   runCoreM metaM.run'
-def liftTermElabM { α } (termElabM: Elab.TermElabM α) : MainM α :=
+def liftTermElabM { α } (termElabM: Elab.TermElabM α) : EMainM α :=
   runCoreM $ termElabM.run' (ctx := defaultElabContext) |>.run'
 
 section Frontend
@@ -68,7 +90,7 @@ structure CompilationUnit where
   messages : Array String
   newConstants : List Name
 
-def frontend_process_inner (args: Protocol.FrontendProcess): MainM (CR Protocol.FrontendProcessResult) := do
+def frontend_process_inner (args: Protocol.FrontendProcess): EMainM Protocol.FrontendProcessResult := do
   let options := (← getMainState).options
   let (fileName, file) ← match args.fileName?, args.file? with
     | .some fileName, .none => do
@@ -76,7 +98,7 @@ def frontend_process_inner (args: Protocol.FrontendProcess): MainM (CR Protocol.
       pure (fileName, file)
     | .none, .some file =>
       pure ("<anonymous>", file)
-    | _, _ => return .error <| errorI "arguments" "Exactly one of {fileName, file} must be supplied"
+    | _, _ => Protocol.throw $ errorI "arguments" "Exactly one of {fileName, file} must be supplied"
   let env?: Option Environment ← if args.readHeader then
       pure .none
     else do
@@ -137,19 +159,23 @@ def frontend_process_inner (args: Protocol.FrontendProcess): MainM (CR Protocol.
       goalSrcBoundaries?,
       newConstants?,
     }
-  return .ok { units }
+  return { units }
 
 end Frontend
 
 /-- Main loop command of the REPL -/
 def execute (command: Protocol.Command): MainM Json := do
-  let run { α β: Type } [FromJson α] [ToJson β] (comm: α → MainM (CR β)): MainM Json :=
-    match fromJson? command.payload with
-    | .ok args => do
-      match (← comm args) with
-      | .ok result =>  return toJson result
-      | .error ierror => return toJson ierror
-    | .error error => return toJson $ errorCommand s!"Unable to parse json: {error}"
+  let run { α β: Type } [FromJson α] [ToJson β] (comm: α → EMainM β): MainM Json :=
+    try
+      match fromJson? command.payload with
+      | .ok args => do
+        match (← comm args |>.run) with
+        | .ok result =>  return toJson result
+        | .error ierror => return toJson ierror
+      | .error error => return toJson $ errorCommand s!"Unable to parse json: {error}"
+    catch ex : IO.Error =>
+      let error : Protocol.InteractionError := { error := "io", desc := ex.toString }
+      return toJson error
   match command.cmd with
   | "reset"         => run reset
   | "stat"          => run stat
@@ -180,40 +206,40 @@ def execute (command: Protocol.Command): MainM Json := do
   errorIndex := errorI "index"
   errorIO := errorI "io"
   -- Command Functions
-  reset (_: Protocol.Reset): MainM (CR Protocol.StatResult) := do
+  reset (_: Protocol.Reset): EMainM Protocol.StatResult := do
     let state ← getMainState
     let nGoals := state.goalStates.size
     set { state with nextId := 0, goalStates := .empty }
-    return .ok { nGoals }
-  stat (_: Protocol.Stat): MainM (CR Protocol.StatResult) := do
+    return { nGoals }
+  stat (_: Protocol.Stat): EMainM Protocol.StatResult := do
     let state ← getMainState
     let nGoals := state.goalStates.size
-    return .ok { nGoals }
-  env_describe (args: Protocol.EnvDescribe): MainM (CR Protocol.EnvDescribeResult) := do
+    return { nGoals }
+  env_describe (args: Protocol.EnvDescribe): EMainM Protocol.EnvDescribeResult := do
     let result ← runCoreM $ Environment.describe args
-    return .ok result
-  env_module_read (args: Protocol.EnvModuleRead): MainM (CR Protocol.EnvModuleReadResult) := do
+    return result
+  env_module_read (args: Protocol.EnvModuleRead): EMainM Protocol.EnvModuleReadResult := do
     runCoreM $ Environment.moduleRead args
-  env_catalog (args: Protocol.EnvCatalog): MainM (CR Protocol.EnvCatalogResult) := do
+  env_catalog (args: Protocol.EnvCatalog): EMainM Protocol.EnvCatalogResult := do
     let result ← runCoreM $ Environment.catalog args
-    return .ok result
-  env_inspect (args: Protocol.EnvInspect): MainM (CR Protocol.EnvInspectResult) := do
+    return result
+  env_inspect (args: Protocol.EnvInspect): EMainM Protocol.EnvInspectResult := do
     let state ← getMainState
-    runCoreM $ Environment.inspect args state.options
-  env_add (args: Protocol.EnvAdd): MainM (CR Protocol.EnvAddResult) := do
-    runCoreM $ Environment.addDecl args
-  env_save (args: Protocol.EnvSaveLoad): MainM (CR Protocol.EnvSaveLoadResult) := do
+    runCoreM' $ Environment.inspect args state.options
+  env_add (args: Protocol.EnvAdd): EMainM Protocol.EnvAddResult := do
+    runCoreM' $ Environment.addDecl args.name args.levels args.type args.value args.isTheorem
+  env_save (args: Protocol.EnvSaveLoad): EMainM Protocol.EnvSaveLoadResult := do
     let env ← MonadEnv.getEnv
     environmentPickle env args.path
-    return .ok {}
-  env_load (args: Protocol.EnvSaveLoad): MainM (CR Protocol.EnvSaveLoadResult) := do
+    return {}
+  env_load (args: Protocol.EnvSaveLoad): EMainM Protocol.EnvSaveLoadResult := do
     let (env, _) ← environmentUnpickle args.path
     setEnv env
-    return .ok {}
-  expr_echo (args: Protocol.ExprEcho): MainM (CR Protocol.ExprEchoResult) := do
+    return {}
+  expr_echo (args: Protocol.ExprEcho): EMainM Protocol.ExprEchoResult := do
     let state ← getMainState
-    runCoreM $ exprEcho args.expr (expectedType? := args.type?) (levels := args.levels.getD #[]) (options := state.options)
-  options_set (args: Protocol.OptionsSet): MainM (CR Protocol.OptionsSetResult) := do
+    runCoreM' $ exprEcho args.expr (expectedType? := args.type?) (levels := args.levels.getD #[]) (options := state.options)
+  options_set (args: Protocol.OptionsSet): EMainM Protocol.OptionsSetResult := do
     let state ← getMainState
     let options := state.options
     set { state with
@@ -227,14 +253,15 @@ def execute (command: Protocol.Command): MainM Json := do
         printAuxDecls := args.printAuxDecls?.getD options.printAuxDecls,
         printImplementationDetailHyps := args.printImplementationDetailHyps?.getD options.printImplementationDetailHyps
         automaticMode := args.automaticMode?.getD options.automaticMode,
+        timeout := args.timeout?.getD options.timeout,
       }
     }
-    return .ok {  }
-  options_print (_: Protocol.OptionsPrint): MainM (CR Protocol.Options) := do
-    return .ok (← getMainState).options
-  goal_start (args: Protocol.GoalStart): MainM (CR Protocol.GoalStartResult) := do
+    return {  }
+  options_print (_: Protocol.OptionsPrint): EMainM Protocol.Options := do
+    return (← getMainState).options
+  goal_start (args: Protocol.GoalStart): EMainM Protocol.GoalStartResult := do
     let expr?: Except _ GoalState ← liftTermElabM (match args.expr, args.copyFrom with
-      | .some expr, .none => goalStartExpr expr (args.levels.getD #[])
+      | .some expr, .none => goalStartExpr expr (args.levels.getD #[]) |>.run
       | .none, .some copyFrom => do
         (match (← getEnv).find? <| copyFrom.toName with
         | .none => return .error <| errorIndex s!"Symbol not found: {copyFrom}"
@@ -242,16 +269,16 @@ def execute (command: Protocol.Command): MainM Json := do
       | _, _ =>
         return .error <| errorI "arguments" "Exactly one of {expr, copyFrom} must be supplied")
     match expr? with
-    | .error error => return .error error
+    | .error error => Protocol.throw error
     | .ok goalState =>
       let stateId ← newGoalState goalState
-      return .ok { stateId, root := goalState.root.name.toString }
-  goal_tactic (args: Protocol.GoalTactic): MainM (CR Protocol.GoalTacticResult) := do
+      return { stateId, root := goalState.root.name.toString }
+  goal_tactic (args: Protocol.GoalTactic): EMainM Protocol.GoalTacticResult := do
     let state ← getMainState
     let .some goalState := state.goalStates[args.stateId]? |
-      return .error $ errorIndex s!"Invalid state index {args.stateId}"
+      Protocol.throw $ errorIndex s!"Invalid state index {args.stateId}"
     let .some goal := goalState.goals.get? args.goalId |
-      return .error $ errorIndex s!"Invalid goal index {args.goalId}"
+      Protocol.throw $ errorIndex s!"Invalid goal index {args.goalId}"
     let nextGoalState?: Except _ TacticResult ← liftTermElabM do
       -- NOTE: Should probably use a macro to handle this...
       match args.tactic?, args.expr?, args.have?, args.let?, args.calc?, args.conv?, args.draft?  with
@@ -277,63 +304,63 @@ def execute (command: Protocol.Command): MainM Json := do
         let error := errorI "arguments" "Exactly one of {tactic, expr, have, let, calc, conv, draft} must be supplied"
         pure $ .error error
     match nextGoalState? with
-    | .error error => return .error error
+    | .error error => Protocol.throw error
     | .ok (.success nextGoalState) => do
       let nextGoalState ← match state.options.automaticMode, args.conv? with
         | true, .none => do
           let .ok result := nextGoalState.resume (nextGoalState.goals ++ goalState.goals) |
-            return .error $ errorIO "Resuming known goals"
+            Protocol.throw $ errorIO "Resuming known goals"
           pure result
         | true, .some true => pure nextGoalState
         | true, .some false => do
           let .some (_, _, dormantGoals) := goalState.convMVar? |
-            return .error $ errorIO "If conv exit succeeded this should not fail"
+            Protocol.throw $ errorIO "If conv exit succeeded this should not fail"
           let .ok result := nextGoalState.resume (nextGoalState.goals ++ dormantGoals) |
-            return .error $ errorIO "Resuming known goals"
+            Protocol.throw $ errorIO "Resuming known goals"
           pure result
         | false, _ => pure nextGoalState
       let nextStateId ← newGoalState nextGoalState
       let goals ← runCoreM $ nextGoalState.serializeGoals (parent := .some goalState) (options := state.options) |>.run'
-      return .ok {
+      return {
         nextStateId? := .some nextStateId,
         goals? := .some goals,
       }
     | .ok (.parseError message) =>
-      return .ok { parseError? := .some message }
+      return { parseError? := .some message }
     | .ok (.invalidAction message) =>
-      return .error $ errorI "invalid" message
+      Protocol.throw $ errorI "invalid" message
     | .ok (.failure messages) =>
-      return .ok { tacticErrors? := .some messages }
-  goal_continue (args: Protocol.GoalContinue): MainM (CR Protocol.GoalContinueResult) := do
+      return { tacticErrors? := .some messages }
+  goal_continue (args: Protocol.GoalContinue): EMainM Protocol.GoalContinueResult := do
     let state ← getMainState
     let .some target := state.goalStates[args.target]? |
-      return .error $ errorIndex s!"Invalid state index {args.target}"
-    let nextState? ← match args.branch?, args.goals? with
+      Protocol.throw $ errorIndex s!"Invalid state index {args.target}"
+    let nextGoalState? : GoalState  ← match args.branch?, args.goals? with
       | .some branchId, .none => do
         match state.goalStates[branchId]? with
-        | .none => return .error $ errorIndex s!"Invalid state index {branchId}"
+        | .none => Protocol.throw $ errorIndex s!"Invalid state index {branchId}"
         | .some branch => pure $ target.continue branch
       | .none, .some goals =>
         pure $ goalResume target goals
-      | _, _ => return .error <| errorI "arguments" "Exactly one of {branch, goals} must be supplied"
-    match nextState? with
-    | .error error => return .error <| errorI "structure" error
+      | _, _ => Protocol.throw $ errorI "arguments" "Exactly one of {branch, goals} must be supplied"
+    match nextGoalState? with
+    | .error error => Protocol.throw $ errorI "structure" error
     | .ok nextGoalState =>
       let nextStateId ← newGoalState nextGoalState
       let goals ← liftMetaM $ goalSerialize nextGoalState (options := state.options)
-      return .ok {
+      return {
         nextStateId,
         goals,
       }
-  goal_delete (args: Protocol.GoalDelete): MainM (CR Protocol.GoalDeleteResult) := do
+  goal_delete (args: Protocol.GoalDelete): EMainM Protocol.GoalDeleteResult := do
     let state ← getMainState
     let goalStates := args.stateIds.foldl (λ map id => map.erase id) state.goalStates
     set { state with goalStates }
-    return .ok {}
-  goal_print (args: Protocol.GoalPrint): MainM (CR Protocol.GoalPrintResult) := do
+    return {}
+  goal_print (args: Protocol.GoalPrint): EMainM Protocol.GoalPrintResult := do
     let state ← getMainState
     let .some goalState := state.goalStates[args.stateId]? |
-      return .error $ errorIndex s!"Invalid state index {args.stateId}"
+      Protocol.throw $ errorIndex s!"Invalid state index {args.stateId}"
     let result ← liftMetaM <| goalPrint
         goalState
         (rootExpr := args.rootExpr?.getD False)
@@ -341,21 +368,18 @@ def execute (command: Protocol.Command): MainM Json := do
         (goals := args.goals?.getD False)
         (extraMVars := args.extraMVars?.getD #[])
         (options := state.options)
-    return .ok result
-  goal_save (args: Protocol.GoalSave): MainM (CR Protocol.GoalSaveResult) := do
+    return result
+  goal_save (args: Protocol.GoalSave): EMainM Protocol.GoalSaveResult := do
     let state ← getMainState
     let .some goalState := state.goalStates[args.id]? |
-      return .error $ errorIndex s!"Invalid state index {args.id}"
+      Protocol.throw $ errorIndex s!"Invalid state index {args.id}"
     goalStatePickle goalState args.path
-    return .ok {}
-  goal_load (args: Protocol.GoalLoad): MainM (CR Protocol.GoalLoadResult) := do
+    return {}
+  goal_load (args: Protocol.GoalLoad): EMainM Protocol.GoalLoadResult := do
     let (goalState, _) ← goalStateUnpickle args.path (← MonadEnv.getEnv)
     let id ← newGoalState goalState
-    return .ok { id }
-  frontend_process (args: Protocol.FrontendProcess): MainM (CR Protocol.FrontendProcessResult) := do
-    try
-      frontend_process_inner args
-    catch e =>
-      return .error $ errorI "frontend" e.toString
+    return { id }
+  frontend_process (args: Protocol.FrontendProcess): EMainM Protocol.FrontendProcessResult := do
+    frontend_process_inner args
 
 end Pantograph.Repl

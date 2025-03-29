@@ -91,6 +91,24 @@ def test_tactic : Test :=
      ({ tacticErrors? := .some #["tactic 'apply' failed, failed to unify\n  ∀ {m : Nat}, Nat.succ ?n ≤ m → ?n ≤ m\nwith\n  ∀ (q : Prop), x ∨ q → q ∨ x\nx : Prop\n⊢ ∀ (q : Prop), x ∨ q → q ∨ x"] }:
       Protocol.GoalTacticResult)
   ]
+example : (1 : Nat) + (2 * 3) = 1 + (4 - 3) + (6 - 4) + 3 := by
+  simp
+def test_tactic_timeout : Test :=
+  [
+    step "goal.start" ({ expr := "(1 : Nat) + (2 * 3) = 1 + (4 - 3) + (6 - 4) + 3" }: Protocol.GoalStart)
+     ({ stateId := 0, root := "_uniq.319" }: Protocol.GoalStartResult),
+    -- timeout of 10 milliseconds
+    step "options.set" ({ timeout? := .some 10 } : Protocol.OptionsSet)
+     ({ }: Protocol.OptionsSetResult),
+    step "goal.tactic" ({ stateId := 0, expr? := .some "by\nsleep 1000; simp" }: Protocol.GoalTactic)
+     ({ error := "internal", desc := "interrupt" }: Protocol.InteractionError),
+    -- ensure graceful recovery
+    step "options.set" ({ timeout? := .some 0 } : Protocol.OptionsSet)
+     ({ }: Protocol.OptionsSetResult),
+    step "goal.tactic" ({ stateId := 0, tactic? := .some "simp" }: Protocol.GoalTactic)
+     ({ nextStateId? := .some 1, goals? := .some #[], }: Protocol.GoalTacticResult),
+  ]
+
 def test_automatic_mode (automatic: Bool): Test :=
   let varsPQ := #[
     { name := "_uniq.10", userName := "p", type? := .some { pp? := .some "Prop" }},
@@ -280,6 +298,7 @@ def suite (env : Lean.Environment): List (String × IO LSpec.TestSeq) :=
     ("options.set options.print", test_option_modify),
     ("Malformed command", test_malformed_command),
     ("Tactic", test_tactic),
+    ("Tactic Timeout", test_tactic_timeout),
     ("Manual Mode", test_automatic_mode false),
     ("Automatic Mode", test_automatic_mode true),
     ("env.add env.inspect", test_env_add_inspect),

@@ -3,6 +3,7 @@ import Pantograph.Goal
 import Pantograph.Protocol
 import Pantograph.Delate
 import Pantograph.Version
+
 import Lean
 
 namespace Lean
@@ -75,59 +76,53 @@ def createCoreState (imports: Array String): IO Core.State := do
     (trustLevel := 1)
   return { env := env }
 
-@[export pantograph_env_add_m]
-def envAdd (name: String) (type: String) (value: String) (isTheorem: Bool):
-    CoreM (Protocol.CR Protocol.EnvAddResult) :=
-  Environment.addDecl { name, type, value, isTheorem }
-
 @[export pantograph_parse_elab_type_m]
-def parseElabType (type: String): Elab.TermElabM (Protocol.CR Expr) := do
+def parseElabType (type: String): Protocol.FallibleT Elab.TermElabM Expr := do
   let env ← MonadEnv.getEnv
   let syn ← match parseTerm env type with
-    | .error str => return .error $ errorI "parsing" str
+    | .error str => Protocol.throw $ errorI "parsing" str
     | .ok syn => pure syn
   match ← elabType syn with
-  | .error str => return .error $ errorI "elab" str
-  | .ok expr => return .ok (← instantiateMVars expr)
+  | .error str => Protocol.throw $ errorI "elab" str
+  | .ok expr => return (← instantiateMVars expr)
 
 /-- This must be a TermElabM since the parsed expr contains extra information -/
 @[export pantograph_parse_elab_expr_m]
-def parseElabExpr (expr: String) (expectedType?: Option String := .none): Elab.TermElabM (Protocol.CR Expr) := do
+def parseElabExpr (expr: String) (expectedType?: Option String := .none): Protocol.FallibleT Elab.TermElabM Expr := do
   let env ← MonadEnv.getEnv
-  let expectedType? ← match ← expectedType?.mapM parseElabType with
-    | .none => pure $ .none
-    | .some (.ok t) => pure $ .some t
-    | .some (.error e) => return .error e
+  let expectedType? ← expectedType?.mapM parseElabType
   let syn ← match parseTerm env expr with
-    | .error str => return .error $ errorI "parsing" str
+    | .error str => Protocol.throw $ errorI "parsing" str
     | .ok syn => pure syn
   match ← elabTerm syn expectedType? with
-  | .error str => return .error $ errorI "elab" str
-  | .ok expr => return .ok (← instantiateMVars expr)
+  | .error str => Protocol.throw $ errorI "elab" str
+  | .ok expr => return (← instantiateMVars expr)
 
 @[export pantograph_expr_echo_m]
 def exprEcho (expr: String) (expectedType?: Option String := .none) (levels: Array String := #[])  (options: @&Protocol.Options := {}):
-    CoreM (Protocol.CR Protocol.ExprEchoResult) :=
-  runTermElabM $ Elab.Term.withLevelNames (levels.toList.map (·.toName)) do
-    let expr ← match ← parseElabExpr expr expectedType? with
-      | .error e => return .error e
+    Protocol.FallibleT CoreM Protocol.ExprEchoResult := do
+  let e : Except Protocol.InteractionError _ ← runTermElabM $ Elab.Term.withLevelNames (levels.toList.map (·.toName)) do
+    let expr ← match ← parseElabExpr expr expectedType? |>.run with
+      | .error e => return Except.error e
       | .ok expr => pure expr
     try
       let type ← unfoldAuxLemmas (← Meta.inferType expr)
-      return .ok {
+      return .ok $ .ok ({
           type := (← serializeExpression options type),
-          expr := (← serializeExpression options expr)
-      }
+          expr := (← serializeExpression options expr),
+      }: Protocol.ExprEchoResult)
     catch exception =>
-      return .error $ errorI "typing" (← exception.toMessageData.toString)
+      return Except.error $ errorI "typing" (← exception.toMessageData.toString)
+  liftExcept e
 
 @[export pantograph_goal_start_expr_m]
-def goalStartExpr (expr: String) (levels: Array String): CoreM (Protocol.CR GoalState) :=
-  runTermElabM $ Elab.Term.withLevelNames (levels.toList.map (·.toName)) do
-    let expr ← match ← parseElabType expr with
+def goalStartExpr (expr: String) (levels: Array String): Protocol.FallibleT CoreM GoalState := do
+  let e : Except Protocol.InteractionError _ ← runTermElabM $ Elab.Term.withLevelNames (levels.toList.map (·.toName)) do
+    let expr ← match ← parseElabType expr |>.run with
       | .error e => return .error e
       | .ok expr => pure $ expr
-    return .ok $ ← GoalState.create expr
+    return .ok $ .ok $ ← GoalState.create expr
+  liftExcept e
 
 @[export pantograph_goal_resume]
 def goalResume (target: GoalState) (goals: Array String): Except String GoalState :=
@@ -211,5 +206,13 @@ def goalConvExit (state: GoalState): CoreM TacticResult :=
 @[export pantograph_goal_calc_m]
 def goalCalc (state: GoalState) (goal: MVarId) (pred: String): CoreM TacticResult :=
   runTermElabM <| state.tryCalc goal pred
+
+-- Cancel the token after a timeout.
+@[export pantograph_run_cancel_token_with_timeout_m]
+def runCancelTokenWithTimeout (cancelToken : IO.CancelToken) (timeout : UInt32) : IO Unit := do
+  let _ ← EIO.asTask do
+    IO.sleep timeout
+    cancelToken.set
+  return ()
 
 end Pantograph

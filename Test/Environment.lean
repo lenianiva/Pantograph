@@ -103,14 +103,14 @@ def test_symbol_location : TestT IO Unit := do
     (opts := {})
     (trustLevel := 1)
   addTest $ ← runTestCoreM env do
-    let .ok result ← Environment.inspect { name := "Nat.le_of_succ_le", source? := .some true } (options := {}) | fail "Inspect failed"
+    let .ok result ← (Environment.inspect { name := "Nat.le_of_succ_le", source? := .some true } (options := {})).run | fail "Inspect failed"
     checkEq "module" result.module? <| .some "Init.Data.Nat.Basic"
 
     -- Extraction of source doesn't work for symbols in `Init` for some reason
     checkTrue "file" result.sourceUri?.isNone
     checkEq "pos" (result.sourceStart?.map (·.column)) <| .some 0
     checkEq "pos" (result.sourceEnd?.map (·.column)) <| .some 88
-    let .ok { imports, constNames, .. } ← Environment.moduleRead ⟨"Init.Data.Nat.Basic"⟩ | fail "Module read failed"
+    let { imports, constNames, .. } ← Environment.moduleRead ⟨"Init.Data.Nat.Basic"⟩
     checkEq "imports" imports #["Init.SimpLemmas", "Init.Data.NeZero"]
     checkTrue "constNames" $ constNames.contains "Nat.succ_add"
 
