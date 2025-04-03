@@ -107,7 +107,7 @@ structure ExprEcho where
   expr: String
   type?: Option String := .none
   -- universe levels
-  levels: Option (Array String) := .none
+  levels?: Option (Array String) := .none
   deriving Lean.FromJson
 structure ExprEchoResult where
   expr: Expression
@@ -204,7 +204,7 @@ structure EnvInspectResult where
 
 structure EnvAdd where
   name: String
-  levels: Array String := #[]
+  levels?: Option (Array String) := .none
   type?: Option String := .none
   value: String
   isTheorem: Bool := false
@@ -239,7 +239,7 @@ structure GoalStart where
   -- Only one of the fields below may be populated.
   expr: Option String     -- Directly parse in an expression
   -- universe levels
-  levels: Option (Array String) := .none
+  levels?: Option (Array String) := .none
   copyFrom: Option String := .none -- Copy the type from a theorem in the environment
   deriving Lean.FromJson
 structure GoalStartResult where
