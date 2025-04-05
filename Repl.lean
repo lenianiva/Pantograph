@@ -77,13 +77,14 @@ def runCoreM' { α } (coreM : Protocol.FallibleT CoreM α) : EMainM α := do
 
 def liftMetaM { α } (metaM : MetaM α): EMainM α :=
   runCoreM metaM.run'
-def liftTermElabM { α } (termElabM: Elab.TermElabM α) : EMainM α := do
+def liftTermElabM { α } (termElabM: Elab.TermElabM α) (levelNames : List Name := [])
+    : EMainM α := do
   let scope := (← get).scope
   let context := {
     isNoncomputableSection := scope.isNoncomputable,
   }
   let state := {
-    levelNames := scope.levelNames,
+    levelNames := scope.levelNames ++ levelNames,
   }
   runCoreM $ termElabM.run' context state |>.run'
 
@@ -268,14 +269,16 @@ def execute (command: Protocol.Command): MainM Json := do
   options_print (_: Protocol.OptionsPrint): EMainM Protocol.Options := do
     return (← getMainState).options
   goal_start (args: Protocol.GoalStart): EMainM Protocol.GoalStartResult := do
-    let expr?: Except _ GoalState ← liftTermElabM (match args.expr, args.copyFrom with
-      | .some expr, .none => goalStartExpr expr (args.levels?.getD #[]) |>.run
+    let levelNames := (args.levels?.getD #[]).toList.map (·.toName)
+    let expr?: Except _ GoalState ← liftTermElabM (levelNames := levelNames) do
+      match args.expr, args.copyFrom with
+      | .some expr, .none => goalStartExpr expr |>.run
       | .none, .some copyFrom => do
         (match (← getEnv).find? <| copyFrom.toName with
         | .none => return .error <| errorIndex s!"Symbol not found: {copyFrom}"
         | .some cInfo => return .ok (← GoalState.create cInfo.type))
       | _, _ =>
-        return .error <| errorI "arguments" "Exactly one of {expr, copyFrom} must be supplied")
+        return .error <| errorI "arguments" "Exactly one of {expr, copyFrom} must be supplied"
     match expr? with
     | .error error => Protocol.throw error
     | .ok goalState =>
@@ -349,7 +352,8 @@ def execute (command: Protocol.Command): MainM Json := do
         | .none => Protocol.throw $ errorIndex s!"Invalid state index {branchId}"
         | .some branch => pure $ target.continue branch
       | .none, .some goals =>
-        pure $ goalResume target goals
+        let goals := goals.toList.map (λ n => { name := n.toName })
+        pure $ target.resume goals
       | _, _ => Protocol.throw $ errorI "arguments" "Exactly one of {branch, goals} must be supplied"
     match nextGoalState? with
     | .error error => Protocol.throw $ errorI "structure" error

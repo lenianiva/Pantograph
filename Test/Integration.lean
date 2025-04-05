@@ -299,7 +299,7 @@ def test_import_open : Test :=
     step "goal.tactic" ({ stateId := 1, tactic? := .some "apply add_one" }: Protocol.GoalTactic)
      ({ nextStateId? := .some 2, goals? := .some #[], }: Protocol.GoalTacticResult),
     step "goal.start" ({ expr := "∀ (x : Sort u), Sort (u + 1)"} : Protocol.GoalStart)
-     ({ stateId := 0, root := "_uniq.65" }: Protocol.GoalStartResult),
+     ({ stateId := 3, root := "_uniq.5" }: Protocol.GoalStartResult),
   ]
 
 def runTest (env: Lean.Environment) (steps: Test): IO LSpec.TestSeq := do

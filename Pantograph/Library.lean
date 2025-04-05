@@ -116,17 +116,9 @@ def exprEcho (expr: String) (expectedType?: Option String := .none) (levels: Arr
   liftExcept e
 
 @[export pantograph_goal_start_expr_m]
-def goalStartExpr (expr: String) (levels: Array String): Protocol.FallibleT CoreM GoalState := do
-  let e : Except Protocol.InteractionError _ ← runTermElabM $ Elab.Term.withLevelNames (levels.toList.map (·.toName)) do
-    let expr ← match ← parseElabType expr |>.run with
-      | .error e => return .error e
-      | .ok expr => pure $ expr
-    return .ok $ .ok $ ← GoalState.create expr
-  liftExcept e
-
-@[export pantograph_goal_resume]
-def goalResume (target: GoalState) (goals: Array String): Except String GoalState :=
-  target.resume (goals.map (λ n => { name := n.toName }) |>.toList)
+def goalStartExpr (expr: String) : Protocol.FallibleT Elab.TermElabM GoalState := do
+  let t ← parseElabType expr
+  GoalState.create t
 
 @[export pantograph_goal_serialize_m]
 def goalSerialize (state: GoalState) (options: @&Protocol.Options): CoreM (Array Protocol.Goal) :=
@@ -164,48 +156,27 @@ def goalPrint (state: GoalState) (rootExpr: Bool) (parentExpr: Bool) (goals: Boo
     extraMVars,
   }
 
-@[export pantograph_goal_tactic_m]
-def goalTactic (state: GoalState) (goal:  MVarId) (tactic: String): CoreM TacticResult :=
-  runTermElabM <| state.tryTactic goal tactic
-@[export pantograph_goal_assign_m]
-def goalAssign (state: GoalState) (goal: MVarId) (expr: String): CoreM TacticResult :=
-  runTermElabM <| state.tryAssign goal expr
 @[export pantograph_goal_have_m]
-protected def GoalState.tryHave (state: GoalState) (goal: MVarId) (binderName: String) (type: String): CoreM TacticResult := do
+protected def GoalState.tryHave (state: GoalState) (goal: MVarId) (binderName: String) (type: String): Elab.TermElabM TacticResult := do
   let type ← match (← parseTermM type) with
     | .ok syn => pure syn
     | .error error => return .parseError error
-  runTermElabM do
-    state.restoreElabM
-    state.tryTacticM goal $ Tactic.evalHave binderName.toName type
+  state.restoreElabM
+  state.tryTacticM goal $ Tactic.evalHave binderName.toName type
 @[export pantograph_goal_try_define_m]
-protected def GoalState.tryDefine (state: GoalState) (goal: MVarId) (binderName: String) (expr: String): CoreM TacticResult := do
+protected def GoalState.tryDefine (state: GoalState) (goal: MVarId) (binderName: String) (expr: String): Elab.TermElabM TacticResult := do
   let expr ← match (← parseTermM expr) with
     | .ok syn => pure syn
     | .error error => return .parseError error
-  runTermElabM do
-    state.restoreElabM
-    state.tryTacticM goal (Tactic.evalDefine binderName.toName expr)
+  state.restoreElabM
+  state.tryTacticM goal (Tactic.evalDefine binderName.toName expr)
 @[export pantograph_goal_try_draft_m]
-protected def GoalState.tryDraft (state: GoalState) (goal: MVarId) (expr: String): CoreM TacticResult := do
+protected def GoalState.tryDraft (state: GoalState) (goal: MVarId) (expr: String): Elab.TermElabM TacticResult := do
   let expr ← match (← parseTermM expr) with
     | .ok syn => pure syn
     | .error error => return .parseError error
-  runTermElabM do
-    state.restoreElabM
-    state.tryTacticM goal (Tactic.evalDraft expr)
-@[export pantograph_goal_let_m]
-def goalLet (state: GoalState) (goal: MVarId) (binderName: String) (type: String): CoreM TacticResult :=
-  runTermElabM <| state.tryLet goal binderName type
-@[export pantograph_goal_conv_m]
-def goalConv (state: GoalState) (goal: MVarId): CoreM TacticResult :=
-  runTermElabM <| state.conv goal
-@[export pantograph_goal_conv_exit_m]
-def goalConvExit (state: GoalState): CoreM TacticResult :=
-  runTermElabM <| state.convExit
-@[export pantograph_goal_calc_m]
-def goalCalc (state: GoalState) (goal: MVarId) (pred: String): CoreM TacticResult :=
-  runTermElabM <| state.tryCalc goal pred
+  state.restoreElabM
+  state.tryTacticM goal (Tactic.evalDraft expr)
 
 -- Cancel the token after a timeout.
 @[export pantograph_run_cancel_token_with_timeout_m]
