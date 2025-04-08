@@ -114,12 +114,20 @@ def test_symbol_location : TestT IO Unit := do
     checkEq "imports" imports #["Init.SimpLemmas", "Init.Data.NeZero"]
     checkTrue "constNames" $ constNames.contains "Nat.succ_add"
 
+def test_matcher : TestT IO Unit := do
+  let env: Environment ← importModules
+    (imports := #[`Init])
+    (opts := {})
+    (trustLevel := 1)
+  checkTrue "not matcher" $ ¬ Meta.isMatcherCore env `Nat.strongRecOn
+
 def suite: List (String × IO LSpec.TestSeq) :=
   [
     ("Catalog", test_catalog),
     ("Symbol Visibility", test_symbol_visibility),
     ("Inspect", test_inspect),
     ("Symbol Location", runTest test_symbol_location),
+    ("Matcher", runTest test_matcher),
   ]
 
 end Pantograph.Test.Environment

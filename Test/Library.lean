@@ -8,15 +8,18 @@ open Pantograph
 
 namespace Pantograph.Test.Library
 
+def runTermElabM { α } (termElabM: Elab.TermElabM α): CoreM α :=
+  termElabM.run' (ctx := defaultElabContext) |>.run'
+
 def test_expr_echo (env: Environment): IO LSpec.TestSeq := do
   let inner: CoreM LSpec.TestSeq := do
     let prop_and_proof := "⟨∀ (x: Prop), x → x, λ (x: Prop) (h: x) => h⟩"
     let tests := LSpec.TestSeq.done
-    let echoResult ← exprEcho prop_and_proof (options := {})
+    let echoResult ← runTermElabM $ exprEcho prop_and_proof (options := {})
     let tests := tests.append (LSpec.test "fail" (echoResult.toOption == .some {
       type := { pp? := "?m.2" }, expr := { pp? := "?m.3" }
     }))
-    let echoResult ← exprEcho prop_and_proof (expectedType? := .some "Σ' p:Prop, p") (options := { printExprAST := true })
+    let echoResult ← runTermElabM $ exprEcho prop_and_proof (expectedType? := .some "Σ' p:Prop, p") (options := { printExprAST := true })
     let tests := tests.append (LSpec.test "fail" (echoResult.toOption == .some {
       type := {
         pp? := "(p : Prop) ×' p",

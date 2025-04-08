@@ -30,7 +30,7 @@ abbrev Test := List (MainM LSpec.TestSeq)
 def test_expr_echo : Test :=
   [
     step "expr.echo"
-     ({ expr := "λ {α : Sort (u + 1)} => List α", levels := .some #["u"]}: Protocol.ExprEcho)
+     ({ expr := "λ {α : Sort (u + 1)} => List α", levels? := .some #["u"]}: Protocol.ExprEcho)
      ({
        type := { pp? := .some "{α : Type u} → Type u" },
        expr := { pp? := .some "fun {α} => List α" }
@@ -194,7 +194,7 @@ def test_env_add_inspect : Test :=
     step "env.add"
       ({
         name := name3,
-        levels := #["u"]
+        levels? := .some #["u"]
         type? := "(α : Type u) → α → (α × α)",
         value := "λ (α : Type u) (x : α) => (x, x)",
         isTheorem := false
@@ -273,7 +273,7 @@ def test_frontend_process_sorry : Test :=
   ]
 
 def test_import_open : Test :=
-  let header := "import Init\nopen Nat"
+  let header := "import Init\nopen Nat\nuniverse u"
   let goal1: Protocol.Goal := {
     name := "_uniq.67",
     target := { pp? := .some "n + 1 = n.succ" },
@@ -287,9 +287,10 @@ def test_import_open : Test :=
         inheritEnv := true,
       }: Protocol.FrontendProcess)
      ({
-       units := [{
-         boundary := (12, header.utf8ByteSize),
-       }],
+       units := [
+         { boundary := (12, 21) },
+         { boundary := (21, header.utf8ByteSize) },
+       ],
      }: Protocol.FrontendProcessResult),
     step "goal.start" ({ expr := "∀ (n : Nat), n + 1 = Nat.succ n"} : Protocol.GoalStart)
      ({ stateId := 0, root := "_uniq.65" }: Protocol.GoalStartResult),
@@ -297,6 +298,8 @@ def test_import_open : Test :=
      ({ nextStateId? := .some 1, goals? := #[goal1], }: Protocol.GoalTacticResult),
     step "goal.tactic" ({ stateId := 1, tactic? := .some "apply add_one" }: Protocol.GoalTactic)
      ({ nextStateId? := .some 2, goals? := .some #[], }: Protocol.GoalTacticResult),
+    step "goal.start" ({ expr := "∀ (x : Sort u), Sort (u + 1)"} : Protocol.GoalStart)
+     ({ stateId := 3, root := "_uniq.5" }: Protocol.GoalStartResult),
   ]
 
 def runTest (env: Lean.Environment) (steps: Test): IO LSpec.TestSeq := do

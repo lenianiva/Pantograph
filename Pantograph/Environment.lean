@@ -180,7 +180,7 @@ def addDecl (name: String) (levels: Array String := #[]) (type?: Option String) 
     Lean.Declaration.thmDecl <| Lean.mkTheoremValEx
       (name := name.toName)
       (levelParams := levelParams)
-      (type := type )
+      (type := type)
       (value := value)
       (all := [])
   else

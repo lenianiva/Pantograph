@@ -45,9 +45,10 @@ def runCoreM { α } (coreM : CoreM α) : EMainM α := do
     | _ => .some <$> IO.CancelToken.new
   let coreCtx : Core.Context := {
     (← read).coreContext with
-    currNamespace      := scope.currNamespace
-    openDecls          := scope.openDecls
-    options            := scope.opts
+    currNamespace      := scope.currNamespace,
+    openDecls          := scope.openDecls,
+    options            := scope.opts,
+    initHeartbeats     :=  ← IO.getNumHeartbeats,
     cancelTk?,
   }
   let coreState : Core.State := {
@@ -76,8 +77,16 @@ def runCoreM' { α } (coreM : Protocol.FallibleT CoreM α) : EMainM α := do
 
 def liftMetaM { α } (metaM : MetaM α): EMainM α :=
   runCoreM metaM.run'
-def liftTermElabM { α } (termElabM: Elab.TermElabM α) : EMainM α :=
-  runCoreM $ termElabM.run' (ctx := defaultElabContext) |>.run'
+def liftTermElabM { α } (termElabM: Elab.TermElabM α) (levelNames : List Name := [])
+    : EMainM α := do
+  let scope := (← get).scope
+  let context := {
+    isNoncomputableSection := scope.isNoncomputable,
+  }
+  let state := {
+    levelNames := scope.levelNames ++ levelNames,
+  }
+  runCoreM $ termElabM.run' context state |>.run'
 
 section Frontend
 
@@ -227,7 +236,7 @@ def execute (command: Protocol.Command): MainM Json := do
     let state ← getMainState
     runCoreM' $ Environment.inspect args state.options
   env_add (args: Protocol.EnvAdd): EMainM Protocol.EnvAddResult := do
-    runCoreM' $ Environment.addDecl args.name args.levels args.type? args.value args.isTheorem
+    runCoreM' $ Environment.addDecl args.name (args.levels?.getD #[]) args.type? args.value args.isTheorem
   env_save (args: Protocol.EnvSaveLoad): EMainM Protocol.EnvSaveLoadResult := do
     let env ← MonadEnv.getEnv
     environmentPickle env args.path
@@ -238,7 +247,9 @@ def execute (command: Protocol.Command): MainM Json := do
     return {}
   expr_echo (args: Protocol.ExprEcho): EMainM Protocol.ExprEchoResult := do
     let state ← getMainState
-    runCoreM' $ exprEcho args.expr (expectedType? := args.type?) (levels := args.levels.getD #[]) (options := state.options)
+    let levelNames := (args.levels?.getD #[]).toList.map (·.toName)
+    liftExcept $ ← liftTermElabM (levelNames := levelNames) do
+      (exprEcho args.expr (expectedType? := args.type?) (options := state.options)).run
   options_set (args: Protocol.OptionsSet): EMainM Protocol.OptionsSetResult := do
     let state ← getMainState
     let options := state.options
@@ -260,14 +271,16 @@ def execute (command: Protocol.Command): MainM Json := do
   options_print (_: Protocol.OptionsPrint): EMainM Protocol.Options := do
     return (← getMainState).options
   goal_start (args: Protocol.GoalStart): EMainM Protocol.GoalStartResult := do
-    let expr?: Except _ GoalState ← liftTermElabM (match args.expr, args.copyFrom with
-      | .some expr, .none => goalStartExpr expr (args.levels.getD #[]) |>.run
+    let levelNames := (args.levels?.getD #[]).toList.map (·.toName)
+    let expr?: Except _ GoalState ← liftTermElabM (levelNames := levelNames) do
+      match args.expr, args.copyFrom with
+      | .some expr, .none => goalStartExpr expr |>.run
       | .none, .some copyFrom => do
         (match (← getEnv).find? <| copyFrom.toName with
         | .none => return .error <| errorIndex s!"Symbol not found: {copyFrom}"
         | .some cInfo => return .ok (← GoalState.create cInfo.type))
       | _, _ =>
-        return .error <| errorI "arguments" "Exactly one of {expr, copyFrom} must be supplied")
+        return .error <| errorI "arguments" "Exactly one of {expr, copyFrom} must be supplied"
     match expr? with
     | .error error => Protocol.throw error
     | .ok goalState =>
@@ -341,7 +354,8 @@ def execute (command: Protocol.Command): MainM Json := do
         | .none => Protocol.throw $ errorIndex s!"Invalid state index {branchId}"
         | .some branch => pure $ target.continue branch
       | .none, .some goals =>
-        pure $ goalResume target goals
+        let goals := goals.toList.map (λ n => { name := n.toName })
+        pure $ target.resume goals
       | _, _ => Protocol.throw $ errorI "arguments" "Exactly one of {branch, goals} must be supplied"
     match nextGoalState? with
     | .error error => Protocol.throw $ errorI "structure" error
