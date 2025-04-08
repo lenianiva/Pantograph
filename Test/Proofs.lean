@@ -328,7 +328,7 @@ def test_or_comm: TestM Unit := do
       addTest $ assertUnreachable $ msg
       return ()
     | .ok state => pure state
-  addTest $ LSpec.test "(resume)" (state2b.goals == [state2.goals.get! 0])
+  addTest $ LSpec.test "(resume)" (state2b.goals == [state2.goals[0]!])
   let state3_1 ← match ← state2b.tacticOn (goalId := 0) (tactic := "apply Or.inr") with
     | .success state => pure state
     | other => do

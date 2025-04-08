@@ -102,7 +102,7 @@ private def GoalState.restoreTacticM (state: GoalState) (goal: MVarId): Elab.Tac
 
 @[export pantograph_goal_state_focus]
 protected def GoalState.focus (state: GoalState) (goalId: Nat): Option GoalState := do
-  let goal ← state.savedState.tactic.goals.get? goalId
+  let goal ← state.savedState.tactic.goals[goalId]?
   return {
     state with
     savedState := {

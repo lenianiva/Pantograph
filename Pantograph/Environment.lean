@@ -26,7 +26,7 @@ def env_catalog (env: Environment): Array Name := env.constants.fold (init := #[
 def module_of_name (env: Environment) (name: Name): Option Name := do
   let moduleId ← env.getModuleIdxFor? name
   if h : moduleId.toNat < env.allImportedModuleNames.size then
-    return env.allImportedModuleNames.get moduleId.toNat h
+    return env.allImportedModuleNames[moduleId.toNat]
   else
     .none
 
@@ -75,7 +75,7 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): Protocol.
   let info? := env.find? name
   let .some info := info? | Protocol.throw $ Protocol.errorIndex s!"Symbol not found {args.name}"
   let module? := env.getModuleIdxFor? name >>=
-    (λ idx => env.allImportedModuleNames.get? idx.toNat)
+    (λ idx => env.allImportedModuleNames[idx.toNat]?)
   let value? := match args.value?, info with
     | .some true, _ => info.value?
     | .some false, _ => .none
