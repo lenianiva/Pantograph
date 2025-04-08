@@ -41,8 +41,6 @@ namespace Pantograph
 
 def runMetaM { α } (metaM: MetaM α): CoreM α :=
   metaM.run'
-def runTermElabM { α } (termElabM: Elab.TermElabM α): CoreM α :=
-  termElabM.run' (ctx := defaultElabContext) |>.run'
 
 def errorI (type desc: String): Protocol.InteractionError := { error := type, desc := desc }
 
@@ -99,21 +97,17 @@ def parseElabExpr (expr: String) (expectedType?: Option String := .none): Protoc
   | .ok expr => return (← instantiateMVars expr)
 
 @[export pantograph_expr_echo_m]
-def exprEcho (expr: String) (expectedType?: Option String := .none) (levels: Array String := #[])  (options: @&Protocol.Options := {}):
-    Protocol.FallibleT CoreM Protocol.ExprEchoResult := do
-  let e : Except Protocol.InteractionError _ ← runTermElabM $ Elab.Term.withLevelNames (levels.toList.map (·.toName)) do
-    let expr ← match ← parseElabExpr expr expectedType? |>.run with
-      | .error e => return Except.error e
-      | .ok expr => pure expr
-    try
-      let type ← unfoldAuxLemmas (← Meta.inferType expr)
-      return .ok $ .ok ({
-          type := (← serializeExpression options type),
-          expr := (← serializeExpression options expr),
-      }: Protocol.ExprEchoResult)
-    catch exception =>
-      return Except.error $ errorI "typing" (← exception.toMessageData.toString)
-  liftExcept e
+def exprEcho (expr: String) (expectedType?: Option String := .none) (options: @&Protocol.Options := {}):
+    Protocol.FallibleT Elab.TermElabM Protocol.ExprEchoResult := do
+  let expr ← parseElabExpr expr expectedType?
+  try
+    let type ← unfoldAuxLemmas (← Meta.inferType expr)
+    return {
+        type := (← serializeExpression options type),
+        expr := (← serializeExpression options expr),
+    }
+  catch exception =>
+    Protocol.throw $ errorI "typing" (← exception.toMessageData.toString)
 
 @[export pantograph_goal_start_expr_m]
 def goalStartExpr (expr: String) : Protocol.FallibleT Elab.TermElabM GoalState := do

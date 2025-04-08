@@ -247,7 +247,9 @@ def execute (command: Protocol.Command): MainM Json := do
     return {}
   expr_echo (args: Protocol.ExprEcho): EMainM Protocol.ExprEchoResult := do
     let state ← getMainState
-    runCoreM' $ exprEcho args.expr (expectedType? := args.type?) (levels := args.levels?.getD #[]) (options := state.options)
+    let levelNames := (args.levels?.getD #[]).toList.map (·.toName)
+    liftExcept $ ← liftTermElabM (levelNames := levelNames) do
+      (exprEcho args.expr (expectedType? := args.type?) (options := state.options)).run
   options_set (args: Protocol.OptionsSet): EMainM Protocol.OptionsSetResult := do
     let state ← getMainState
     let options := state.options
