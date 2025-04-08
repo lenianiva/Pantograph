@@ -26,7 +26,7 @@ def analyzeProjection (env: Environment) (e: Expr): Projection :=
     | _ => panic! "Argument must be proj"
   if (getStructureInfo? env typeName).isSome then
     let ctor := getStructureCtor env typeName
-    let fieldName := getStructureFields env typeName |>.get! idx
+    let fieldName := (getStructureFields env typeName)[idx]!
     let projector := getProjFnForField? env typeName fieldName |>.get!
     .field projector ctor.numParams
   else

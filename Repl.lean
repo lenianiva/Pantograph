@@ -62,7 +62,7 @@ def runCoreM { α } (coreM : CoreM α) : EMainM α := do
       let desc ← ex.toMessageData.toString
       return Except.error $ ({ error := "exception", desc } : Protocol.InteractionError)
   if let .some token := cancelTk? then
-    runCancelTokenWithTimeout token (timeout := .mk options.timeout)
+    runCancelTokenWithTimeout token (timeout := .ofBitVec options.timeout)
   let (result, state') ← match ← (coreM'.run coreCtx coreState).toIO' with
     | Except.error (Exception.error _ msg)   => Protocol.throw $ { error := "core", desc := ← msg.toString }
     | Except.error (Exception.internal id _) => Protocol.throw $ { error := "internal", desc := (← id.getName).toString }
@@ -290,7 +290,7 @@ def execute (command: Protocol.Command): MainM Json := do
     let state ← getMainState
     let .some goalState := state.goalStates[args.stateId]? |
       Protocol.throw $ errorIndex s!"Invalid state index {args.stateId}"
-    let .some goal := goalState.goals.get? args.goalId |
+    let .some goal := goalState.goals[args.goalId]? |
       Protocol.throw $ errorIndex s!"Invalid goal index {args.goalId}"
     let nextGoalState?: Except _ TacticResult ← liftTermElabM do
       -- NOTE: Should probably use a macro to handle this...
