@@ -1,120 +1,175 @@
-/-
-All serialisation functions
--/
-import Lean
+import Lean.Environment
+import Lean.Replay
+import Init.System.IOError
+import Std.Data.HashMap
+import Pantograph.Goal
 
-namespace Pantograph
+/-!
+Input/Output functions
+
+# Pickling and unpickling objects
+
+By abusing `saveModuleData` and `readModuleData` we can pickle and unpickle objects to disk.
+-/
+
 open Lean
 
+namespace Pantograph
 
-/-- Read a theorem from the environment -/
-def expr_from_const (env: Environment) (name: Name): Except String Lean.Expr :=
-  match env.find? name with
-  | none       => throw s!"Symbol not found: {name}"
-  | some cInfo => return cInfo.type
-def syntax_from_str (env: Environment) (s: String): Except String Syntax :=
-  Parser.runParserCategory
-    (env := env)
-    (catName := `term)
-    (input := s)
-    (fileName := "<stdin>")
+/--
+Save an object to disk.
+If you need to write multiple objects from within a single declaration,
+you will need to provide a unique `key` for each.
+-/
+def pickle {α : Type} (path : System.FilePath) (x : α) (key : Name := by exact decl_name%) : IO Unit :=
+  saveModuleData path key (unsafe unsafeCast x)
+
+/--
+Load an object from disk.
+Note: The returned `CompactedRegion` can be used to free the memory behind the value
+of type `α`, using `CompactedRegion.free` (which is only safe once all references to the `α` are
+released). Ignoring the `CompactedRegion` results in the data being leaked.
+Use `withUnpickle` to call `CompactedRegion.free` automatically.
+
+This function is unsafe because the data being loaded may not actually have type `α`, and this
+may cause crashes or other bad behavior.
+-/
+unsafe def unpickle (α : Type) (path : System.FilePath) : IO (α × CompactedRegion) := do
+  let (x, region) ← readModuleData path
+  pure (unsafeCast x, region)
+
+/-- Load an object from disk and run some continuation on it, freeing memory afterwards. -/
+unsafe def withUnpickle [Monad m] [MonadLiftT IO m] {α β : Type}
+    (path : System.FilePath) (f : α → m β) : m β := do
+  let (x, region) ← unpickle α path
+  let r ← f x
+  region.free
+  pure r
+
+/--
+Pickle an `Environment` to disk.
+
+We only store:
+* the list of imports
+* the new constants from `Environment.constants`
+and when unpickling, we build a fresh `Environment` from the imports,
+and then add the new constants.
+-/
+@[export pantograph_env_pickle_m]
+def environmentPickle (env : Environment) (path : System.FilePath) : IO Unit :=
+  Pantograph.pickle path (env.header.imports, env.constants.map₂)
+
+def resurrectEnvironment
+  (imports : Array Import)
+  (map₂ : PHashMap Name ConstantInfo)
+  : IO Environment := do
+  let env ← importModules imports {} 0
+  env.replay (Std.HashMap.ofList map₂.toList)
+/--
+Unpickle an `Environment` from disk.
+
+We construct a fresh `Environment` with the relevant imports,
+and then replace the new constants.
+-/
+@[export pantograph_env_unpickle_m]
+def environmentUnpickle (path : System.FilePath) : IO (Environment × CompactedRegion) := unsafe do
+  let ((imports, map₂), region) ← Pantograph.unpickle (Array Import × PHashMap Name ConstantInfo) path
+  return (← resurrectEnvironment imports map₂, region)
 
 
-def syntax_to_expr_type (syn: Syntax): Elab.TermElabM (Except String Expr) := do
-  try
-    let expr ← Elab.Term.elabType syn
-    -- Immediately synthesise all metavariables if we need to leave the elaboration context.
-    -- See https://leanprover.zulipchat.com/#narrow/stream/270676-lean4/topic/Unknown.20universe.20metavariable/near/360130070
-    --Elab.Term.synthesizeSyntheticMVarsNoPostponing
-    let expr ← instantiateMVars expr
-    return .ok expr
-  catch ex => return .error (← ex.toMessageData.toString)
-def syntax_to_expr (syn: Syntax): Elab.TermElabM (Except String Expr) := do
-  try
-    let expr ← Elab.Term.elabTerm (stx := syn) (expectedType? := .none)
-    -- Immediately synthesise all metavariables if we need to leave the elaboration context.
-    -- See https://leanprover.zulipchat.com/#narrow/stream/270676-lean4/topic/Unknown.20universe.20metavariable/near/360130070
-    --Elab.Term.synthesizeSyntheticMVarsNoPostponing
-    let expr ← instantiateMVars expr
-    return .ok expr
-  catch ex => return .error (← ex.toMessageData.toString)
+open Lean.Core in
+structure CompactCoreState where
+  -- env             : Environment
+  nextMacroScope  : MacroScope     := firstFrontendMacroScope + 1
+  ngen            : NameGenerator  := {}
+  -- traceState      : TraceState     := {}
+  -- cache           : Cache     := {}
+  -- messages        : MessageLog     := {}
+  -- infoState       : Elab.InfoState := {}
 
-structure BoundExpression where
-  binders: Array (String × String)
-  target: String
-  deriving ToJson
-def type_expr_to_bound (expr: Expr): MetaM BoundExpression := do
-  Meta.forallTelescope expr fun arr body => do
-    let binders ← arr.mapM fun fvar => do
-      return (toString (← fvar.fvarId!.getUserName), toString (← Meta.ppExpr (← fvar.fvarId!.getType)))
-    return { binders, target := toString (← Meta.ppExpr body) }
-
-
-structure Variable where
-  name: String
-  /-- Does the name contain a dagger -/
-  isInaccessible: Bool      := false
-  type: String
-  value?: Option String     := .none
-  deriving ToJson
-structure Goal where
-  /-- String case id -/
-  caseName?: Option String  := .none
-  /-- Is the goal in conversion mode -/
-  isConversion: Bool        := false
-  /-- target expression type -/
-  target: String
-  /-- Variables -/
-  vars: Array Variable      := #[]
-  deriving ToJson
-
-/-- Adapted from ppGoal -/
-def serialize_goal (mvarDecl: MetavarDecl) : MetaM Goal := do
-  -- Options for printing; See Meta.ppGoal for details
-  let showLetValues  := True
-  let ppAuxDecls     := false
-  let ppImplDetailHyps := false
-  let lctx           := mvarDecl.lctx
-  let lctx           := lctx.sanitizeNames.run' { options := (← getOptions) }
-  Meta.withLCtx lctx mvarDecl.localInstances do
-    let rec ppVars (localDecl : LocalDecl) : MetaM Variable := do
-      match localDecl with
-      | .cdecl _ _ varName type _ _ =>
-        let varName := varName.simpMacroScopes
-        let type ← instantiateMVars type
-        return {
-          name := toString varName,
-          isInaccessible := varName.isInaccessibleUserName,
-          type := toString <| ← Meta.ppExpr type
+@[export pantograph_goal_state_pickle_m]
+def goalStatePickle (goalState : GoalState) (path : System.FilePath) : IO Unit :=
+  let {
+    savedState := {
+      term := {
+        meta := {
+          core := {
+            env, nextMacroScope, ngen, ..
+          },
+          meta,
         }
-      | .ldecl _ _ varName type val _ _ => do
-        let varName := varName.simpMacroScopes
-        let type ← instantiateMVars type
-        let value? ← if showLetValues then
-          let val ← instantiateMVars val
-          pure $ .some <| toString <| (← Meta.ppExpr val)
-        else
-          pure $ .none
-        return {
-          name := toString varName,
-          isInaccessible := varName.isInaccessibleUserName,
-          type := toString <| ← Meta.ppExpr type
-          value? := value?
-        }
-    let vars ← lctx.foldlM (init := []) fun acc (localDecl : LocalDecl) => do
-       let skip := !ppAuxDecls && localDecl.isAuxDecl || !ppImplDetailHyps && localDecl.isImplementationDetail
-       if skip then
-         return acc
-       else
-         let var ← ppVars localDecl
-         return var::acc
-    return {
-      caseName? := match mvarDecl.userName with
-        | Name.anonymous => .none
-        | name => .some <| toString name,
-      isConversion := "| " == (Meta.getGoalPrefix mvarDecl)
-      target := toString <| (← Meta.ppExpr (← instantiateMVars mvarDecl.type)),
-      vars := vars.reverse.toArray
+        «elab»,
+      },
+      tactic
     }
+    root,
+    parentMVar?,
+    convMVar?,
+    calcPrevRhs?,
+  } := goalState
+  Pantograph.pickle path (
+    env.constants.map₂,
+
+    ({ nextMacroScope, ngen } : CompactCoreState),
+    meta,
+    «elab»,
+    tactic,
+
+    root,
+    parentMVar?,
+    convMVar?,
+    calcPrevRhs?,
+  )
+
+@[export pantograph_goal_state_unpickle_m]
+def goalStateUnpickle (path : System.FilePath) (env : Environment)
+    : IO (GoalState × CompactedRegion) := unsafe do
+  let ((
+    map₂,
+
+    compactCore,
+    meta,
+    «elab»,
+    tactic,
+
+    root,
+    parentMVar?,
+    convMVar?,
+    calcPrevRhs?,
+  ), region) ← Pantograph.unpickle (
+    PHashMap Name ConstantInfo ×
+
+    CompactCoreState ×
+    Meta.State ×
+    Elab.Term.State ×
+    Elab.Tactic.State ×
+
+    MVarId ×
+    Option MVarId ×
+    Option (MVarId × MVarId × List MVarId) ×
+    Option (MVarId × Expr)
+  ) path
+  let env ← env.replay (Std.HashMap.ofList map₂.toList)
+  let goalState := {
+    savedState := {
+      term := {
+        meta := {
+          core := {
+            compactCore with
+            passedHeartbeats := 0,
+            env,
+          },
+          meta,
+        },
+        «elab»,
+      },
+      tactic,
+    },
+    root,
+    parentMVar?,
+    convMVar?,
+    calcPrevRhs?,
+  }
+  return (goalState, region)
 
 end Pantograph
