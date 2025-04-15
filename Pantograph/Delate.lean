@@ -164,7 +164,7 @@ partial def instantiateDelayedMVars (expr : Expr) : MetaM Expr :=
   self e := instantiateDelayedMVars e
 
 /--
-Convert an expression to an equiavlent form with
+Convert an expression to an equivalent form with
 1. No nested delayed assigned mvars
 2. No aux lemmas or matchers
 3. No assigned mvars
