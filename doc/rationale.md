@@ -47,11 +47,11 @@ include:
 
 - If a tactic loses track of metavariables, it will not be caught until the end
   of the proof search. This is a bug in the tactic itself.
-- Timeouts for executing tactics is not available. Maybe this will change in the
-  future.
+- Although a timeout feature exists in Pantograph, it relies on the coöperative
+  multitasking from the tactic implementation. There is nothing preventing a
+  buggy tactic from stalling Lean if it does not check for cancellation often.
 - Interceptions of parsing errors generally cannot be turned into goals (e.g.
   `def mystery : Nat := :=`) due to Lean's parsing system.
-
 
 ## References
 
