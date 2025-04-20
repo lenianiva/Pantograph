@@ -8,6 +8,12 @@ import Repl
 open Pantograph.Repl
 open Pantograph.Protocol
 
+/-- Print a string to stdout without buffering -/
+def printImmediate (s : String) : IO Unit := do
+  let stdout ← IO.getStdout
+  stdout.putStr (s ++ "\n")
+  stdout.flush
+
 /-- Parse a command either in `{ "cmd": ..., "payload": ... }` form or `cmd { ... }` form. -/
 def parseCommand (s: String): Except String Command := do
   match s.trim.get? 0 with
@@ -34,27 +40,27 @@ partial def loop : MainM Unit := do repeat do
   | .error error =>
     let error  := Lean.toJson ({ error := "command", desc := error }: InteractionError)
     -- Using `Lean.Json.compress` here to prevent newline
-    IO.println error.compress
+    printImmediate error.compress
   | .ok command =>
     try
       let ret ← execute command
       let str := match state.options.printJsonPretty with
         | true => ret.pretty
         | false => ret.compress
-      IO.println str
+      printImmediate str
     catch e =>
       let message := e.toString
       let error  := Lean.toJson ({ error := "main", desc := message }: InteractionError)
-      IO.println error.compress
+      printImmediate error.compress
 
-
-unsafe def main (args: List String): IO Unit := do
+def main (args: List String): IO Unit := do
   -- NOTE: A more sophisticated scheme of command line argument handling is needed.
   if args == ["--version"] then do
     IO.println s!"{Pantograph.version}"
     return
 
-  Pantograph.initSearch ""
+  unsafe do
+    Pantograph.initSearch ""
 
   -- Separate imports and options
   let (options, imports) := args.partition (·.startsWith "--")
@@ -62,7 +68,7 @@ unsafe def main (args: List String): IO Unit := do
   let coreState ← Pantograph.createCoreState imports.toArray
   try
     let mainM := loop.run { coreContext } |>.run' { env := coreState.env }
-    IO.println "ready."
+    printImmediate "ready."
     mainM
   catch ex =>
     let message := ex.toString
