@@ -338,11 +338,14 @@ def execute (command: Protocol.Command): MainM Json := do
           pure result
         | false, _ => pure nextGoalState
       let nextStateId ← newGoalState nextGoalState
+      let parentExpr := nextGoalState.parentExpr?.get!
       let goals ← runCoreM $ nextGoalState.serializeGoals (parent := .some goalState) (options := state.options) |>.run'
       return {
         nextStateId? := .some nextStateId,
         goals? := .some goals,
         messages? := .some messages,
+        hasSorry := parentExpr.hasSorry,
+        hasUnsafe := (← getEnv).hasUnsafe parentExpr,
       }
     | .ok (.parseError message) =>
       return { messages? := .none, parseError? := .some message }

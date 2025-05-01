@@ -140,8 +140,7 @@ protected def GoalState.resume (state: GoalState) (goals: List MVarId): Except S
   -- Set goals to the goals that have not been assigned yet, similar to the `focus` tactic.
   let unassigned := goals.filter λ goal =>
     let isSolved := state.mctx.eAssignment.contains goal || state.mctx.dAssignment.contains goal
-    let isDuplicate := state.goals.contains goal
-    (¬ isDuplicate) && (¬ isSolved)
+    ¬ isSolved
   return {
     state with
     savedState := {
@@ -162,18 +161,18 @@ protected def GoalState.continue (target: GoalState) (branch: GoalState): Except
     target.resume (goals := branch.goals)
 
 @[export pantograph_goal_state_root_expr]
-protected def GoalState.rootExpr? (goalState: GoalState): Option Expr := do
+protected def GoalState.rootExpr? (goalState : GoalState): Option Expr := do
   if goalState.root.name == .anonymous then
     .none
   let expr ← goalState.mctx.eAssignment.find? goalState.root
   let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
-  if expr.hasExprMVar then
-    -- Must not assert that the goal state is empty here. We could be in a branch goal.
-    --assert! ¬goalState.goals.isEmpty
-    .none
-  else
-    assert! goalState.goals.isEmpty
-    return expr
+  return expr
+@[export pantograph_goal_state_is_solved]
+protected def GoalState.isSolved (goalState : GoalState) : Bool :=
+  let solvedRoot := match goalState.rootExpr? with
+    | .some e => ¬ e.hasExprMVar
+    | .none => true
+  goalState.goals.isEmpty && solvedRoot
 @[export pantograph_goal_state_parent_expr]
 protected def GoalState.parentExpr? (goalState: GoalState): Option Expr := do
   let parent ← goalState.parentMVar?

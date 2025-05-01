@@ -84,12 +84,17 @@ def test_tactic : Test :=
     step "goal.tactic" ({ stateId := 0, tactic? := .some "intro x" }: Protocol.GoalTactic)
      ({ nextStateId? := .some 1, goals? := #[goal1], }: Protocol.GoalTacticResult),
     step "goal.print" ({ stateId := 1, parentExpr? := .some true, rootExpr? := .some true }: Protocol.GoalPrint)
-     ({ parent? := .some { pp? := .some "fun x => ?m.11" }, }: Protocol.GoalPrintResult),
+     ({
+       root? := .some { pp? := "fun x => ?m.11"},
+       parent? := .some { pp? := .some "fun x => ?m.11" },
+     }: Protocol.GoalPrintResult),
     step "goal.tactic" ({ stateId := 1, tactic? := .some "intro y" }: Protocol.GoalTactic)
      ({ nextStateId? := .some 2, goals? := #[goal2], }: Protocol.GoalTacticResult),
     step "goal.tactic" ({ stateId := 1, tactic? := .some "apply Nat.le_of_succ_le" }: Protocol.GoalTactic)
      ({ messages? := .some #["tactic 'apply' failed, failed to unify\n  ∀ {m : Nat}, Nat.succ ?n ≤ m → ?n ≤ m\nwith\n  ∀ (q : Prop), x ∨ q → q ∨ x\nx : Prop\n⊢ ∀ (q : Prop), x ∨ q → q ∨ x"] }:
-      Protocol.GoalTacticResult)
+      Protocol.GoalTacticResult),
+    step "goal.tactic" ({ stateId := 0, tactic? := .some "sorry" }: Protocol.GoalTactic)
+     ({ nextStateId? := .some 3, goals? := .some #[], hasSorry := true }: Protocol.GoalTacticResult),
   ]
 example : (1 : Nat) + (2 * 3) = 1 + (4 - 3) + (6 - 4) + 3 := by
   simp
