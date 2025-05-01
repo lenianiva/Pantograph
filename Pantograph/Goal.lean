@@ -113,11 +113,14 @@ protected def GoalState.focus (state: GoalState) (goalId: Nat): Option GoalState
   }
 
 /-- Immediately bring all parent goals back into scope. Used in automatic mode -/
-@[export pantograph_goal_state_immediate_resume_parent]
+@[export pantograph_goal_state_immediate_resume]
 protected def GoalState.immediateResume (state: GoalState) (parent: GoalState): GoalState :=
   -- Prune parents solved goals
   let mctx := state.mctx
-  let parentGoals := parent.goals.filter $ λ goal => mctx.eAssignment.contains goal
+  let parentGoals := parent.goals.filter λ goal =>
+    let isDuplicate := state.goals.contains goal
+    let isSolved := mctx.eAssignment.contains goal || mctx.dAssignment.contains goal
+    (¬ isDuplicate) && (¬ isSolved)
   {
     state with
     savedState := {
@@ -127,25 +130,25 @@ protected def GoalState.immediateResume (state: GoalState) (parent: GoalState): 
   }
 
 /--
-Brings into scope a list of goals
+Brings into scope a list of goals. User must ensure `goals` is distinct.
 -/
 @[export pantograph_goal_state_resume]
-protected def GoalState.resume (state: GoalState) (goals: List MVarId): Except String GoalState :=
+protected def GoalState.resume (state: GoalState) (goals: List MVarId): Except String GoalState := do
   if ¬ (goals.all (λ goal => state.mvars.contains goal)) then
     let invalid_goals := goals.filter (λ goal => ¬ state.mvars.contains goal) |>.map (·.name.toString)
     .error s!"Goals {invalid_goals} are not in scope"
-  else
-    -- Set goals to the goals that have not been assigned yet, similar to the `focus` tactic.
-    let unassigned := goals.filter (λ goal =>
-      let mctx := state.mctx
-      ¬(mctx.eAssignment.contains goal || mctx.dAssignment.contains goal))
-    .ok {
-      state with
-      savedState := {
-        term := state.savedState.term,
-        tactic := { goals := unassigned },
-      },
-    }
+  -- Set goals to the goals that have not been assigned yet, similar to the `focus` tactic.
+  let unassigned := goals.filter λ goal =>
+    let isSolved := state.mctx.eAssignment.contains goal || state.mctx.dAssignment.contains goal
+    let isDuplicate := state.goals.contains goal
+    (¬ isDuplicate) && (¬ isSolved)
+  return {
+    state with
+    savedState := {
+      term := state.savedState.term,
+      tactic := { goals := unassigned },
+    },
+  }
 /--
 Brings into scope all goals from `branch`
 -/

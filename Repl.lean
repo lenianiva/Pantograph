@@ -87,6 +87,7 @@ def liftTermElabM { α } (termElabM: Elab.TermElabM α) (levelNames : List Name 
     : EMainM α := do
   let scope := (← get).scope
   let context := {
+    errToSorry := false,
     isNoncomputableSection := scope.isNoncomputable,
   }
   let state := {
@@ -327,9 +328,7 @@ def execute (command: Protocol.Command): MainM Json := do
     | .ok (.success nextGoalState messages) => do
       let nextGoalState ← match state.options.automaticMode, args.conv? with
         | true, .none => do
-          let .ok result := nextGoalState.resume (nextGoalState.goals ++ goalState.goals) |
-            Protocol.throw $ errorIO "Resuming known goals"
-          pure result
+          pure $ nextGoalState.immediateResume goalState
         | true, .some true => pure nextGoalState
         | true, .some false => do
           let .some (_, _, dormantGoals) := goalState.convMVar? |
