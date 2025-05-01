@@ -123,8 +123,9 @@ def goalPrint (state: GoalState) (rootExpr: Bool) (parentExpr: Bool) (goals: Boo
   : CoreM Protocol.GoalPrintResult := runMetaM do
   state.restoreMetaM
 
+  let rootExpr? := state.rootExpr?
   let root? ← if rootExpr then
-      state.rootExpr?.mapM λ expr => state.withRootContext do
+      rootExpr?.mapM λ expr => state.withRootContext do
         serializeExpression options (← instantiateAll expr)
     else
       pure .none
@@ -143,11 +144,15 @@ def goalPrint (state: GoalState) (rootExpr: Bool) (parentExpr: Bool) (goals: Boo
     state.withContext mvarId do
       let .some expr ← getExprMVarAssignment? mvarId | return {}
       serializeExpression options (← instantiateAll expr)
+  let env ← getEnv
   return {
     root?,
     parent?,
     goals,
     extraMVars,
+    rootHasSorry := rootExpr?.map (·.hasSorry) |>.getD false,
+    rootHasUnsafe := rootExpr?.map (env.hasUnsafe ·) |>.getD false,
+    rootHasMVar := rootExpr?.map (·.hasExprMVar) |>.getD false,
   }
 
 @[export pantograph_goal_have_m]

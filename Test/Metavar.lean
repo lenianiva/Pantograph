@@ -85,14 +85,14 @@ def test_m_couple: TestM Unit := do
       return ()
   addTest $ LSpec.check "apply Nat.le_trans" ((← state1.serializeGoals (options := ← read)).map (·.target.pp?) =
     #[.some "2 ≤ ?m", .some "?m ≤ 5", .some "Nat"])
-  addTest $ LSpec.test "(1 root)" state1.rootExpr?.isNone
+  checkTrue "(1 root)" $ ¬ state1.isSolved
   -- Set m to 3
   let state2 ← match ← state1.tacticOn (goalId := 2) (tactic := "exact 3") with
     | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.test "(1b root)" state2.rootExpr?.isNone
+  checkTrue "(1b root)" $ ¬ state2.isSolved
   let state1b ← match state2.continue state1 with
     | .error msg => do
       addTest $ assertUnreachable $ msg
@@ -100,7 +100,7 @@ def test_m_couple: TestM Unit := do
     | .ok state => pure state
   addTest $ LSpec.check "exact 3" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
     #[.some "2 ≤ 3", .some "3 ≤ 5"])
-  addTest $ LSpec.test "(2 root)" state1b.rootExpr?.isNone
+  checkTrue "(2 root)" $ ¬ state1b.isSolved
 
 def test_m_couple_simp: TestM Unit := do
   let state? ← startProof "(2: Nat) ≤ 5"
@@ -126,7 +126,7 @@ def test_m_couple_simp: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.test "(1b root)" state2.rootExpr?.isNone
+  checkTrue "(1b root)" $ ¬ state2.isSolved
   let state1b ← match state2.continue state1 with
     | .error msg => do
       addTest $ assertUnreachable $ msg
@@ -134,7 +134,7 @@ def test_m_couple_simp: TestM Unit := do
     | .ok state => pure state
   addTest $ LSpec.check "exact 2" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
     #[.some "2 ≤ 2", .some "2 ≤ 5"])
-  addTest $ LSpec.test "(2 root)" state1b.rootExpr?.isNone
+  checkTrue "(2 root)" $ ¬ state1b.isSolved
   let state3 ← match ← state1b.tacticOn (goalId := 0) (tactic := "simp") with
     | .success state _ => pure state
     | other => do
@@ -184,7 +184,7 @@ def test_proposition_generation: TestM Unit := do
       ])
   if let #[goal1, goal2] := ← state1.serializeGoals (options := { (← read) with printExprAST := true }) then
     addTest $ LSpec.test "(1 reference)" (goal1.target.sexp? = .some s!"(:mv {goal2.name})")
-  addTest $ LSpec.test "(1 root)" state1.rootExpr?.isNone
+  checkTrue "(1 root)" $ ¬ state1.isSolved
 
   let state2 ← match ← state1.tryAssign (state1.get! 0) (expr := "λ (x: Nat) => _") with
     | .success state _ => pure state
@@ -193,7 +193,7 @@ def test_proposition_generation: TestM Unit := do
       return ()
   addTest $ LSpec.check ":= λ (x: Nat), _" ((← state2.serializeGoals (options := ← read)).map (·.target.pp?) =
     #[.some "?m.30 x"])
-  addTest $ LSpec.test "(2 root)" state2.rootExpr?.isNone
+  checkTrue "(2 root)" $ ¬ state2.isSolved
 
   let assign := "Eq.refl x"
   let state3 ← match ← state2.tryAssign (state2.get! 0) (expr := assign) with
@@ -204,7 +204,7 @@ def test_proposition_generation: TestM Unit := do
   addTest $ LSpec.check s!":= {assign}" ((← state3.serializeGoals (options := ← read)).map (·.target.pp?) =
     #[])
 
-  addTest $ LSpec.test "(3 root)" state3.rootExpr?.isSome
+  checkTrue "(3 root)" state3.isSolved
   return ()
 
 def test_partial_continuation: TestM Unit := do
@@ -240,7 +240,7 @@ def test_partial_continuation: TestM Unit := do
     | .ok state => pure state
   addTest $ LSpec.check "(continue)" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
     #[.some "2 ≤ Nat.succ ?m", .some "Nat.succ ?m ≤ 5", .some "Nat"])
-  addTest $ LSpec.test "(2 root)" state1b.rootExpr?.isNone
+  checkTrue "(2 root)" state1b.rootExpr?.get!.hasExprMVar
 
   -- Roundtrip
   --let coupled_goals := coupled_goals.map (λ g =>
@@ -254,7 +254,7 @@ def test_partial_continuation: TestM Unit := do
     | .ok state => pure state
   addTest $ LSpec.check "(continue)" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
     #[.some "2 ≤ Nat.succ ?m", .some "Nat.succ ?m ≤ 5", .some "Nat"])
-  addTest $ LSpec.test "(2 root)" state1b.rootExpr?.isNone
+  checkTrue "(2 root)" state1b.rootExpr?.get!.hasExprMVar
 
   -- Continuation should fail if the state does not exist:
   match state0.resume coupled_goals with

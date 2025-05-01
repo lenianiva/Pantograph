@@ -192,14 +192,14 @@ def test_arith: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check tactic (state1.goals.length = 1)
-  addTest $ LSpec.test "(1 root)" state1.rootExpr?.isNone
+  checkTrue "(1 root)" state1.rootExpr?.get!.hasExprMVar
   let state2 ← match ← state1.tacticOn (goalId := 0) (tactic := "simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm, Nat.mul_comm, Nat.mul_assoc, Nat.mul_left_comm] at *") with
     | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "simp ..." (state2.goals.length = 1)
-  addTest $ LSpec.check "(2 root)" state2.rootExpr?.isNone
+  checkTrue "(2 root)" state2.rootExpr?.get!.hasExprMVar
   let tactic := "assumption"
   let state3 ← match ← state2.tacticOn (goalId := 0) (tactic := tactic) with
     | .success state _ => pure state
@@ -207,7 +207,7 @@ def test_arith: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.test tactic state3.goals.isEmpty
-  addTest $ LSpec.check "(3 root)" state3.rootExpr?.isSome
+  checkTrue "(3 root)" $ ¬ state3.rootExpr?.get!.hasExprMVar
   return ()
 
 -- Two ways to write the same theorem
@@ -257,8 +257,8 @@ def test_or_comm: TestM Unit := do
         { name := fvH, userName := "h", type? := .some { pp? := .some "p ∨ q" } }
       ]
     }])
-  addTest $ LSpec.check "(1 parent)" state1.parentExpr?.isSome
-  addTest $ LSpec.check "(1 root)" state1.rootExpr?.isNone
+  checkTrue "(1 parent)" state1.parentExpr?.isSome
+  checkTrue "(1 root)" $ ¬ state1.isSolved
 
   let state1parent ← state1.withParentContext do
     serializeExpressionSexp (← instantiateAll state1.parentExpr?.get!)
@@ -276,8 +276,8 @@ def test_or_comm: TestM Unit := do
   let (caseL, caseR) := (state2g0.name.toString, state2g1.name.toString)
   addTest $ LSpec.check tactic ((← state2.serializeGoals (options := ← read)).map (·.name) =
     #[caseL, caseR])
-  addTest $ LSpec.check "(2 parent exists)" state2.parentExpr?.isSome
-  addTest $ LSpec.check "(2 root)" state2.rootExpr?.isNone
+  checkTrue "(2 parent exists)" state2.parentExpr?.isSome
+  checkTrue "(2 root)" $ ¬ state2.isSolved
 
   let state2parent ← state2.withParentContext do
     serializeExpressionSexp (← instantiateAll state2.parentExpr?.get!)
@@ -308,7 +308,7 @@ def test_or_comm: TestM Unit := do
   addTest $ LSpec.check "  assumption" state4_1.goals.isEmpty
   let state4_1parent ← instantiateAll state4_1.parentExpr?.get!
   addTest $ LSpec.test "(4_1 parent)" state4_1parent.isFVar
-  addTest $ LSpec.check "(4_1 root)" state4_1.rootExpr?.isNone
+  checkTrue "(4_1 root)" $ ¬ state4_1.isSolved
   let state3_2 ← match ← state2.tacticOn (goalId := 1) (tactic := "apply Or.inl") with
     | .success state _ => pure state
     | other => do
@@ -321,7 +321,7 @@ def test_or_comm: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "  assumption" state4_2.goals.isEmpty
-  addTest $ LSpec.check "(4_2 root)" state4_2.rootExpr?.isNone
+  checkTrue "(4_2 root)" $ ¬ state4_2.isSolved
   -- Ensure the proof can continue from `state4_2`.
   let state2b ← match state4_2.continue state2 with
     | .error msg => do
@@ -341,7 +341,7 @@ def test_or_comm: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "  assumption" state4_1.goals.isEmpty
-  addTest $ LSpec.check "(4_1 root)" state4_1.rootExpr?.isSome
+  checkTrue "(4_1 root)" $ ¬ state4_1.rootExpr?.get!.hasExprMVar
 
   return ()
   where

@@ -276,6 +276,9 @@ structure GoalTacticResult where
 
   -- Existence of this field shows the tactic parsing has failed
   parseError? : Option String       := .none
+
+  hasSorry : Bool := false
+  hasUnsafe : Bool := false
   deriving Lean.ToJson
 structure GoalContinue where
   -- State from which the continuation acquires the context
@@ -319,6 +322,10 @@ structure GoalPrintResult where
   parent?: Option Expression := .none
   goals: Array Goal := #[]
   extraMVars: Array Expression := #[]
+
+  rootHasSorry : Bool := false
+  rootHasUnsafe : Bool := false
+  rootHasMVar : Bool := true
   deriving Lean.ToJson
 
 -- Diagnostic Options, not available in REPL
