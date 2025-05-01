@@ -118,6 +118,7 @@ partial def translateLCtx : MetaTranslateM LocalContext := do
 
 partial def translateMVarId (srcMVarId: MVarId) : MetaTranslateM MVarId := do
   if let .some mvarId' := (← get).mvarMap[srcMVarId]? then
+    trace[Pantograph.Frontend.MetaTranslate] "Existing mvar id {srcMVarId.name} → {mvarId'.name}"
     return mvarId'
   let mvarId' ← Meta.withLCtx .empty #[] do
     let srcDecl := (← getSourceMCtx).findDecl? srcMVarId |>.get!
@@ -134,6 +135,7 @@ partial def translateMVarId (srcMVarId: MVarId) : MetaTranslateM MVarId := do
           let fvars' ← mvarIdPending'.withContext $ fvars.mapM translateExpr
           assignDelayedMVar mvarId' fvars' mvarIdPending'
         pure mvarId'
+  trace[Pantograph.Frontend.MetaTranslate] "Translated {srcMVarId.name} → {mvarId'.name}"
   addTranslatedMVar srcMVarId mvarId'
   return mvarId'
 end
@@ -148,6 +150,7 @@ def translateMVarFromTermInfo (termInfo : Elab.TermInfo) (context? : Option Elab
     let lctx' ← translateLCtx
     let mvar ← Meta.withLCtx lctx' #[] do
       let type' ← translateExpr type
+      trace[Pantograph.Frontend.MetaTranslate] "Translating from term info {← Meta.ppExpr type'}"
       Meta.mkFreshExprSyntheticOpaqueMVar type'
     return mvar.mvarId!
 

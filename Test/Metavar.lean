@@ -79,7 +79,7 @@ def test_m_couple: TestM Unit := do
       return ()
 
   let state1 ← match ← state0.tacticOn (goalId := 0) (tactic := "apply Nat.le_trans") with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -88,7 +88,7 @@ def test_m_couple: TestM Unit := do
   addTest $ LSpec.test "(1 root)" state1.rootExpr?.isNone
   -- Set m to 3
   let state2 ← match ← state1.tacticOn (goalId := 2) (tactic := "exact 3") with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -111,7 +111,7 @@ def test_m_couple_simp: TestM Unit := do
       return ()
 
   let state1 ← match ← state0.tacticOn (goalId := 0) (tactic := "apply Nat.le_trans") with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -122,7 +122,7 @@ def test_m_couple_simp: TestM Unit := do
     #[#["_uniq.38"], #["_uniq.38"], #[]])
 
   let state2 ← match ← state1.tacticOn (goalId := 2) (tactic := "exact 2") with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -136,7 +136,7 @@ def test_m_couple_simp: TestM Unit := do
     #[.some "2 ≤ 2", .some "2 ≤ 5"])
   addTest $ LSpec.test "(2 root)" state1b.rootExpr?.isNone
   let state3 ← match ← state1b.tacticOn (goalId := 0) (tactic := "simp") with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -146,7 +146,7 @@ def test_m_couple_simp: TestM Unit := do
       return ()
     | .ok state => pure state
   let state5 ← match ← state4.tacticOn (goalId := 0) (tactic := "simp") with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -173,7 +173,7 @@ def test_proposition_generation: TestM Unit := do
       return ()
 
   let state1 ← match ← state0.tacticOn (goalId := 0) (tactic := "apply PSigma.mk") with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -187,7 +187,7 @@ def test_proposition_generation: TestM Unit := do
   addTest $ LSpec.test "(1 root)" state1.rootExpr?.isNone
 
   let state2 ← match ← state1.tryAssign (state1.get! 0) (expr := "λ (x: Nat) => _") with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -197,7 +197,7 @@ def test_proposition_generation: TestM Unit := do
 
   let assign := "Eq.refl x"
   let state3 ← match ← state2.tryAssign (state2.get! 0) (expr := assign) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -216,7 +216,7 @@ def test_partial_continuation: TestM Unit := do
       return ()
 
   let state1 ← match ← state0.tacticOn (goalId := 0) (tactic := "apply Nat.le_trans") with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -224,7 +224,7 @@ def test_partial_continuation: TestM Unit := do
     #[.some "2 ≤ ?m", .some "?m ≤ 5", .some "Nat"])
 
   let state2 ← match ← state1.tacticOn (goalId := 2) (tactic := "apply Nat.succ") with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()

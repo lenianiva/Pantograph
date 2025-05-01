@@ -88,7 +88,7 @@ def test_tactic : Test :=
     step "goal.tactic" ({ stateId := 1, tactic? := .some "intro y" }: Protocol.GoalTactic)
      ({ nextStateId? := .some 2, goals? := #[goal2], }: Protocol.GoalTacticResult),
     step "goal.tactic" ({ stateId := 1, tactic? := .some "apply Nat.le_of_succ_le" }: Protocol.GoalTactic)
-     ({ tacticErrors? := .some #["tactic 'apply' failed, failed to unify\n  ∀ {m : Nat}, Nat.succ ?n ≤ m → ?n ≤ m\nwith\n  ∀ (q : Prop), x ∨ q → q ∨ x\nx : Prop\n⊢ ∀ (q : Prop), x ∨ q → q ∨ x"] }:
+     ({ messages? := .some #["tactic 'apply' failed, failed to unify\n  ∀ {m : Nat}, Nat.succ ?n ≤ m → ?n ≤ m\nwith\n  ∀ (q : Prop), x ∨ q → q ∨ x\nx : Prop\n⊢ ∀ (q : Prop), x ∨ q → q ∨ x"] }:
       Protocol.GoalTacticResult)
   ]
 example : (1 : Nat) + (2 * 3) = 1 + (4 - 3) + (6 - 4) + 3 := by
@@ -302,6 +302,34 @@ def test_import_open : Test :=
      ({ stateId := 3, root := "_uniq.5" }: Protocol.GoalStartResult),
   ]
 
+/-- Ensure there cannot be circular references -/
+def test_frontend_process_circular : Test :=
+  let withSorry := "theorem mystery : 1 + 2 = 2 + 3 := sorry"
+  [
+    let goal1: Protocol.Goal := {
+      name := "_uniq.2",
+      target := { pp? := .some "1 + 2 = 2 + 3" },
+      vars := #[],
+    }
+    step "frontend.process"
+      ({
+        file? := .some withSorry,
+        sorrys := true,
+      }: Protocol.FrontendProcess)
+     ({
+       units := [{
+         boundary := (0, withSorry.utf8ByteSize),
+         goalStateId? := .some 0,
+         goals? := .some #[goal1],
+         goalSrcBoundaries? := .some #[(35, 40)],
+         messages := #["<anonymous>:1:8: warning: declaration uses 'sorry'\n"],
+       }],
+     }: Protocol.FrontendProcessResult),
+    step "goal.tactic" ({ stateId := 0, tactic? := .some "exact?" }: Protocol.GoalTactic)
+     ({ messages? := .some #["`exact?` could not close the goal. Try `apply?` to see partial suggestions."] }
+     : Protocol.GoalTacticResult),
+  ]
+
 def runTest (env: Lean.Environment) (steps: Test): IO LSpec.TestSeq := do
   -- Setup the environment for execution
   let coreContext ← createCoreContext #[]
@@ -322,6 +350,7 @@ def suite (env : Lean.Environment): List (String × IO LSpec.TestSeq) :=
     ("frontend.process invocation", test_frontend_process),
     ("frontend.process sorry", test_frontend_process_sorry),
     ("frontend.process import", test_import_open),
+    ("frontend.process circular", test_frontend_process_circular),
   ]
   tests.map (fun (name, test) => (name, runTest env test))
 
