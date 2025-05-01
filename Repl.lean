@@ -5,6 +5,8 @@ namespace Pantograph.Repl
 
 open Lean
 
+set_option trace.Pantograph.Frontend.MetaTranslate true
+
 structure Context where
   coreContext : Core.Context
 
@@ -61,6 +63,10 @@ def runCoreM { α } (coreM : CoreM α) : EMainM α := do
     catch ex =>
       let desc ← ex.toMessageData.toString
       return Except.error $ ({ error := "exception", desc } : Protocol.InteractionError)
+    finally
+      for {msg, ..} in (← getTraceState).traces do
+        IO.eprintln (← msg.format.toIO)
+      resetTraceState
   if let .some token := cancelTk? then
     runCancelTokenWithTimeout token (timeout := .ofBitVec options.timeout)
   let (result, state') ← match ← (coreM'.run coreCtx coreState).toIO' with
@@ -148,7 +154,7 @@ def frontend_process_inner (args: Protocol.FrontendProcess): EMainM Protocol.Fro
         .some $ step.newConstants.toArray.map λ name => name.toString
       else
         .none
-    let (goalStateId?, goals?, goalSrcBoundaries?) ← if step.sorrys.isEmpty then do
+    let (goalStateId?, goals?, goalSrcBoundaries?) ← if step.sorrys.isEmpty then
         pure (.none, .none, .none)
       else do
         let ({ state, srcBoundaries }, goals) ← liftMetaM do
@@ -318,7 +324,7 @@ def execute (command: Protocol.Command): MainM Json := do
         pure $ .error error
     match nextGoalState? with
     | .error error => Protocol.throw error
-    | .ok (.success nextGoalState) => do
+    | .ok (.success nextGoalState messages) => do
       let nextGoalState ← match state.options.automaticMode, args.conv? with
         | true, .none => do
           let .ok result := nextGoalState.resume (nextGoalState.goals ++ goalState.goals) |
@@ -337,13 +343,14 @@ def execute (command: Protocol.Command): MainM Json := do
       return {
         nextStateId? := .some nextStateId,
         goals? := .some goals,
+        messages? := .some messages,
       }
     | .ok (.parseError message) =>
-      return { parseError? := .some message }
+      return { messages? := .none, parseError? := .some message }
     | .ok (.invalidAction message) =>
       Protocol.throw $ errorI "invalid" message
     | .ok (.failure messages) =>
-      return { tacticErrors? := .some messages }
+      return { messages? := .some messages }
   goal_continue (args: Protocol.GoalContinue): EMainM Protocol.GoalContinueResult := do
     let state ← getMainState
     let .some target := state.goalStates[args.target]? |

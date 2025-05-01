@@ -56,7 +56,7 @@ def test_define_proof : TestT Elab.TermElabM Unit := do
   let state0 ← GoalState.create rootExpr
   let tactic := "intro p q h"
   let state1 ← match ← state0.tacticOn (goalId := 0) (tactic := tactic) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -65,7 +65,7 @@ def test_define_proof : TestT Elab.TermElabM Unit := do
 
   let expr := "Or.inl (Or.inl h)"
   let state2 ← match ← state1.tryAssign (state1.get! 0) (expr := expr) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -75,7 +75,7 @@ def test_define_proof : TestT Elab.TermElabM Unit := do
   let evalBind := "y"
   let evalExpr := "Or.inl h"
   let state2 ← match ← state1.tryDefine (state1.get! 0) (binderName := evalBind) (expr := evalExpr) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -95,7 +95,7 @@ def test_define_proof : TestT Elab.TermElabM Unit := do
 
   let expr := "Or.inl y"
   let state3 ← match ← state2.tryAssign (state2.get! 0) (expr := expr) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -112,22 +112,22 @@ def fun_define_root_expr: ∀ (p: Prop), PProd (Nat → p) Unit → p := by
 def test_define_root_expr : TestT Elab.TermElabM Unit := do
   --let rootExpr ← parseSentence "Nat"
   --let state0 ← GoalState.create rootExpr
-  --let .success state1 ← state0.tacticOn (goalId := 0) "exact 5" | addTest $ assertUnreachable "exact 5"
+  --let .success state1 _ ← state0.tacticOn (goalId := 0) "exact 5" | addTest $ assertUnreachable "exact 5"
   --let .some rootExpr := state1.rootExpr? | addTest $ assertUnreachable "Root expr"
   --addTest $ LSpec.check "root" ((toString $ ← Meta.ppExpr rootExpr) = "5")
   let rootExpr ← parseSentence "∀ (p: Prop), PProd (Nat → p) Unit → p"
   let state0 ← GoalState.create rootExpr
   let tactic := "intro p x"
-  let .success state1 ← state0.tacticOn (goalId := 0) tactic | addTest $ assertUnreachable tactic
+  let .success state1 _ ← state0.tacticOn (goalId := 0) tactic | addTest $ assertUnreachable tactic
   let binderName := `binder
   let value := "x.fst"
   let expr ← state1.goals[0]!.withContext $ strToTermSyntax value
   let tacticM := Tactic.evalDefine binderName expr
-  let .success state2 ← state1.tryTacticM (state1.get! 0) tacticM | addTest $ assertUnreachable s!"define {binderName} := {value}"
+  let .success state2 _ ← state1.tryTacticM (state1.get! 0) tacticM | addTest $ assertUnreachable s!"define {binderName} := {value}"
   let tactic := s!"apply {binderName}"
-  let .success state3 ← state2.tacticOn (goalId := 0) tactic | addTest $ assertUnreachable tactic
+  let .success state3 _ ← state2.tacticOn (goalId := 0) tactic | addTest $ assertUnreachable tactic
   let tactic := s!"exact 5"
-  let .success state4 ← state3.tacticOn (goalId := 0) tactic | addTest $ assertUnreachable tactic
+  let .success state4 _ ← state3.tacticOn (goalId := 0) tactic | addTest $ assertUnreachable tactic
   let .some rootExpr := state4.rootExpr? | addTest $ assertUnreachable "Root expr"
   addTest $ LSpec.check "root" ((toString $ ← Meta.ppExpr rootExpr) = "fun p x =>\n  let binder := x.fst;\n  binder 5")
 
@@ -140,7 +140,7 @@ def test_have_proof : TestT Elab.TermElabM Unit := do
   let state0 ← GoalState.create rootExpr
   let tactic := "intro p q h"
   let state1 ← match ← state0.tacticOn (goalId := 0) (tactic := tactic) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -149,7 +149,7 @@ def test_have_proof : TestT Elab.TermElabM Unit := do
 
   let expr := "Or.inl (Or.inl h)"
   let state2 ← match ← state1.tryAssign (state1.get! 0) (expr := expr) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -159,7 +159,7 @@ def test_have_proof : TestT Elab.TermElabM Unit := do
   let haveBind := "y"
   let haveType := "p ∨ q"
   let state2 ← match ← state1.tryHave (state1.get! 0) (binderName := haveBind) (type := haveType) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -171,7 +171,7 @@ def test_have_proof : TestT Elab.TermElabM Unit := do
 
   let expr := "Or.inl h"
   let state3 ← match ← state2.tryAssign (state2.get! 0) (expr := expr) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -185,7 +185,7 @@ def test_have_proof : TestT Elab.TermElabM Unit := do
       return ()
   let expr := "Or.inl y"
   let state4 ← match ← state2b.tryAssign (state2b.get! 0) (expr := expr) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -200,7 +200,7 @@ def test_let (specialized: Bool): TestT Elab.TermElabM Unit := do
   let state0 ← GoalState.create rootExpr
   let tactic := "intro a p h"
   let state1 ← match ← state0.tacticOn (goalId := 0) (tactic := tactic) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -216,7 +216,7 @@ def test_let (specialized: Bool): TestT Elab.TermElabM Unit := do
     | true => state1.tryLet (state1.get! 0) (binderName := "b") (type := letType)
     | false => state1.tryAssign (state1.get! 0) (expr := expr)
   let state2 ← match result2 with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -241,7 +241,7 @@ def test_let (specialized: Bool): TestT Elab.TermElabM Unit := do
 
   let tactic := "exact 1"
   let state3 ← match ← state2.tacticOn (goalId := 0) (tactic := tactic) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -274,7 +274,7 @@ def test_let (specialized: Bool): TestT Elab.TermElabM Unit := do
 
   let tactic := "exact Or.inl (Or.inl h)"
   let state4 ← match ← state3r.tacticOn (goalId := 0) (tactic := tactic) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()

@@ -154,33 +154,31 @@ the draft tactic instead.
 -/
 @[export pantograph_frontend_sorrys_to_goal_state_m]
 def sorrysToGoalState (sorrys : List InfoWithContext) : MetaM AnnotatedGoalState := do
-  let env := sorrys.head? >>= (·.context?) |>.map (·.env) |>.getD (← getEnv)
   assert! !sorrys.isEmpty
-  withEnv env do
-    let goalsM := sorrys.mapM λ i => do
-      match i.info with
-      | .ofTermInfo termInfo  => do
-        let mvarId ← MetaTranslate.translateMVarFromTermInfo termInfo i.context?
+  let goalsM := sorrys.mapM λ i => do
+    match i.info with
+    | .ofTermInfo termInfo  => do
+      let mvarId ← MetaTranslate.translateMVarFromTermInfo termInfo i.context?
+      if (← mvarId.getType).hasSorry then
+        throwError s!"Coupling is not allowed in drafting"
+      return [(mvarId, stxByteRange termInfo.stx)]
+    | .ofTacticInfo tacticInfo => do
+      let mvarIds ← MetaTranslate.translateMVarFromTacticInfoBefore tacticInfo i.context?
+      for mvarId in mvarIds do
         if (← mvarId.getType).hasSorry then
           throwError s!"Coupling is not allowed in drafting"
-        return [(mvarId, stxByteRange termInfo.stx)]
-      | .ofTacticInfo tacticInfo => do
-        let mvarIds ← MetaTranslate.translateMVarFromTacticInfoBefore tacticInfo i.context?
-        for mvarId in mvarIds do
-          if (← mvarId.getType).hasSorry then
-            throwError s!"Coupling is not allowed in drafting"
-        let range := stxByteRange tacticInfo.stx
-        return mvarIds.map (·, range)
-      | _ => panic! "Invalid info"
-    let annotatedGoals := List.flatten (← goalsM.run {} |>.run' {})
-    let goals := annotatedGoals.map Prod.fst
-    let srcBoundaries := annotatedGoals.map Prod.snd
-    let root := match goals with
-      | [] => panic! "No MVars generated"
-      | [g] => g
-      | _ => { name := .anonymous }
-    let state ← GoalState.createFromMVars goals root
-    return { state, srcBoundaries }
+      let range := stxByteRange tacticInfo.stx
+      return mvarIds.map (·, range)
+    | _ => panic! "Invalid info"
+  let annotatedGoals := List.flatten (← goalsM.run {} |>.run' {})
+  let goals := annotatedGoals.map Prod.fst
+  let srcBoundaries := annotatedGoals.map Prod.snd
+  let root := match goals with
+    | [] => panic! "No MVars generated"
+    | [g] => g
+    | _ => { name := .anonymous }
+  let state ← GoalState.createFromMVars goals root
+  return { state, srcBoundaries }
 
 
 @[export pantograph_frontend_collect_new_defined_constants_m]
