@@ -140,8 +140,7 @@ protected def GoalState.resume (state: GoalState) (goals: List MVarId): Except S
   -- Set goals to the goals that have not been assigned yet, similar to the `focus` tactic.
   let unassigned := goals.filter λ goal =>
     let isSolved := state.mctx.eAssignment.contains goal || state.mctx.dAssignment.contains goal
-    let isDuplicate := state.goals.contains goal
-    (¬ isDuplicate) && (¬ isSolved)
+    ¬ isSolved
   return {
     state with
     savedState := {

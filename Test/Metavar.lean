@@ -238,21 +238,21 @@ def test_partial_continuation: TestM Unit := do
       addTest $ assertUnreachable $ msg
       return ()
     | .ok state => pure state
-  addTest $ LSpec.check "(continue)" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
+  addTest $ LSpec.check "(continue 1)" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
     #[.some "2 ≤ Nat.succ ?m", .some "Nat.succ ?m ≤ 5", .some "Nat"])
   checkTrue "(2 root)" state1b.rootExpr?.get!.hasExprMVar
 
   -- Roundtrip
   --let coupled_goals := coupled_goals.map (λ g =>
   --  { name := str_to_name $ serializeName g.name (sanitize := false)})
-  let coupled_goals := coupled_goals.map (λ g => serializeName g.name (sanitize := false))
-  let coupled_goals := coupled_goals.map (λ g => { name := g.toName })
+  let coupled_goals := coupled_goals.map (·.name.toString)
+  let coupled_goals := coupled_goals.map ({ name := ·.toName })
   let state1b ← match state2.resume (goals := coupled_goals) with
     | .error msg => do
       addTest $ assertUnreachable $ msg
       return ()
     | .ok state => pure state
-  addTest $ LSpec.check "(continue)" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
+  addTest $ LSpec.check "(continue 2)" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
     #[.some "2 ≤ Nat.succ ?m", .some "Nat.succ ?m ≤ 5", .some "Nat"])
   checkTrue "(2 root)" state1b.rootExpr?.get!.hasExprMVar
 
