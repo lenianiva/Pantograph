@@ -55,6 +55,7 @@ def main (args: List String) := do
     ("Serial", Serial.suite env_default),
     ("Tactic/Assign", Tactic.Assign.suite env_default),
     ("Tactic/Prograde", Tactic.Prograde.suite env_default),
+    ("Tactic/Special", Tactic.Special.suite env_default),
   ]
   let tests: List (String × IO LSpec.TestSeq) := suites.foldl (λ acc (name, suite) => acc ++ (addPrefix name suite)) []
   LSpec.lspecEachIO [()] (λ () => runTestGroup nameFilter? tests)
