@@ -268,14 +268,14 @@ structure GoalTactic where
 structure GoalTacticResult where
   -- The next goal state id. Existence of this field shows success
   nextStateId?: Option Nat          := .none
-  -- If the array is empty, it shows the goals have been fully resolved.
-  goals?: Option (Array Goal)          := .none
+  -- If the array is empty, it shows the goals have been fully resolved. If this
+  -- is .none, there has been a tactic error.
+  goals?: Option (Array Goal)       := .none
 
-  -- Existence of this field shows tactic execution failure
-  tacticErrors?: Option (Array String) := .none
+  messages? : Option (Array String) := .some #[]
 
   -- Existence of this field shows the tactic parsing has failed
-  parseError?: Option String := .none
+  parseError? : Option String       := .none
   deriving Lean.ToJson
 structure GoalContinue where
   -- State from which the continuation acquires the context

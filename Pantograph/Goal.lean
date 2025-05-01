@@ -113,11 +113,14 @@ protected def GoalState.focus (state: GoalState) (goalId: Nat): Option GoalState
   }
 
 /-- Immediately bring all parent goals back into scope. Used in automatic mode -/
-@[export pantograph_goal_state_immediate_resume_parent]
+@[export pantograph_goal_state_immediate_resume]
 protected def GoalState.immediateResume (state: GoalState) (parent: GoalState): GoalState :=
   -- Prune parents solved goals
   let mctx := state.mctx
-  let parentGoals := parent.goals.filter $ λ goal => mctx.eAssignment.contains goal
+  let parentGoals := parent.goals.filter λ goal =>
+    let isDuplicate := state.goals.contains goal
+    let isSolved := mctx.eAssignment.contains goal || mctx.dAssignment.contains goal
+    (¬ isDuplicate) && (¬ isSolved)
   {
     state with
     savedState := {
@@ -127,25 +130,25 @@ protected def GoalState.immediateResume (state: GoalState) (parent: GoalState): 
   }
 
 /--
-Brings into scope a list of goals
+Brings into scope a list of goals. User must ensure `goals` is distinct.
 -/
 @[export pantograph_goal_state_resume]
-protected def GoalState.resume (state: GoalState) (goals: List MVarId): Except String GoalState :=
+protected def GoalState.resume (state: GoalState) (goals: List MVarId): Except String GoalState := do
   if ¬ (goals.all (λ goal => state.mvars.contains goal)) then
     let invalid_goals := goals.filter (λ goal => ¬ state.mvars.contains goal) |>.map (·.name.toString)
     .error s!"Goals {invalid_goals} are not in scope"
-  else
-    -- Set goals to the goals that have not been assigned yet, similar to the `focus` tactic.
-    let unassigned := goals.filter (λ goal =>
-      let mctx := state.mctx
-      ¬(mctx.eAssignment.contains goal || mctx.dAssignment.contains goal))
-    .ok {
-      state with
-      savedState := {
-        term := state.savedState.term,
-        tactic := { goals := unassigned },
-      },
-    }
+  -- Set goals to the goals that have not been assigned yet, similar to the `focus` tactic.
+  let unassigned := goals.filter λ goal =>
+    let isSolved := state.mctx.eAssignment.contains goal || state.mctx.dAssignment.contains goal
+    let isDuplicate := state.goals.contains goal
+    (¬ isDuplicate) && (¬ isSolved)
+  return {
+    state with
+    savedState := {
+      term := state.savedState.term,
+      tactic := { goals := unassigned },
+    },
+  }
 /--
 Brings into scope all goals from `branch`
 -/
@@ -238,23 +241,20 @@ protected def GoalState.step (state: GoalState) (goal: MVarId) (tacticM: Elab.Ta
 /-- Response for executing a tactic -/
 inductive TacticResult where
   -- Goes to next state
-  | success (state: GoalState)
+  | success (state : GoalState) (messages : Array String)
   -- Tactic failed with messages
-  | failure (messages: Array String)
+  | failure (messages : Array String)
   -- Could not parse tactic
-  | parseError (message: String)
+  | parseError (message : String)
   -- The given action cannot be executed in the state
-  | invalidAction (message: String)
+  | invalidAction (message : String)
 
-private def dumpMessageLog (prevMessageLength : Nat) : CoreM (Array String) := do
-  let newMessages ← (← Core.getMessageLog).toList.drop prevMessageLength
-    |>.filterMapM λ m => do
-      if m.severity == .error then
-        return .some $ ← m.toString
-      else
-        return .none
+private def dumpMessageLog (prevMessageLength : Nat) : CoreM (Bool × Array String) := do
+  let newMessages := (← Core.getMessageLog).toList.drop prevMessageLength
+  let hasErrors := newMessages.any (·.severity == .error)
+  let newMessages ← newMessages.mapM λ m => m.toString
   Core.resetMessageLog
-  return newMessages.toArray
+  return (hasErrors, newMessages.toArray)
 
 /-- Executes a `TacticM` monad on this `GoalState`, collecting the errors as necessary -/
 protected def GoalState.tryTacticM
@@ -266,13 +266,16 @@ protected def GoalState.tryTacticM
     let nextState ← state.step goal tacticM guardMVarErrors
 
     -- Check if error messages have been generated in the core.
-    let newMessages ← dumpMessageLog prevMessageLength
-    if ¬ newMessages.isEmpty then
+    let (hasError, newMessages) ← dumpMessageLog prevMessageLength
+    if hasError then
       return .failure newMessages
-    return .success nextState
+    else
+      return .success nextState newMessages
   catch exception =>
     match exception with
-    | .internal _ => return .failure $ ← dumpMessageLog prevMessageLength
+    | .internal _ =>
+      let (_, messages) ← dumpMessageLog prevMessageLength
+      return .failure messages
     | _ => return .failure #[← exception.toMessageData.toString]
 
 /-- Execute a string tactic on given state. Restores TermElabM -/
@@ -341,7 +344,7 @@ protected def GoalState.conv (state: GoalState) (goal: MVarId):
       parentMVar? := .some goal,
       convMVar? := .some (convRhs, goal, otherGoals),
       calcPrevRhs? := .none
-    }
+    } #[]
   catch exception =>
     return .failure #[← exception.toMessageData.toString]
 
@@ -378,7 +381,7 @@ protected def GoalState.convExit (state: GoalState):
       parentMVar? := .some convGoal,
       convMVar? := .none
       calcPrevRhs? := .none
-    }
+    } #[]
   catch exception =>
     return .failure #[← exception.toMessageData.toString]
 
@@ -456,7 +459,7 @@ protected def GoalState.tryCalc (state: GoalState) (goal: MVarId) (pred: String)
       },
       parentMVar? := .some goal,
       calcPrevRhs?
-    }
+    } #[]
   catch exception =>
     return .failure #[← exception.toMessageData.toString]
 

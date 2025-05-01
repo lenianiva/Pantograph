@@ -89,7 +89,7 @@ def test_identity: TestM Unit := do
 
   let tactic := "intro p h"
   let state1 ← match ← state0.tacticOn 0 tactic with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -116,7 +116,7 @@ def test_nat_add_comm (manual: Bool): TestM Unit := do
       return ()
 
   let state1 ← match ← state0.tacticOn 0 "intro n m" with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -130,7 +130,7 @@ def test_nat_add_comm (manual: Bool): TestM Unit := do
     addTest $ assertUnreachable $ other.toString
 
   let state2 ← match ← state1.tacticOn 0 "rw [Nat.add_comm]" with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -148,14 +148,14 @@ def test_delta_variable: TestM Unit := do
       return ()
 
   let state1 ← match ← state0.tacticOn (goalId := 0) (tactic := "intro n") with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "intro n" ((← state1.serializeGoals (parent := state0) options).map (·.devolatilize) =
     #[buildGoalSelective [("n", .some "Nat")] "∀ (b : Nat), n + b = b + n"])
   let state2 ← match ← state1.tacticOn (goalId := 0) (tactic := "intro m") with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -187,14 +187,14 @@ def test_arith: TestM Unit := do
 
   let tactic := "intros"
   let state1 ← match ← state0.tacticOn (goalId := 0) (tactic := tactic) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check tactic (state1.goals.length = 1)
   addTest $ LSpec.test "(1 root)" state1.rootExpr?.isNone
   let state2 ← match ← state1.tacticOn (goalId := 0) (tactic := "simp [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm, Nat.mul_comm, Nat.mul_assoc, Nat.mul_left_comm] at *") with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -202,7 +202,7 @@ def test_arith: TestM Unit := do
   addTest $ LSpec.check "(2 root)" state2.rootExpr?.isNone
   let tactic := "assumption"
   let state3 ← match ← state2.tacticOn (goalId := 0) (tactic := tactic) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -237,7 +237,7 @@ def test_or_comm: TestM Unit := do
 
   let tactic := "intro p q h"
   let state1 ← match ← state0.tacticOn (goalId := 0) (tactic := tactic) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -265,7 +265,7 @@ def test_or_comm: TestM Unit := do
   addTest $ LSpec.test "(1 parent)" (state1parent == s!"(:lambda p (:sort 0) (:lambda q (:sort 0) (:lambda h ((:c Or) 1 0) (:subst (:mv {state1g0}) 2 1 0))))")
   let tactic := "cases h"
   let state2 ← match ← state1.tacticOn (goalId := 0) (tactic := tactic) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -291,7 +291,7 @@ def test_or_comm: TestM Unit := do
     s!"((:c Or.casesOn) (:fv {fvP}) (:fv {fvQ}) {motive} (:fv {fvH}) {caseL} {caseR} {conduit})")
 
   let state3_1 ← match ← state2.tacticOn (goalId := 0) (tactic := "apply Or.inr") with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -301,7 +301,7 @@ def test_or_comm: TestM Unit := do
   addTest $ LSpec.test "(3_1 parent)" (state3_1parent == s!"((:c Or.inr) (:fv {fvQ}) (:fv {fvP}) (:mv {state3_1goal0}))")
   addTest $ LSpec.check "· apply Or.inr" (state3_1.goals.length = 1)
   let state4_1 ← match ← state3_1.tacticOn (goalId := 0) (tactic := "assumption") with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -310,13 +310,13 @@ def test_or_comm: TestM Unit := do
   addTest $ LSpec.test "(4_1 parent)" state4_1parent.isFVar
   addTest $ LSpec.check "(4_1 root)" state4_1.rootExpr?.isNone
   let state3_2 ← match ← state2.tacticOn (goalId := 1) (tactic := "apply Or.inl") with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "· apply Or.inl" (state3_2.goals.length = 1)
   let state4_2 ← match ← state3_2.tacticOn (goalId := 0) (tactic := "assumption") with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -330,13 +330,13 @@ def test_or_comm: TestM Unit := do
     | .ok state => pure state
   addTest $ LSpec.test "(resume)" (state2b.goals == [state2.goals[0]!])
   let state3_1 ← match ← state2b.tacticOn (goalId := 0) (tactic := "apply Or.inr") with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "· apply Or.inr" (state3_1.goals.length = 1)
   let state4_1 ← match ← state3_1.tacticOn (goalId := 0) (tactic := "assumption") with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -375,7 +375,7 @@ def test_conv: TestM Unit := do
 
   let tactic := "intro a b c1 c2 h"
   let state1 ← match ← state0.tacticOn (goalId := 0) (tactic := tactic) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -383,7 +383,7 @@ def test_conv: TestM Unit := do
     #[interiorGoal [] "a + b + c1 = b + a + c2"])
 
   let state2 ← match ← state1.conv (state1.get! 0) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -392,7 +392,7 @@ def test_conv: TestM Unit := do
 
   let convTactic := "rhs"
   let state3R ← match ← state2.tacticOn (goalId := 0) convTactic with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -401,7 +401,7 @@ def test_conv: TestM Unit := do
 
   let convTactic := "lhs"
   let state3L ← match ← state2.tacticOn (goalId := 0) convTactic with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -410,7 +410,7 @@ def test_conv: TestM Unit := do
 
   let convTactic := "congr"
   let state4 ← match ← state3L.tacticOn (goalId := 0) convTactic with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -422,7 +422,7 @@ def test_conv: TestM Unit := do
 
   let convTactic := "rw [Nat.add_comm]"
   let state5_1 ← match ← state4.tacticOn (goalId := 0) convTactic with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -431,7 +431,7 @@ def test_conv: TestM Unit := do
 
   let convTactic := "rfl"
   let state6_1 ← match ← state5_1.tacticOn (goalId := 0) convTactic with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -446,7 +446,7 @@ def test_conv: TestM Unit := do
 
   let convTactic := "rfl"
   let state6 ← match ← state4_1.tacticOn (goalId := 0) convTactic with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -454,14 +454,14 @@ def test_conv: TestM Unit := do
     #[])
 
   let state1_1 ← match ← state6.convExit with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
 
   let tactic := "exact h"
   let stateF ← match ← state1_1.tacticOn (goalId := 0) (tactic := tactic) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -488,7 +488,7 @@ def test_calc: TestM Unit := do
       return ()
   let tactic := "intro a b c d h1 h2"
   let state1 ← match ← state0.tacticOn (goalId := 0) (tactic := tactic) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -496,7 +496,7 @@ def test_calc: TestM Unit := do
     #[interiorGoal [] "a + b = c + d"])
   let pred := "a + b = b + c"
   let state2 ← match ← state1.tryCalc (state1.get! 0) (pred := pred) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -510,7 +510,7 @@ def test_calc: TestM Unit := do
 
   let tactic := "apply h1"
   let state2m ← match ← state2.tacticOn (goalId := 0) (tactic := tactic) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -521,7 +521,7 @@ def test_calc: TestM Unit := do
       return ()
   let pred := "_ = c + d"
   let state4 ← match ← state3.tryCalc (state3.get! 0) (pred := pred) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -532,7 +532,7 @@ def test_calc: TestM Unit := do
   addTest $ LSpec.test "(4.0 prev rhs)" (state4.calcPrevRhsOf? (state4.get! 0) |>.isNone)
   let tactic := "apply h2"
   let state4m ← match ← state4.tacticOn (goalId := 0) (tactic := tactic) with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -553,7 +553,7 @@ def test_tactic_failure_unresolved_goals : TestM Unit := do
 
   let tactic := "intro p"
   let state1 ← match ← state0.tacticOn 0 tactic with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -572,7 +572,7 @@ def test_tactic_failure_synthesize_placeholder : TestM Unit := do
 
   let tactic := "intro p q r h"
   let state1 ← match ← state0.tacticOn 0 tactic with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
@@ -604,7 +604,7 @@ def test_deconstruct : TestM Unit := do
 
   let tactic := "intro p q ⟨hp, hq⟩"
   let state1 ← match ← state0.tacticOn 0 tactic with
-    | .success state => pure state
+    | .success state _ => pure state
     | other => do
       fail other.toString
       return ()

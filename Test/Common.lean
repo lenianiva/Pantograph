@@ -71,7 +71,7 @@ def GoalState.get! (state: GoalState) (i: Nat): MVarId := state.goals[i]!
 def GoalState.tacticOn (state: GoalState) (goalId: Nat) (tactic: String) := state.tryTactic (state.get! goalId) tactic
 
 def TacticResult.toString : TacticResult → String
-  | .success state => s!".success ({state.goals.length} goals)"
+  | .success state _messages => s!".success ({state.goals.length} goals)"
   | .failure messages =>
     let messages := "\n".intercalate messages.toList
     s!".failure {messages}"

@@ -39,6 +39,8 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
   - `{ "conv": <bool> }`: Enter or exit conversion tactic mode. In the case of
     exit, the goal id is ignored.
   - `{ "draft": <expr> }`: Draft an expression with `sorry`s, turning them into goals. Coupling is not allowed.
+  If the `goals` field does not exist, the tactic execution has failed. Read
+  `messages` to find the reason.
 * `goal.continue {"stateId": <id>, ["branch": <id>], ["goals": <names>]}`:
   Execute continuation/resumption
   - `{ "branch": <id> }`: Continue on branch state. The current state must have no goals.
