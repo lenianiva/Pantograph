@@ -50,8 +50,13 @@ include:
 - Although a timeout feature exists in Pantograph, it relies on the coöperative
   multitasking from the tactic implementation. There is nothing preventing a
   buggy tactic from stalling Lean if it does not check for cancellation often.
+- For the same reason as above, there is no graceful way to stop a tactic which
+  leaks infinite memory. Users who wish to have this behaviour should run
+  Pantograph in a controlled environment with limited allocations. e.g.
+  Linux control groups.
 - Interceptions of parsing errors generally cannot be turned into goals (e.g.
-  `def mystery : Nat := :=`) due to Lean's parsing system.
+  `def mystery : Nat := :=`) due to Lean's parsing system. This question is also
+  not well-defined.
 
 ## References
 
