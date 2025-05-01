@@ -81,6 +81,7 @@ def liftTermElabM { α } (termElabM: Elab.TermElabM α) (levelNames : List Name 
     : EMainM α := do
   let scope := (← get).scope
   let context := {
+    errToSorry := false,
     isNoncomputableSection := scope.isNoncomputable,
   }
   let state := {
