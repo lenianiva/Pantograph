@@ -131,10 +131,6 @@ def test_define_root_expr : TestT Elab.TermElabM Unit := do
   let .some rootExpr := state4.rootExpr? | addTest $ assertUnreachable "Root expr"
   addTest $ LSpec.check "root" ((toString $ ← Meta.ppExpr rootExpr) = "fun p x =>\n  let binder := x.fst;\n  binder 5")
 
---set_option pp.all true
---#check @PSigma (α := Prop) (β := λ (p: Prop) => p)
---def test_define_root_expr : TestT Elab.TermElabM Unit := do
-
 def test_have_proof : TestT Elab.TermElabM Unit := do
   let rootExpr ← parseSentence "∀ (p q: Prop), p → ((p ∨ q) ∨ (p ∨ q))"
   let state0 ← GoalState.create rootExpr

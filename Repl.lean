@@ -5,8 +5,6 @@ namespace Pantograph.Repl
 
 open Lean
 
-set_option trace.Pantograph.Frontend.MetaTranslate true
-
 structure Context where
   coreContext : Core.Context
 
@@ -30,7 +28,7 @@ instance : MonadEnv MainM where
   getEnv := return (← get).env
   modifyEnv f := modify fun s => { s with env := f s.env  }
 
-def newGoalState (goalState: GoalState) : MainM Nat := do
+def newGoalState (goalState : GoalState) : MainM Nat := do
   let state ← get
   let stateId := state.nextId
   set { state with
