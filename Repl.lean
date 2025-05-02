@@ -39,7 +39,7 @@ def newGoalState (goalState : GoalState) : MainM Nat := do
 
 def runCoreM { α } (coreM : CoreM α) : EMainM α := do
   let scope := (← get).scope
-  let options :=(← get).options
+  let options := (← get).options
   let cancelTk? ← match options.timeout with
     | 0 => pure .none
     | _ => .some <$> IO.CancelToken.new
@@ -60,7 +60,7 @@ def runCoreM { α } (coreM : CoreM α) : EMainM α := do
       Except.ok <$> coreM
     catch ex =>
       let desc ← ex.toMessageData.toString
-      return Except.error $ ({ error := "exception", desc } : Protocol.InteractionError)
+      return Except.error ({ error := "exception", desc } : Protocol.InteractionError)
     finally
       for {msg, ..} in (← getTraceState).traces do
         IO.eprintln (← msg.format.toIO)
@@ -72,16 +72,15 @@ def runCoreM { α } (coreM : CoreM α) : EMainM α := do
     | Except.error (Exception.internal id _) => Protocol.throw $ { error := "internal", desc := (← id.getName).toString }
     | Except.ok a                            => pure a
   if result matches .ok _ then
-    modifyEnv λ _ => state'.env
+    setEnv state'.env
   liftExcept result
 
 def runCoreM' { α } (coreM : Protocol.FallibleT CoreM α) : EMainM α := do
   liftExcept $ ← runCoreM coreM.run
 
-
 def liftMetaM { α } (metaM : MetaM α): EMainM α :=
   runCoreM metaM.run'
-def liftTermElabM { α } (termElabM: Elab.TermElabM α) (levelNames : List Name := [])
+def liftTermElabM { α } (termElabM : Elab.TermElabM α) (levelNames : List Name := [])
     : EMainM α := do
   let scope := (← get).scope
   let context := {
@@ -96,7 +95,7 @@ def liftTermElabM { α } (termElabM: Elab.TermElabM α) (levelNames : List Name 
 section Frontend
 
 structure CompilationUnit where
-  -- Should be the penultimate environment, but this is ok
+  -- Environment immediately before the unit
   env : Environment
   boundary : Nat × Nat
   invocations : List Protocol.InvokedTactic
@@ -104,7 +103,7 @@ structure CompilationUnit where
   messages : Array String
   newConstants : List Name
 
-def frontend_process_inner (args: Protocol.FrontendProcess): EMainM Protocol.FrontendProcessResult := do
+def frontend_process (args: Protocol.FrontendProcess): EMainM Protocol.FrontendProcessResult := do
   let options := (← getMainState).options
   let (fileName, file) ← match args.fileName?, args.file? with
     | .some fileName, .none => do
@@ -400,7 +399,5 @@ def execute (command: Protocol.Command): MainM Json := do
     let (goalState, _) ← goalStateUnpickle args.path (← MonadEnv.getEnv)
     let id ← newGoalState goalState
     return { id }
-  frontend_process (args: Protocol.FrontendProcess): EMainM Protocol.FrontendProcessResult := do
-    frontend_process_inner args
 
 end Pantograph.Repl
