@@ -7,6 +7,8 @@ open Lean
 
 structure Context where
   coreContext : Core.Context
+  -- If true, the environment will change after running `CoreM`
+  inheritEnv : Bool := false
 
 /-- Stores state of the REPL -/
 structure State where
@@ -27,6 +29,9 @@ def getMainState : MainM State := get
 instance : MonadEnv MainM where
   getEnv := return (← get).env
   modifyEnv f := modify fun s => { s with env := f s.env  }
+
+def withInheritEnv [Monad m] [MonadWithReaderOf Context m] [MonadLift MainM m] { α } (z : m α) : m α := do
+  withTheReader Context ({ · with inheritEnv := true }) z
 
 def newGoalState (goalState : GoalState) : MainM Nat := do
   let state ← get
@@ -71,7 +76,7 @@ def runCoreM { α } (coreM : CoreM α) : EMainM α := do
     | Except.error (Exception.error _ msg)   => Protocol.throw $ { error := "core", desc := ← msg.toString }
     | Except.error (Exception.internal id _) => Protocol.throw $ { error := "internal", desc := (← id.getName).toString }
     | Except.ok a                            => pure a
-  if result matches .ok _ then
+  if (← read).inheritEnv && result matches .ok _ then
     setEnv state'.env
   liftExcept result
 
@@ -239,7 +244,7 @@ def execute (command: Protocol.Command): MainM Json := do
   env_inspect (args: Protocol.EnvInspect): EMainM Protocol.EnvInspectResult := do
     let state ← getMainState
     runCoreM' $ Environment.inspect args state.options
-  env_add (args: Protocol.EnvAdd): EMainM Protocol.EnvAddResult := do
+  env_add (args: Protocol.EnvAdd): EMainM Protocol.EnvAddResult := withInheritEnv do
     runCoreM' $ Environment.addDecl args.name (args.levels?.getD #[]) args.type? args.value args.isTheorem
   env_save (args: Protocol.EnvSaveLoad): EMainM Protocol.EnvSaveLoadResult := do
     let env ← MonadEnv.getEnv
