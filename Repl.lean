@@ -14,7 +14,7 @@ structure Context where
 structure State where
   options : Protocol.Options := {}
   nextId : Nat := 0
-  goalStates : Std.HashMap Nat GoalState := Std.HashMap.empty
+  goalStates : Std.HashMap Nat GoalState := Std.HashMap.emptyWithCapacity
 
   env : Environment
   -- Parser state
@@ -225,7 +225,7 @@ def execute (command: Protocol.Command): MainM Json := do
   reset (_: Protocol.Reset): EMainM Protocol.StatResult := do
     let state ← getMainState
     let nGoals := state.goalStates.size
-    set { state with nextId := 0, goalStates := .empty }
+    set { state with nextId := 0, goalStates := .emptyWithCapacity }
     return { nGoals }
   stat (_: Protocol.Stat): EMainM Protocol.StatResult := do
     let state ← getMainState
