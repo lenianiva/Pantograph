@@ -66,15 +66,15 @@ def proofRunner (env: Lean.Environment) (tests: TestM Unit): IO LSpec.TestSeq :=
     return a
 
 def test_identity: TestM Unit := do
-  let state0 ← GoalState.create (expr := ← parseSentence "∀ (p: Prop), p → p")
-  let tactic := "intro p h"
-  let state1 ← match ← state0.tacticOn 0 tactic with
+  let rootTarget ← Elab.Term.elabTerm (← `(term|∀ (p: Prop), p → p)) .none
+  let state0 ← GoalState.create (expr := rootTarget)
+  let state1 ← match ← state0.tacticOn' 0 (← `(tactic|intro p h)) with
     | .success state _ => pure state
     | other => do
       fail other.toString
       return ()
   let inner := "_uniq.11"
-  addTest $ LSpec.check tactic ((← state1.serializeGoals (options := ← read)).map (·.name) =
+  addTest $ LSpec.check "intro" ((← state1.serializeGoals (options := ← read)).map (·.name) =
     #[inner])
   let state1parent ← state1.withParentContext do
     serializeExpressionSexp (← instantiateAll state1.parentExpr?.get!)
