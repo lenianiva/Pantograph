@@ -15,11 +15,7 @@ deriving instance DecidableEq, Repr for Protocol.RecursorRule
 deriving instance DecidableEq, Repr for Protocol.RecursorInfo
 deriving instance DecidableEq, Repr for Protocol.EnvInspectResult
 
-def test_catalog: IO LSpec.TestSeq := do
-  let env: Environment ← importModules
-    (imports := #[`Init])
-    (opts := {})
-    (trustLevel := 1)
+def test_catalog (env : Environment) : IO LSpec.TestSeq := do
   let inner: CoreM LSpec.TestSeq := do
     let catalogResult ← Environment.catalog {}
     let symbolsWithNum := env.constants.fold (init := #[]) (λ acc name info =>
@@ -46,11 +42,7 @@ inductive ConstantCat where
   | ctor (info: Protocol.ConstructorInfo)
   | recursor (info: Protocol.RecursorInfo)
 
-def test_inspect: IO LSpec.TestSeq := do
-  let env: Environment ← importModules
-    (imports := #[`Init])
-    (opts := {})
-    (trustLevel := 1)
+def test_inspect (env : Environment) : IO LSpec.TestSeq := do
   let testCases: List (String × ConstantCat) := [
     ("Or", ConstantCat.induct {
       numParams := 2,
@@ -97,11 +89,7 @@ def test_inspect: IO LSpec.TestSeq := do
     ) LSpec.TestSeq.done
   runCoreMSeq env inner
 
-def test_symbol_location : TestT IO Unit := do
-  let env: Environment ← importModules
-    (imports := #[`Init])
-    (opts := {})
-    (trustLevel := 1)
+def test_symbol_location (env : Environment) : TestT IO Unit := do
   addTest $ ← runTestCoreM env do
     let .ok result ← (Environment.inspect { name := "Nat.le_of_succ_le", source? := .some true } (options := {})).run | fail "Inspect failed"
     checkEq "module" result.module? <| .some "Init.Data.Nat.Basic"
@@ -114,20 +102,16 @@ def test_symbol_location : TestT IO Unit := do
     checkEq "imports" imports #["Init.SimpLemmas", "Init.Data.NeZero"]
     checkTrue "constNames" $ constNames.contains "Nat.succ_add"
 
-def test_matcher : TestT IO Unit := do
-  let env: Environment ← importModules
-    (imports := #[`Init])
-    (opts := {})
-    (trustLevel := 1)
+def test_matcher (env : Environment) : TestT IO Unit := do
   checkTrue "not matcher" $ ¬ Meta.isMatcherCore env `Nat.strongRecOn
 
-def suite: List (String × IO LSpec.TestSeq) :=
+def suite (env : Environment) : List (String × IO LSpec.TestSeq) :=
   [
-    ("Catalog", test_catalog),
+    ("Catalog", test_catalog env),
     ("Symbol Visibility", test_symbol_visibility),
-    ("Inspect", test_inspect),
-    ("Symbol Location", runTest test_symbol_location),
-    ("Matcher", runTest test_matcher),
+    ("Inspect", test_inspect env),
+    ("Symbol Location", runTest $ test_symbol_location env),
+    ("Matcher", runTest $ test_matcher env),
   ]
 
 end Pantograph.Test.Environment

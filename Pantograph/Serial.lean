@@ -63,7 +63,7 @@ def resurrectEnvironment
   (imports : Array Import)
   (map₂ : PHashMap Name ConstantInfo)
   : IO Environment := do
-  let env ← importModules imports {} 0
+  let env ← importModules imports {} 0 (loadExts := true)
   env.replay (Std.HashMap.ofList map₂.toList)
 /--
 Unpickle an `Environment` from disk.
