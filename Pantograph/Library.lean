@@ -72,6 +72,7 @@ def createCoreState (imports: Array String): IO Core.State := do
     (imports := imports.map (λ str => { module := str.toName, runtimeOnly := false }))
     (opts := {})
     (trustLevel := 1)
+    (loadExts := true)
   return { env := env }
 
 @[export pantograph_parse_elab_type_m]
