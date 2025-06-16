@@ -11,7 +11,7 @@ open Pantograph
 open Lean
 
 inductive Start where
-  | copy (name: String) -- Start from some name in the environment
+  | copy (name: Name) -- Start from some name in the environment
   | expr (expr: String) -- Start from some expression
 
 abbrev TestM := TestT $ ReaderT Protocol.Options $ Elab.TermElabM
@@ -20,7 +20,7 @@ def startProof (start: Start): TestM (Option GoalState) := do
   let env ← Lean.MonadEnv.getEnv
   match start with
   | .copy name =>
-    let cInfo? := name.toName |> env.find?
+    let cInfo? := name |> env.find?
     addTest $ LSpec.check s!"Symbol exists {name}" cInfo?.isSome
     match cInfo? with
     | .some cInfo =>
@@ -29,22 +29,8 @@ def startProof (start: Start): TestM (Option GoalState) := do
     | .none =>
       return Option.none
   | .expr expr =>
-    let syn? := parseTerm env expr
-    addTest $ LSpec.check s!"Parsing {expr}" (syn?.isOk)
-    match syn? with
-    | .error error =>
-      IO.println error
-      return Option.none
-    | .ok syn =>
-      let expr? ← elabType syn
-      addTest $ LSpec.check s!"Elaborating" expr?.isOk
-      match expr? with
-      | .error error =>
-        IO.println error
-        return Option.none
-      | .ok expr =>
-        let goal ← GoalState.create (expr := expr)
-        return Option.some goal
+    let expr ← parseSentence expr
+    return .some $ ← GoalState.create (expr := expr)
 
 def buildNamedGoal (name: String) (nameType: List (String × String)) (target: String)
     (userName?: Option String := .none): Protocol.Goal :=
@@ -80,20 +66,14 @@ def proofRunner (env: Lean.Environment) (tests: TestM Unit): IO LSpec.TestSeq :=
     return a
 
 def test_identity: TestM Unit := do
-  let state? ← startProof (.expr "∀ (p: Prop), p → p")
-  let state0 ← match state? with
-    | .some state => pure state
-    | .none => do
-      addTest $ assertUnreachable "Goal could not parse"
-      return ()
-
+  let state0 ← GoalState.create (expr := ← parseSentence "∀ (p: Prop), p → p")
   let tactic := "intro p h"
   let state1 ← match ← state0.tacticOn 0 tactic with
     | .success state _ => pure state
     | other => do
-      addTest $ assertUnreachable $ other.toString
+      fail other.toString
       return ()
-  let inner := "_uniq.12"
+  let inner := "_uniq.11"
   addTest $ LSpec.check tactic ((← state1.serializeGoals (options := ← read)).map (·.name) =
     #[inner])
   let state1parent ← state1.withParentContext do
@@ -106,7 +86,7 @@ example: ∀ (a b: Nat), a + b = b + a := by
   rw [Nat.add_comm]
 def test_nat_add_comm (manual: Bool): TestM Unit := do
   let state? ← startProof <| match manual with
-    | false => .copy "Nat.add_comm"
+    | false => .copy `Nat.add_comm
     | true => .expr "∀ (a b: Nat), a + b = b + a"
   addTest $ LSpec.check "Start goal" state?.isSome
   let state0 ← match state? with

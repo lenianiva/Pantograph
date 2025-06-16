@@ -39,23 +39,27 @@ open Pantograph.Test
 def main (args: List String) := do
   let nameFilter? := args.head?
   Lean.initSearchPath (← Lean.findSysroot)
-  let env_default: Lean.Environment ← Lean.importModules
+  let env_default : Lean.Environment ← Lean.importModules
     (imports := #[`Init])
     (opts := {})
     (trustLevel := 1)
+    (loadExts := true)
 
-  let suites: List (String × List (String × IO LSpec.TestSeq)) := [
+  let suites: List (String × (Lean.Environment → List (String × IO LSpec.TestSeq))) := [
     ("Environment", Environment.suite),
-    ("Frontend", Frontend.suite env_default),
-    ("Integration", Integration.suite env_default),
-    ("Library", Library.suite env_default),
-    ("Metavar", Metavar.suite env_default),
-    ("Proofs", Proofs.suite env_default),
-    ("Delate", Delate.suite env_default),
-    ("Serial", Serial.suite env_default),
-    ("Tactic/Assign", Tactic.Assign.suite env_default),
-    ("Tactic/Prograde", Tactic.Prograde.suite env_default),
-    ("Tactic/Special", Tactic.Special.suite env_default),
+    ("Frontend", Frontend.suite),
+    ("Integration", Integration.suite),
+    ("Library", Library.suite),
+    ("Metavar", Metavar.suite),
+    ("Proofs", Proofs.suite),
+    ("Delate", Delate.suite),
+    ("Serial", Serial.suite),
+    ("Tactic/Assign", Tactic.Assign.suite),
+    ("Tactic/Prograde", Tactic.Prograde.suite),
+    ("Tactic/Special", Tactic.Special.suite),
   ]
-  let tests: List (String × IO LSpec.TestSeq) := suites.foldl (λ acc (name, suite) => acc ++ (addPrefix name suite)) []
+  let suiterunner (f : Lean.Environment → List (String × IO LSpec.TestSeq)) :=
+    f env_default
+  let tests : List (String × IO LSpec.TestSeq) := suites.foldl (init := []) λ acc (name, suite) =>
+    acc ++ (addPrefix name $ suiterunner suite)
   LSpec.lspecEachIO [()] (λ () => runTestGroup nameFilter? tests)
