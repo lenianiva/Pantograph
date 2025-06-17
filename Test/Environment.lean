@@ -96,10 +96,10 @@ def test_symbol_location (env : Environment) : TestT IO Unit := do
 
     -- Extraction of source doesn't work for symbols in `Init` for some reason
     checkTrue "file" result.sourceUri?.isNone
-    checkEq "pos" (result.sourceStart?.map (·.column)) <| .some 0
-    checkEq "pos" (result.sourceEnd?.map (·.column)) <| .some 88
+    checkEq "sourceStart" (result.sourceStart?.map (·.column)) <| .some 0
+    checkEq "sourceEnd" (result.sourceEnd?.map (·.column)) <| .some 88
     let { imports, constNames, .. } ← Environment.moduleRead ⟨"Init.Data.Nat.Basic"⟩
-    checkEq "imports" imports #["Init.SimpLemmas", "Init.Data.NeZero"]
+    checkEq "imports" imports #["Init.SimpLemmas", "Init.Data.NeZero", "Init.Grind.Tactics"]
     checkTrue "constNames" $ constNames.contains "Nat.succ_add"
 
 def test_matcher (env : Environment) : TestT IO Unit := do
