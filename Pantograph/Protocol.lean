@@ -361,8 +361,8 @@ structure FrontendProcess where
   readHeader : Bool := false
   -- Alter the REPL environment after the compilation units.
   inheritEnv : Bool := false
-  -- collect tactic invocations
-  invocations: Bool := false
+  -- collect tactic invocations and output to a given file
+  invocations?: Option String := .none
   -- collect `sorry`s
   sorrys: Bool := false
   -- collect type errors
@@ -383,8 +383,8 @@ structure CompilationUnit where
   -- String boundaries of compilation units
   boundary: (Nat × Nat)
   messages: Array String := #[]
-  -- Tactic invocations
-  invocations?: Option (List InvokedTactic) := .none
+  -- Number of tactic invocations
+  nInvocations?: Option Nat := .none
   goalStateId?: Option Nat := .none
   goals?: Option (Array Goal) := .none
   -- Code segments which generated the goals
@@ -395,6 +395,12 @@ structure CompilationUnit where
   deriving Lean.ToJson
 structure FrontendProcessResult where
   units: List CompilationUnit
+  deriving Lean.ToJson
+structure FrontendDataUnit where
+  invocations? : Option (List Protocol.InvokedTactic) := .none
+  deriving Lean.ToJson
+structure FrontendData where
+  units : List FrontendDataUnit
   deriving Lean.ToJson
 
 abbrev FallibleT := ExceptT InteractionError
