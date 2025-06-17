@@ -1,3 +1,4 @@
+import Pantograph.Adaptor
 import Pantograph.Delate
 import Pantograph.Elab
 import Pantograph.Environment

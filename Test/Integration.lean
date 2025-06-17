@@ -214,7 +214,8 @@ example : ∀ (p: Prop), p → p := by
 def test_frontend_process : Test := do
   let file := "example : ∀ (p q: Prop), p → p ∨ q := by\n  intro p q h\n  exact Or.inl h"
   let goal1 := "p q : Prop\nh : p\n⊢ p ∨ q"
-  IO.FS.withTempDir λ tempdir => do
+  let tempdir := "/tmp/pantograph"
+  IO.FS.createDir tempdir
   let filename := s!"{tempdir}/invocations.jsonl"
   step "frontend.process"
     ({
@@ -244,6 +245,7 @@ def test_frontend_process : Test := do
           },
         ]
     } ] }
+  IO.FS.removeDir tempdir
 
 example : 1 + 2 = 3 := rfl
 example (p: Prop): p → p := by simp

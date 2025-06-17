@@ -1,4 +1,3 @@
-import Std.Data.HashMap
 import Pantograph
 
 namespace Pantograph.Repl
@@ -14,7 +13,7 @@ structure Context where
 structure State where
   options : Protocol.Options := {}
   nextId : Nat := 0
-  goalStates : Std.HashMap Nat GoalState := Std.HashMap.emptyWithCapacity
+  goalStates : Std.HashMap Nat GoalState := Lean.HashMap.empty
 
   env : Environment
   -- Parser state
@@ -68,10 +67,10 @@ def runCoreM { α } (coreM : CoreM α) : EMainM α := do
       return Except.error ({ error := "exception", desc } : Protocol.InteractionError)
     finally
       for {msg, ..} in (← getTraceState).traces do
-        IO.eprintln (← msg.format.toIO)
+        IO.eprintln (← msg.format)
       resetTraceState
   if let .some token := cancelTk? then
-    runCancelTokenWithTimeout token (timeout := .ofBitVec options.timeout)
+    runCancelTokenWithTimeout token (timeout := .ofNat options.timeout)
   let (result, state') ← match ← (coreM'.run coreCtx coreState).toIO' with
     | Except.error (Exception.error _ msg)   => Protocol.throw $ { error := "core", desc := ← msg.toString }
     | Except.error (Exception.internal id _) => Protocol.throw $ { error := "internal", desc := (← id.getName).toString }
@@ -231,7 +230,7 @@ def execute (command: Protocol.Command): MainM Json := do
   reset (_: Protocol.Reset): EMainM Protocol.StatResult := do
     let state ← getMainState
     let nGoals := state.goalStates.size
-    set { state with nextId := 0, goalStates := .emptyWithCapacity }
+    set { state with nextId := 0, goalStates := .empty }
     return { nGoals }
   stat (_: Protocol.Stat): EMainM Protocol.StatResult := do
     let state ← getMainState
@@ -301,9 +300,9 @@ def execute (command: Protocol.Command): MainM Json := do
       return { stateId, root := goalState.root.name.toString }
   goal_tactic (args: Protocol.GoalTactic): EMainM Protocol.GoalTacticResult := do
     let state ← getMainState
-    let .some goalState := state.goalStates[args.stateId]? |
+    let .some goalState := state.goalStates.find? args.stateId |
       Protocol.throw $ errorIndex s!"Invalid state index {args.stateId}"
-    let .some goal := goalState.goals[args.goalId]? |
+    let .some goal := goalState.goals.get? args.goalId |
       Protocol.throw $ errorIndex s!"Invalid goal index {args.goalId}"
     let nextGoalState?: Except _ TacticResult ← liftTermElabM do
       -- NOTE: Should probably use a macro to handle this...
@@ -361,11 +360,11 @@ def execute (command: Protocol.Command): MainM Json := do
       return { messages? := .some messages }
   goal_continue (args: Protocol.GoalContinue): EMainM Protocol.GoalContinueResult := do
     let state ← getMainState
-    let .some target := state.goalStates[args.target]? |
+    let .some target := state.goalStates.find? args.target |
       Protocol.throw $ errorIndex s!"Invalid state index {args.target}"
     let nextGoalState? : GoalState  ← match args.branch?, args.goals? with
       | .some branchId, .none => do
-        match state.goalStates[branchId]? with
+        match state.goalStates.find? branchId with
         | .none => Protocol.throw $ errorIndex s!"Invalid state index {branchId}"
         | .some branch => pure $ target.continue branch
       | .none, .some goals =>
@@ -388,7 +387,7 @@ def execute (command: Protocol.Command): MainM Json := do
     return {}
   goal_print (args: Protocol.GoalPrint): EMainM Protocol.GoalPrintResult := do
     let state ← getMainState
-    let .some goalState := state.goalStates[args.stateId]? |
+    let .some goalState := state.goalStates.find? args.stateId |
       Protocol.throw $ errorIndex s!"Invalid state index {args.stateId}"
     let result ← liftMetaM <| goalPrint
         goalState
@@ -400,7 +399,7 @@ def execute (command: Protocol.Command): MainM Json := do
     return result
   goal_save (args: Protocol.GoalSave): EMainM Protocol.GoalSaveResult := do
     let state ← getMainState
-    let .some goalState := state.goalStates[args.id]? |
+    let .some goalState := state.goalStates.find? args.id |
       Protocol.throw $ errorIndex s!"Invalid state index {args.id}"
     goalStatePickle goalState args.path
     return {}

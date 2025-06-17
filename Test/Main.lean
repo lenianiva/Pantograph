@@ -43,7 +43,6 @@ def main (args: List String) := do
     (imports := #[`Init])
     (opts := {})
     (trustLevel := 1)
-    (loadExts := true)
 
   let suites: List (String × (Lean.Environment → List (String × IO LSpec.TestSeq))) := [
     ("Environment", Environment.suite),

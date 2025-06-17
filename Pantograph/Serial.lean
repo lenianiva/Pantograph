@@ -1,8 +1,9 @@
+import Pantograph.Adaptor
+import Pantograph.Goal
+
 import Lean.Environment
 import Lean.Replay
 import Init.System.IOError
-import Std.Data.HashMap
-import Pantograph.Goal
 
 /-!
 Input/Output functions
@@ -63,8 +64,8 @@ def resurrectEnvironment
   (imports : Array Import)
   (map₂ : PHashMap Name ConstantInfo)
   : IO Environment := do
-  let env ← importModules imports {} 0 (loadExts := true)
-  env.replay (Std.HashMap.ofList map₂.toList)
+  let env ← importModules imports {} 0
+  env.replay (Lean.HashMap.ofList map₂.toList)
 /--
 Unpickle an `Environment` from disk.
 
@@ -149,14 +150,14 @@ def goalStateUnpickle (path : System.FilePath) (env : Environment)
     Option (MVarId × MVarId × List MVarId) ×
     Option (MVarId × Expr)
   ) path
-  let env ← env.replay (Std.HashMap.ofList map₂.toList)
+  let env ← env.replay (Lean.HashMap.ofList map₂.toList)
   let goalState := {
     savedState := {
       term := {
         meta := {
           core := {
             compactCore with
-            passedHeartbeats := 0,
+            passedHearbeats := 0,
             env,
           },
           meta,

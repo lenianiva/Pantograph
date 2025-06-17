@@ -1,10 +1,11 @@
 /-
 This file handles "Delation": The conversion of Kernel view into Search view.
 -/
-import Lean
-import Std.Data.HashMap
+import Pantograph.Adaptor
 import Pantograph.Goal
 import Pantograph.Protocol
+
+import Lean.Meta
 
 open Lean
 
@@ -123,7 +124,7 @@ partial def instantiateDelayedMVars (expr : Expr) : MetaM Expr :=
       else if let some { fvars, mvarIdPending } ← getDelayedMVarAssignment? mvarId then
         if ← isTracingEnabledFor `Pantograph.Delate then
           let substTableStr := ",".intercalate $
-            Array.zipWith (λ fvar assign => s!"{fvar.fvarId!.name} := {assign}") fvars args |>.toList
+            Array.zipWith fvars args (λ fvar assign => s!"{fvar.fvarId!.name} := {assign}") |>.toList
           trace[Pantograph.Delate]"MD ?{mvarId.name} := ?{mvarIdPending.name} [{substTableStr}]"
 
         if args.size < fvars.size then
@@ -195,10 +196,10 @@ def toDelayedMVarInvocation (e: Expr): MetaM (Option DelayedMVarInvocation) := d
   assert! args.size ≥ decl.fvars.size
   assert! !(← mvarIdPending.isAssigned)
   assert! !(← mvarIdPending.isDelayedAssigned)
-  let fvarArgMap: Std.HashMap FVarId Expr := Std.HashMap.ofList $ (decl.fvars.map (·.fvarId!) |>.zip args).toList
+  let fvarArgMap: Std.HashMap FVarId Expr := Lean.HashMap.ofList $ (decl.fvars.map (·.fvarId!) |>.zip args).toList
   let subst ← mvarDecl.lctx.foldlM (init := []) λ acc localDecl => do
     let fvarId := localDecl.fvarId
-    let a := fvarArgMap[fvarId]?
+    let a := fvarArgMap.find? fvarId
     return acc ++ [(fvarId, a)]
 
   assert! decl.fvars.all (λ fvar => mvarDecl.lctx.findFVar? fvar |>.isSome)

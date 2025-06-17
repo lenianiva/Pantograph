@@ -1,5 +1,6 @@
+import Pantograph.Adaptor
+
 import Lean.Meta
-import Std.Data.HashMap
 
 open Lean
 
@@ -41,7 +42,7 @@ def resetFVarMap : MetaTranslateM Unit := do
 mutual
 private partial def translateLevel (srcLevel: Level) : MetaTranslateM Level := do
   let sourceMCtx ← getSourceMCtx
-  let (_, level) := instantiateLevelMVarsImp sourceMCtx srcLevel
+  let level ← Meta.withMCtx sourceMCtx do instantiateLevelMVars srcLevel
   match level with
   | .zero => return .zero
   | .succ inner => do
@@ -67,14 +68,14 @@ private partial def translateExpr (srcExpr: Expr) : MetaTranslateM Expr := do
     let state ← get
     match e with
     | .fvar fvarId =>
-      let .some fvarId' := state.fvarMap[fvarId]? | panic! s!"FVar id not registered: {fvarId.name}"
+      let .some fvarId' := state.fvarMap.find? fvarId | panic! s!"FVar id not registered: {fvarId.name}"
       -- Delegating this to `Meta.check` later
       --assert! (← getLCtx).contains fvarId'
       return .done $ .fvar fvarId'
     | .mvar mvarId => do
       -- Must not be assigned
       assert! !(sourceMCtx.eAssignment.contains mvarId)
-      match state.mvarMap[mvarId]? with
+      match state.mvarMap.find? mvarId with
       | .some mvarId' => do
         return .done $ .mvar mvarId'
       | .none => do
@@ -117,7 +118,7 @@ partial def translateLCtx : MetaTranslateM LocalContext := do
   ) lctx
 
 partial def translateMVarId (srcMVarId: MVarId) : MetaTranslateM MVarId := do
-  if let .some mvarId' := (← get).mvarMap[srcMVarId]? then
+  if let .some mvarId' := (← get).mvarMap.find? srcMVarId then
     trace[Pantograph.Frontend.MetaTranslate] "Existing mvar id {srcMVarId.name} → {mvarId'.name}"
     return mvarId'
   let mvarId' ← Meta.withLCtx .empty #[] do
@@ -129,7 +130,7 @@ partial def translateMVarId (srcMVarId: MVarId) : MetaTranslateM MVarId := do
         let target' ← translateExpr srcDecl.type
         let mvar' ← Meta.mkFreshExprMVar target' srcDecl.kind srcDecl.userName
         let mvarId' := mvar'.mvarId!
-        if let .some { fvars, mvarIdPending }:= (← getSourceMCtx).getDelayedMVarAssignmentExp srcMVarId then
+        if let .some { fvars, mvarIdPending }:= (← getSourceMCtx).getDelayedMVarAssignmentCore? srcMVarId then
           -- Map the fvars in the pending context.
           let mvarIdPending' ← translateMVarId mvarIdPending
           let fvars' ← mvarIdPending'.withContext $ fvars.mapM translateExpr

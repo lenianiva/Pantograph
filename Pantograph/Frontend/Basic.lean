@@ -1,3 +1,5 @@
+import Pantograph.Adaptor
+
 import Lean.Parser
 import Lean.Elab.Frontend
 

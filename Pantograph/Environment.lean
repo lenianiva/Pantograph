@@ -135,14 +135,14 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): Protocol.
       let declRange? ← findDeclarationRanges? name
       let sourceStart? := declRange?.map (·.range.pos)
       let sourceEnd? := declRange?.map (·.range.endPos)
-      .pure {
+      pure {
         result with
         sourceUri?,
         sourceStart?,
         sourceEnd?,
       }
     else
-      .pure result
+      pure result
   return result
 /-- Elaborates and adds a declaration to the `CoreM` environment. -/
 @[export pantograph_env_add_m]

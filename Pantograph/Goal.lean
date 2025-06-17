@@ -198,7 +198,7 @@ private def collectAllErroredMVars (src : MVarId) : Elab.TermElabM (List MVarId)
   --let _ ← Elab.Term.logUnassignedUsingErrorInfos descendants
   let mut alreadyVisited : MVarIdSet := {}
   let mut result : MVarIdSet := {}
-  for { mvarId, .. } in (← get).mvarErrorInfos do
+  for ( mvarId, _ ) in (← get).mvarErrorInfos do
     unless alreadyVisited.contains mvarId do
       alreadyVisited := alreadyVisited.insert mvarId
       /- The metavariable `mvarErrorInfo.mvarId` may have been assigned or

@@ -8,7 +8,7 @@ open Lean
 namespace Pantograph.Test.Serial
 
 def tempPath : IO System.FilePath := do
-  Prod.snd <$> IO.FS.createTempFile
+  return ⟨"/tmp/pickle.leanobj"⟩
 
 structure MultiState where
   coreContext : Core.Context
