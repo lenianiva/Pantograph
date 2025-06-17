@@ -131,9 +131,8 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): Protocol.
       } }
     | _ => pure core
   let result ← if args.source?.getD false then
-      let srcSearchPath ← getSrcSearchPath
       try
-        let sourceUri? ← module?.mapM (findLean srcSearchPath ·)
+        let sourceUri? ← module?.bindM (Server.documentUriFromModule? ·)
         let declRange? ← findDeclarationRanges? name
         let sourceStart? := declRange?.map (·.range.pos)
         let sourceEnd? := declRange?.map (·.range.endPos)
@@ -143,7 +142,7 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): Protocol.
           sourceStart?,
           sourceEnd?,
         }
-      catch _ =>
+      catch _e =>
         .pure result
     else
       .pure result
