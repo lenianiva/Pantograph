@@ -260,6 +260,7 @@ protected def GoalState.tryTacticM
     (state: GoalState) (goal: MVarId) (tacticM: Elab.Tactic.TacticM Unit)
     (guardMVarErrors : Bool := false)
     : Elab.TermElabM TacticResult := do
+  assert! ¬ (← goal.isAssigned)
   let prevMessageLength := state.coreState.messages.toList.length
   try
     let nextState ← state.step goal tacticM guardMVarErrors
@@ -289,7 +290,6 @@ protected def GoalState.tryTactic (state: GoalState) (goal: MVarId) (tactic: Str
     (fileName := ← getFileName) with
     | .ok stx => pure $ stx
     | .error error => return .parseError error
-  assert! ¬ (← goal.isAssigned)
   state.tryTacticM goal (Elab.Tactic.evalTactic tactic) true
 
 protected def GoalState.tryAssign (state: GoalState) (goal: MVarId) (expr: String):
