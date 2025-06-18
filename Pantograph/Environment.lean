@@ -4,6 +4,7 @@ import Pantograph.Protocol
 import Pantograph.Serial
 import Lean.Environment
 import Lean.Replay
+import Lean.Util.Path
 
 open Lean
 open Pantograph
@@ -130,17 +131,19 @@ def inspect (args: Protocol.EnvInspect) (options: @&Protocol.Options): Protocol.
       } }
     | _ => pure core
   let result ← if args.source?.getD false then
-      let srcSearchPath ← initSrcSearchPath
-      let sourceUri? ← module?.bindM (Server.documentUriFromModule srcSearchPath ·)
-      let declRange? ← findDeclarationRanges? name
-      let sourceStart? := declRange?.map (·.range.pos)
-      let sourceEnd? := declRange?.map (·.range.endPos)
-      .pure {
-        result with
-        sourceUri?,
-        sourceStart?,
-        sourceEnd?,
-      }
+      try
+        let sourceUri? ← module?.bindM (Server.documentUriFromModule? ·)
+        let declRange? ← findDeclarationRanges? name
+        let sourceStart? := declRange?.map (·.range.pos)
+        let sourceEnd? := declRange?.map (·.range.endPos)
+        .pure {
+          result with
+          sourceUri? := sourceUri?.map (toString ·),
+          sourceStart?,
+          sourceEnd?,
+        }
+      catch _e =>
+        .pure result
     else
       .pure result
   return result

@@ -104,7 +104,7 @@ example : (1 : Nat) + (2 * 3) = 1 + (4 - 3) + (6 - 4) + 3 := by
   simp
 def test_tactic_timeout : Test := do
   step "goal.start" ({ expr := "(1 : Nat) + (2 * 3) = 1 + (4 - 3) + (6 - 4) + 3" }: Protocol.GoalStart)
-   ({ stateId := 0, root := "_uniq.319" }: Protocol.GoalStartResult)
+   ({ stateId := 0, root := "_uniq.355" }: Protocol.GoalStartResult)
   -- timeout of 10 milliseconds
   step "options.set" ({ timeout? := .some 10 } : Protocol.OptionsSet)
    ({ }: Protocol.OptionsSetResult)
@@ -277,9 +277,9 @@ def test_frontend_process_sorry : Test := do
 def test_import_open : Test := do
   let header := "import Init\nopen Nat\nuniverse u"
   let goal1: Protocol.Goal := {
-    name := "_uniq.67",
+    name := "_uniq.77",
     target := { pp? := .some "n + 1 = n.succ" },
-    vars := #[{ name := "_uniq.66", userName := "n", type? := .some { pp? := .some "Nat" }}],
+    vars := #[{ name := "_uniq.76", userName := "n", type? := .some { pp? := .some "Nat" }}],
   }
   step "frontend.process"
     ({
@@ -294,7 +294,7 @@ def test_import_open : Test := do
      ],
    }: Protocol.FrontendProcessResult)
   step "goal.start" ({ expr := "∀ (n : Nat), n + 1 = Nat.succ n"} : Protocol.GoalStart)
-   ({ stateId := 0, root := "_uniq.65" }: Protocol.GoalStartResult)
+   ({ stateId := 0, root := "_uniq.75" }: Protocol.GoalStartResult)
   step "goal.tactic" ({ stateId := 0, tactic? := .some "intro n" }: Protocol.GoalTactic)
    ({ nextStateId? := .some 1, goals? := #[goal1], }: Protocol.GoalTacticResult)
   step "goal.tactic" ({ stateId := 1, tactic? := .some "apply add_one" }: Protocol.GoalTactic)

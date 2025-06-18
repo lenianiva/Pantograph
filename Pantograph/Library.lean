@@ -69,7 +69,7 @@ def createCoreContext (options: Array String): IO Core.Context := do
 @[export pantograph_create_core_state]
 def createCoreState (imports: Array String): IO Core.State := do
   let env ← Lean.importModules
-    (imports := imports.map (λ str => { module := str.toName, runtimeOnly := false }))
+    (imports := imports.map (λ str => { module := str.toName }))
     (opts := {})
     (trustLevel := 1)
     (loadExts := true)

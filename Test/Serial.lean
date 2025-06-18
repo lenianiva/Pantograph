@@ -7,9 +7,6 @@ open Lean
 
 namespace Pantograph.Test.Serial
 
-def tempPath : IO System.FilePath := do
-  Prod.snd <$> IO.FS.createTempFile
-
 structure MultiState where
   coreContext : Core.Context
   env: Environment
@@ -35,7 +32,7 @@ def test_environment_pickling : TestM Unit := do
   let coreDst : Core.State := { env := ← getEnv }
 
   let name := `mystery
-  let envPicklePath ← tempPath
+  IO.FS.withTempFile λ _ envPicklePath => do
   let ((), _) ← runCoreM coreSrc do
     let type: Expr := .forallE `p (.sort 0) (.forallE `h (.bvar 0) (.bvar 1) .default) .default
     let value: Expr := .lam `p (.sort 0) (.lam `h (.bvar 0) (.bvar 0) .default) .default
@@ -56,13 +53,10 @@ def test_environment_pickling : TestM Unit := do
     let anotherName := `mystery2
     checkTrue s!"Doesn't have symbol {anotherName}" (env'.find? anotherName).isNone
 
-  IO.FS.removeFile envPicklePath
-
 def test_goal_state_pickling_simple : TestM Unit := do
   let coreSrc : Core.State := { env := ← getEnv }
   let coreDst : Core.State := { env := ← getEnv }
-  let statePath ← tempPath
-
+  IO.FS.withTempFile λ _ statePath => do
   let type: Expr := .forallE `p (.sort 0) (.forallE `h (.bvar 0) (.bvar 1) .default) .default
   let stateGenerate : MetaM GoalState := runTermElabMInMeta do
     GoalState.create type
@@ -77,8 +71,6 @@ def test_goal_state_pickling_simple : TestM Unit := do
       goalState.goals.mapM λ goal => goalState.withContext goal goal.getType
     let types ← metaM.run'
     checkTrue "Goals" $ types[0]!.equal type
-
-  IO.FS.removeFile statePath
 
 structure Test where
   name : String

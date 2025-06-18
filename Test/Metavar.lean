@@ -25,8 +25,8 @@ def test_instantiate_mvar: TestM Unit := do
       addTest $ assertUnreachable e
       return ()
   let t ← Lean.Meta.inferType expr
-  addTest $ LSpec.check "typing" ((toString (← serializeExpressionSexp t)) =
-    "((:c LE.le) (:c Nat) (:c instLENat) ((:c OfNat.ofNat) (:mv _uniq.2) (:lit 2) (:mv _uniq.3)) ((:c OfNat.ofNat) (:mv _uniq.14) (:lit 5) (:mv _uniq.15)))")
+  checkEq "typing" (toString (← serializeExpressionSexp t))
+    "((:c LE.le) (:c Nat) (:c instLENat) ((:c OfNat.ofNat) (:mv _uniq.2) (:lit 2) (:mv _uniq.3)) ((:c OfNat.ofNat) (:mv _uniq.15) (:lit 5) (:mv _uniq.16)))"
   return ()
 
 def startProof (expr: String): TestM (Option GoalState) := do
@@ -118,8 +118,9 @@ def test_m_couple_simp: TestM Unit := do
   let serializedState1 ← state1.serializeGoals (options := { ← read with printDependentMVars := true })
   addTest $ LSpec.check "apply Nat.le_trans" (serializedState1.map (·.target.pp?) =
     #[.some "2 ≤ ?m", .some "?m ≤ 5", .some "Nat"])
+  let n := state1.goals[2]!
   addTest $ LSpec.check "(metavariables)" (serializedState1.map (·.target.dependentMVars?.get!) =
-    #[#["_uniq.38"], #["_uniq.38"], #[]])
+    #[#[toString n.name], #[toString n.name], #[]])
 
   let state2 ← match ← state1.tacticOn (goalId := 2) (tactic := "exact 2") with
     | .success state _ => pure state
@@ -158,10 +159,10 @@ def test_m_couple_simp: TestM Unit := do
       addTest $ assertUnreachable "(5 root)"
       return ()
   let rootStr: String := toString (← Lean.Meta.ppExpr root)
-  addTest $ LSpec.check "(5 root)" (rootStr = "Nat.le_trans (of_eq_true (Init.Data.Nat.Basic._auxLemma.4 2)) (of_eq_true (eq_true_of_decide (Eq.refl true)))")
+  checkEq "(5 root)" rootStr "Nat.le_trans (of_eq_true (_proof_4✝ 2)) (of_eq_true (eq_true_of_decide (Eq.refl true)))"
   let unfoldedRoot ←  unfoldAuxLemmas root
-  addTest $ LSpec.check "(5 root)" ((toString (← Lean.Meta.ppExpr unfoldedRoot)) =
-    "Nat.le_trans (of_eq_true (eq_true (Nat.le_refl 2))) (of_eq_true (eq_true_of_decide (Eq.refl true)))")
+  checkEq "(5 root)" (toString (← Lean.Meta.ppExpr unfoldedRoot))
+    "Nat.le_trans (of_eq_true (_proof_4✝ 2)) (of_eq_true (eq_true_of_decide (Eq.refl true)))"
   return ()
 
 def test_proposition_generation: TestM Unit := do
@@ -258,7 +259,7 @@ def test_partial_continuation: TestM Unit := do
 
   -- Continuation should fail if the state does not exist:
   match state0.resume coupled_goals with
-  | .error error => addTest $ LSpec.check "(continuation failure message)" (error = "Goals [_uniq.40, _uniq.41, _uniq.38, _uniq.47] are not in scope")
+  | .error error => addTest $ LSpec.check "(continuation failure message)" (error = "Goals [_uniq.44, _uniq.45, _uniq.42, _uniq.51] are not in scope")
   | .ok _ => addTest $ assertUnreachable "(continuation failure)"
   -- Continuation should fail if some goals have not been solved
   match state2.continue state1 with
