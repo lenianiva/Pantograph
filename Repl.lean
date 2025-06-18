@@ -125,7 +125,7 @@ def frontend_process (args: Protocol.FrontendProcess): EMainM Protocol.FrontendP
   let frontendM: Elab.Frontend.FrontendM (List CompilationUnit) :=
     Frontend.mapCompilationSteps λ step => do
     let boundary := (step.src.startPos.byteIdx, step.src.stopPos.byteIdx)
-    let invocations: Option (List Protocol.InvokedTactic) ← if args.invocations then
+    let invocations: Option (List Protocol.InvokedTactic) ← if args.invocations?.isSome then
         Frontend.collectTacticsFromCompilationStep step
       else
         pure []
@@ -152,6 +152,10 @@ def frontend_process (args: Protocol.FrontendProcess): EMainM Protocol.FrontendP
     if let .some scope := state'.commandState.scopes.head? then
       -- modify the scope
       set { ← getMainState with scope }
+  if let .some fileName := args.invocations? then
+    let units := li.map λ unit => { invocations? := .some unit.invocations }
+    let data : Protocol.FrontendData := { units }
+    IO.FS.writeFile fileName (toJson data |>.compress)
   let units ← li.mapM λ step => withEnv step.env do
     let newConstants? := if args.newConstants then
         .some $ step.newConstants.toArray.map λ name => name.toString
@@ -167,11 +171,11 @@ def frontend_process (args: Protocol.FrontendProcess): EMainM Protocol.FrontendP
         let stateId ← newGoalState state
         let srcBoundaries := srcBoundaries.toArray.map (λ (b, e) => (b.byteIdx, e.byteIdx))
         pure (.some stateId, .some goals, .some srcBoundaries)
-    let invocations? := if args.invocations then .some step.invocations else .none
+    let nInvocations? := if args.invocations?.isSome then .some step.invocations.length else .none
     return {
       boundary := step.boundary,
       messages := step.messages,
-      invocations?,
+      nInvocations?,
       goalStateId?,
       goals?,
       goalSrcBoundaries?,
