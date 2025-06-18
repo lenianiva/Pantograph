@@ -7,9 +7,6 @@ open Lean
 
 namespace Pantograph.Test.Serial
 
-def tempPath : IO System.FilePath := do
-  return ⟨"/tmp/pickle.leanobj"⟩
-
 structure MultiState where
   coreContext : Core.Context
   env: Environment
@@ -35,7 +32,7 @@ def test_environment_pickling : TestM Unit := do
   let coreDst : Core.State := { env := ← getEnv }
 
   let name := `mystery
-  let envPicklePath ← tempPath
+  let envPicklePath := "/tmp/pickle-env.leanobj"
   let ((), _) ← runCoreM coreSrc do
     let type: Expr := .forallE `p (.sort 0) (.forallE `h (.bvar 0) (.bvar 1) .default) .default
     let value: Expr := .lam `p (.sort 0) (.lam `h (.bvar 0) (.bvar 0) .default) .default
@@ -61,7 +58,7 @@ def test_environment_pickling : TestM Unit := do
 def test_goal_state_pickling_simple : TestM Unit := do
   let coreSrc : Core.State := { env := ← getEnv }
   let coreDst : Core.State := { env := ← getEnv }
-  let statePath ← tempPath
+  let statePath := "/tmp/pickle-state.leanobj"
 
   let type: Expr := .forallE `p (.sort 0) (.forallE `h (.bvar 0) (.bvar 1) .default) .default
   let stateGenerate : MetaM GoalState := runTermElabMInMeta do
