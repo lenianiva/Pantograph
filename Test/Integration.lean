@@ -71,8 +71,9 @@ def test_malformed_command : Test := do
     Protocol.InteractionError) (name? := .some "JSON Deserialization")
 def test_tactic : Test := do
   let varX := { name := "_uniq.10", userName := "x", type? := .some { pp? := .some "Prop" }}
+  let goal1id := 11
   let goal1: Protocol.Goal := {
-    name := "_uniq.11",
+    name := s!"_uniq.{goal1id}",
     target := { pp? := .some "∀ (q : Prop), x ∨ q → q ∨ x" },
     vars := #[varX],
   }
@@ -90,13 +91,13 @@ def test_tactic : Test := do
    ({ nextStateId? := .some 1, goals? := #[goal1], }: Protocol.GoalTacticResult)
   step "goal.print" ({ stateId := 1, parentExpr? := .some true, rootExpr? := .some true }: Protocol.GoalPrint)
    ({
-     root? := .some { pp? := "fun x => ?m.11"},
-     parent? := .some { pp? := .some "fun x => ?m.11" },
+     root? := .some { pp? := s!"fun x => ?m.12 x"},
+     parent? := .some { pp? := .some s!"fun x => ?m.12 x" },
    }: Protocol.GoalPrintResult)
   step "goal.tactic" ({ stateId := 1, tactic? := .some "intro y" }: Protocol.GoalTactic)
    ({ nextStateId? := .some 2, goals? := #[goal2], }: Protocol.GoalTacticResult)
   step "goal.tactic" ({ stateId := 1, tactic? := .some "apply Nat.le_of_succ_le" }: Protocol.GoalTactic)
-   ({ messages? := .some #["tactic 'apply' failed, failed to unify\n  ∀ {m : Nat}, Nat.succ ?n ≤ m → ?n ≤ m\nwith\n  ∀ (q : Prop), x ∨ q → q ∨ x\nx : Prop\n⊢ ∀ (q : Prop), x ∨ q → q ∨ x"] }:
+   ({ messages? := .some #["tactic 'apply' failed, failed to unify\n  ∀ {m : Nat}, ?n.succ ≤ m → ?n ≤ m\nwith\n  ∀ (q : Prop), x ∨ q → q ∨ x\nx : Prop\n⊢ ∀ (q : Prop), x ∨ q → q ∨ x"] }:
     Protocol.GoalTacticResult)
   step "goal.tactic" ({ stateId := 0, tactic? := .some "sorry" }: Protocol.GoalTactic)
    ({ nextStateId? := .some 3, goals? := .some #[], hasSorry := true }: Protocol.GoalTacticResult)
@@ -104,7 +105,7 @@ example : (1 : Nat) + (2 * 3) = 1 + (4 - 3) + (6 - 4) + 3 := by
   simp
 def test_tactic_timeout : Test := do
   step "goal.start" ({ expr := "(1 : Nat) + (2 * 3) = 1 + (4 - 3) + (6 - 4) + 3" }: Protocol.GoalStart)
-   ({ stateId := 0, root := "_uniq.319" }: Protocol.GoalStartResult)
+   ({ stateId := 0, root := "_uniq.310" }: Protocol.GoalStartResult)
   -- timeout of 10 milliseconds
   step "options.set" ({ timeout? := .some 10 } : Protocol.OptionsSet)
    ({ }: Protocol.OptionsSetResult)
@@ -129,27 +130,27 @@ def test_automatic_mode (automatic: Bool): Test := do
     ],
   }
   let goal2l: Protocol.Goal := {
-    name := "_uniq.61",
+    name := "_uniq.59",
     userName? := .some "inl",
     target := { pp? := .some "q ∨ p" },
     vars := varsPQ ++ #[
-      { name := "_uniq.49", userName := "h✝", type? := .some { pp? := .some "p" }, isInaccessible := true}
+      { name := "_uniq.47", userName := "h✝", type? := .some { pp? := .some "p" }, isInaccessible := true}
     ],
   }
   let goal2r: Protocol.Goal := {
-    name := "_uniq.74",
+    name := "_uniq.72",
     userName? := .some "inr",
     target := { pp? := .some "q ∨ p" },
     vars := varsPQ ++ #[
-      { name := "_uniq.62", userName := "h✝", type? := .some { pp? := .some "q" }, isInaccessible := true}
+      { name := "_uniq.60", userName := "h✝", type? := .some { pp? := .some "q" }, isInaccessible := true}
     ],
   }
   let goal3l: Protocol.Goal := {
-    name := "_uniq.80",
+    name := "_uniq.78",
     userName? := .some "inl.h",
     target := { pp? := .some "p" },
     vars := varsPQ ++ #[
-      { name := "_uniq.49", userName := "h✝", type? := .some { pp? := .some "p" }, isInaccessible := true}
+      { name := "_uniq.47", userName := "h✝", type? := .some { pp? := .some "p" }, isInaccessible := true}
     ],
   }
   step "options.set" ({automaticMode? := .some automatic}: Protocol.OptionsSet)
@@ -279,9 +280,9 @@ def test_frontend_process_sorry : Test := do
 def test_import_open : Test := do
   let header := "import Init\nopen Nat\nuniverse u"
   let goal1: Protocol.Goal := {
-    name := "_uniq.67",
+    name := "_uniq.64",
     target := { pp? := .some "n + 1 = n.succ" },
-    vars := #[{ name := "_uniq.66", userName := "n", type? := .some { pp? := .some "Nat" }}],
+    vars := #[{ name := "_uniq.63", userName := "n", type? := .some { pp? := .some "Nat" }}],
   }
   step "frontend.process"
     ({
@@ -296,7 +297,7 @@ def test_import_open : Test := do
      ],
    }: Protocol.FrontendProcessResult)
   step "goal.start" ({ expr := "∀ (n : Nat), n + 1 = Nat.succ n"} : Protocol.GoalStart)
-   ({ stateId := 0, root := "_uniq.65" }: Protocol.GoalStartResult)
+   ({ stateId := 0, root := "_uniq.62" }: Protocol.GoalStartResult)
   step "goal.tactic" ({ stateId := 0, tactic? := .some "intro n" }: Protocol.GoalTactic)
    ({ nextStateId? := .some 1, goals? := #[goal1], }: Protocol.GoalTacticResult)
   step "goal.tactic" ({ stateId := 1, tactic? := .some "apply add_one" }: Protocol.GoalTactic)
