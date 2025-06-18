@@ -246,7 +246,7 @@ def test_frontend_process : Test := do
           },
         ]
     } ] }
-  IO.FS.removeDir tempdir
+  IO.FS.removeDirAll tempdir
 
 example : 1 + 2 = 3 := rfl
 example (p: Prop): p → p := by simp
