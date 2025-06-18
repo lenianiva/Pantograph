@@ -99,7 +99,7 @@ def test_symbol_location (env : Environment) : TestT IO Unit := do
     checkEq "pos" (result.sourceStart?.map (·.column)) <| .some 0
     checkEq "pos" (result.sourceEnd?.map (·.column)) <| .some 88
     let { imports, constNames, .. } ← Environment.moduleRead ⟨"Init.Data.Nat.Basic"⟩
-    checkEq "imports" imports #["Init.SimpLemmas", "Init.Data.NeZero"]
+    checkEq "imports" imports #["Init.SimpLemmas"]
     checkTrue "constNames" $ constNames.contains "Nat.succ_add"
 
 def test_matcher (env : Environment) : TestT IO Unit := do

@@ -192,7 +192,7 @@ def test_proposition_generation: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check ":= λ (x: Nat), _" ((← state2.serializeGoals (options := ← read)).map (·.target.pp?) =
-    #[.some "?m.30 x"])
+    #[.some "?m.29 x"])
   checkTrue "(2 root)" $ ¬ state2.isSolved
 
   let assign := "Eq.refl x"
@@ -239,7 +239,7 @@ def test_partial_continuation: TestM Unit := do
       return ()
     | .ok state => pure state
   addTest $ LSpec.check "(continue 1)" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
-    #[.some "2 ≤ Nat.succ ?m", .some "Nat.succ ?m ≤ 5", .some "Nat"])
+    #[.some "2 ≤ ?m.succ", .some "?m.succ ≤ 5", .some "Nat"])
   checkTrue "(2 root)" state1b.rootExpr?.get!.hasExprMVar
 
   -- Roundtrip
@@ -253,7 +253,7 @@ def test_partial_continuation: TestM Unit := do
       return ()
     | .ok state => pure state
   addTest $ LSpec.check "(continue 2)" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
-    #[.some "2 ≤ Nat.succ ?m", .some "Nat.succ ?m ≤ 5", .some "Nat"])
+    #[.some "2 ≤ ?m.succ", .some "?m.succ ≤ 5", .some "Nat"])
   checkTrue "(2 root)" state1b.rootExpr?.get!.hasExprMVar
 
   -- Continuation should fail if the state does not exist:
