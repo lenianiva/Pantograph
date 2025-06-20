@@ -74,22 +74,21 @@ def test_goal_state_simple : TestM Unit := do
 
 def test_pickling_env_extensions : TestM Unit := do
   let coreSrc : Core.State := { env := ← getEnv }
+  let p := mkIdent `p
+  let h := mkIdent `h
   let ((), _) ← runCoreM coreSrc $ transformTestT runTermElabMInCore do
-    let .ok e ← elabTerm (← `(term|2 ≤ 5)) .none | unreachable!
+    let .ok e ← elabTerm (← `(term|(2: Nat) ≤ 3 ∧ (3: Nat) ≤ 5)) .none | unreachable!
     let state ← GoalState.create e
-    let .success state _ ← state.tacticOn' 0 (← `(tactic|apply Nat.le_trans)) | unreachable!
-    let .success state' _ ← state.tacticOn' 2 (← `(tactic|exact 3)) | unreachable!
-    let state := state'.immediateResume state
-    let .success state1 _ ← state.tacticOn' 1 (← `(tactic|simp)) | unreachable!
-    let parentExpr := state1.parentExpr?.get!
-    IO.println s!"{parentExpr}"
-    checkTrue "has aux lemma" $ parentExpr.getUsedConstants.any λ name => name.isAuxLemma
+    let .success state _ ← state.tacticOn' 0 (← `(tactic|apply And.intro)) | unreachable!
 
-    let state1 := state1.immediateResume state
-    let .success stateT _ ← state.tacticOn' 0 (← `(tactic|simp)) | unreachable!
-    let rootExpr:= stateT.rootExpr?.get!
-    IO.println s!"root is {rootExpr}"
-    checkTrue "has aux lemma" $ rootExpr.getUsedConstants.any λ name => name.isAuxLemma
+    let goal := state.goals[0]!
+    let (type, value) ← goal.withContext do
+      let .ok type ← elabTerm (← `(term|(2: Nat) ≤ 3)) (.some $ .sort 0) | unreachable!
+      let .ok value ← elabTerm (← `(term|sorry)) (.some type) | unreachable!
+      pure (type, value)
+    let .success state1 _ ← state.tryTacticM goal (Tactic.assignWithAuxLemma type value) | unreachable!
+    let parentExpr := state1.parentExpr?.get!
+    checkTrue "has aux lemma" $ parentExpr.getUsedConstants.any λ name => name.isAuxLemma
   return ()
 
 structure Test where

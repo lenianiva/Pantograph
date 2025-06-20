@@ -183,6 +183,26 @@ def buildGoal (nameType: List (String × String)) (target: String) (userName?: O
     })).toArray
   }
 
+namespace Tactic
+
+/-- Create an aux lemma and assigns it to `mvarId`, which is circuitous, but
+exercises the aux lemma generator. -/
+def assignWithAuxLemma (type value : Expr) : Elab.Tactic.TacticM Unit := do
+  let type ← instantiateMVars type
+  let value ← instantiateMVars value
+  if type.hasExprMVar then
+    throwError "Type has expression mvar"
+  if value.hasExprMVar then
+    throwError "value has expression mvar"
+  let goal ← Elab.Tactic.getMainGoal
+  goal.withContext do
+  let name ← Meta.mkAuxLemma [] type value
+  unless ← Meta.isDefEq type (← goal.getType) do
+    throwError "Type provided is incorrect"
+  goal.assign (.const name [])
+
+end Tactic
+
 end Test
 
 end Pantograph
