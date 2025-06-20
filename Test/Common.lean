@@ -169,9 +169,6 @@ def transformTestT { α } { μ μ' : Type → Type }
   set tests
   return a
 
-
-
-
 def cdeclOf (userName: Name) (type: Expr): Condensed.LocalDecl :=
   { userName, type }
 
