@@ -89,7 +89,7 @@ def test_pickling_env_extensions : TestM Unit := do
     let .success state1 _ ← state.tryTacticM goal (Tactic.assignWithAuxLemma type value) | unreachable!
     let parentExpr := state1.parentExpr?.get!
     checkTrue "src has aux lemma" $ parentExpr.getUsedConstants.any λ name => name.isAuxLemma
-    goalStatePickle state statePath
+    goalStatePickle state1 statePath
   let ((), _) ← runCoreM coreDst $ transformTestT runTermElabMInCore do
     let (state1, _) ← goalStateUnpickle statePath (← getEnv)
     let parentExpr := state1.parentExpr?.get!
