@@ -27,7 +27,7 @@ def runCoreM { α } (state : Core.State) (testCoreM : TestT CoreM α) : TestM (�
     set $ (← getThe LSpec.TestSeq) ++ tests
     return (a, state')
 
-def test_environment_pickling : TestM Unit := do
+def test_pickling_environment : TestM Unit := do
   let coreSrc : Core.State := { env := ← getEnv }
   let coreDst : Core.State := { env := ← getEnv }
 
@@ -36,13 +36,13 @@ def test_environment_pickling : TestM Unit := do
   let ((), _) ← runCoreM coreSrc do
     let type: Expr := .forallE `p (.sort 0) (.forallE `h (.bvar 0) (.bvar 1) .default) .default
     let value: Expr := .lam `p (.sort 0) (.lam `h (.bvar 0) (.bvar 0) .default) .default
-    let c := Lean.Declaration.defnDecl <| Lean.mkDefinitionValEx
+    let c := Declaration.defnDecl <| mkDefinitionValEx
       (name := name)
       (levelParams := [])
       (type := type)
       (value := value)
-      (hints := Lean.mkReducibilityHintsRegularEx 1)
-      (safety := Lean.DefinitionSafety.safe)
+      (hints := mkReducibilityHintsRegularEx 1)
+      (safety := .safe)
       (all := [])
     addDecl c
     environmentPickle (← getEnv) envPicklePath
@@ -53,7 +53,7 @@ def test_environment_pickling : TestM Unit := do
     let anotherName := `mystery2
     checkTrue s!"Doesn't have symbol {anotherName}" (env'.find? anotherName).isNone
 
-def test_goal_state_pickling_simple : TestM Unit := do
+def test_goal_state_simple : TestM Unit := do
   let coreSrc : Core.State := { env := ← getEnv }
   let coreDst : Core.State := { env := ← getEnv }
   IO.FS.withTempFile λ _ statePath => do
@@ -72,11 +72,31 @@ def test_goal_state_pickling_simple : TestM Unit := do
     let types ← metaM.run'
     checkTrue "Goals" $ types[0]!.equal type
 
+def test_pickling_env_extensions : TestM Unit := do
+  let coreSrc : Core.State := { env := ← getEnv }
+  let ((), _) ← runCoreM coreSrc $ transformTestT runTermElabMInCore do
+    let .ok e ← elabTerm (← `(term|2 ≤ 5)) .none | unreachable!
+    let state ← GoalState.create e
+    let .success state _ ← state.tacticOn' 0 (← `(tactic|apply Nat.le_trans)) | unreachable!
+    let .success state' _ ← state.tacticOn' 2 (← `(tactic|exact 3)) | unreachable!
+    let state := state'.immediateResume state
+    let .success state1 _ ← state.tacticOn' 1 (← `(tactic|simp)) | unreachable!
+    let parentExpr := state1.parentExpr?.get!
+    IO.println s!"{parentExpr}"
+    checkTrue "has aux lemma" $ parentExpr.getUsedConstants.any λ name => name.isAuxLemma
+
+    let state1 := state1.immediateResume state
+    let .success stateT _ ← state.tacticOn' 0 (← `(tactic|simp)) | unreachable!
+    let rootExpr:= stateT.rootExpr?.get!
+    IO.println s!"root is {rootExpr}"
+    checkTrue "has aux lemma" $ rootExpr.getUsedConstants.any λ name => name.isAuxLemma
+  return ()
+
 structure Test where
   name : String
   routine: TestM Unit
 
-protected def Test.run (test: Test) (env: Lean.Environment) : IO LSpec.TestSeq := do
+protected def Test.run (test: Test) (env: Environment) : IO LSpec.TestSeq := do
   -- Create the state
   let state : MultiState := {
     coreContext := ← createCoreContext #[],
@@ -87,10 +107,11 @@ protected def Test.run (test: Test) (env: Lean.Environment) : IO LSpec.TestSeq :
   | .error e =>
     return LSpec.check s!"Emitted exception: {e.toString}" (e.toString == "")
 
-def suite (env : Lean.Environment): List (String × IO LSpec.TestSeq) :=
+def suite (env : Environment): List (String × IO LSpec.TestSeq) :=
   let tests: List Test := [
-    { name := "environment_pickling", routine := test_environment_pickling, },
-    { name := "goal_state_pickling_simple", routine := test_goal_state_pickling_simple, },
+    { name := "environment", routine := test_pickling_environment, },
+    { name := "goal simple", routine := test_goal_state_simple, },
+    { name := "extensions", routine := test_pickling_env_extensions, },
   ]
   tests.map (fun test => (test.name, test.run env))
 
