@@ -74,8 +74,8 @@ def test_goal_state_simple : TestM Unit := do
 
 def test_pickling_env_extensions : TestM Unit := do
   let coreSrc : Core.State := { env := ← getEnv }
-  let p := mkIdent `p
-  let h := mkIdent `h
+  let coreDst : Core.State := { env := ← getEnv }
+  IO.FS.withTempFile λ _ statePath => do
   let ((), _) ← runCoreM coreSrc $ transformTestT runTermElabMInCore do
     let .ok e ← elabTerm (← `(term|(2: Nat) ≤ 3 ∧ (3: Nat) ≤ 5)) .none | unreachable!
     let state ← GoalState.create e
@@ -88,7 +88,13 @@ def test_pickling_env_extensions : TestM Unit := do
       pure (type, value)
     let .success state1 _ ← state.tryTacticM goal (Tactic.assignWithAuxLemma type value) | unreachable!
     let parentExpr := state1.parentExpr?.get!
-    checkTrue "has aux lemma" $ parentExpr.getUsedConstants.any λ name => name.isAuxLemma
+    checkTrue "src has aux lemma" $ parentExpr.getUsedConstants.any λ name => name.isAuxLemma
+    goalStatePickle state statePath
+  let ((), _) ← runCoreM coreDst $ transformTestT runTermElabMInCore do
+    let (state1, _) ← goalStateUnpickle statePath (← getEnv)
+    let parentExpr := state1.parentExpr?.get!
+    checkTrue "dst has aux lemma" $ parentExpr.getUsedConstants.any λ name => name.isAuxLemma
+
   return ()
 
 structure Test where
