@@ -260,13 +260,21 @@ def test_partial_continuation: TestM Unit := do
   -- Continuation should fail if the state does not exist:
   match state0.resume coupled_goals with
   | .error error => addTest $ LSpec.check "(continuation failure message)" (error = "Goals [_uniq.44, _uniq.45, _uniq.42, _uniq.51] are not in scope")
-  | .ok _ => addTest $ assertUnreachable "(continuation failure)"
+  | .ok _ => fail "(continuation should fail)"
   -- Continuation should fail if some goals have not been solved
   match state2.continue state1 with
   | .error error => addTest $ LSpec.check "(continuation failure message)" (error = "Target state has unresolved goals")
-  | .ok _ => addTest $ assertUnreachable "(continuation failure)"
+  | .ok _ => fail "(continuation should fail)"
   return ()
 
+def test_branch_unification : TestM Unit := do
+  let .ok expr ← elabTerm (← `(term|∀ (p q : Prop), p → p ∧ (p ∨ q))) .none | unreachable!
+  Meta.forallTelescope expr $ λ _ rootTarget => do
+    let state ← GoalState.create rootTarget
+    let .success state1 _  ← state.tacticOn 0 "exact p" | unreachable!
+    let .success state2 _  ← state.tacticOn 1 "apply Or.inl" | unreachable!
+    let state' := state2.replay state state1
+    return ()
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
@@ -274,7 +282,8 @@ def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
     ("2 < 5", test_m_couple),
     ("2 < 5", test_m_couple_simp),
     ("Proposition Generation", test_proposition_generation),
-    ("Partial Continuation", test_partial_continuation)
+    ("Partial Continuation", test_partial_continuation),
+    ("Branch Unification", test_branch_unification),
   ]
   tests.map (fun (name, test) => (name, proofRunner env test))
 
