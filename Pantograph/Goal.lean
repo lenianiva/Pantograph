@@ -190,7 +190,7 @@ descendants of `src`, replay the differential `src' - src` in `dst`. Colliding
 metavariable and lemma names will be automatically renamed to ensure there is no
 collision. This implements branch unification. Unification might be impossible
 if conflicting assignments exist. -/
-@[export pantograph_goal_state_replay]
+@[export pantograph_goal_state_replay_m]
 protected def GoalState.replay (dst : GoalState) (src src' : GoalState) : CoreM (Option GoalState) := do
   let srcNGen := src.coreState.ngen
   let srcNGen' := src'.coreState.ngen
