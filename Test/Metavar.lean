@@ -253,8 +253,8 @@ def test_partial_continuation: TestM Unit := do
       addTest $ assertUnreachable $ msg
       return ()
     | .ok state => pure state
-  addTest $ LSpec.check "(continue 2)" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
-    #[.some "2 ≤ Nat.succ ?m", .some "Nat.succ ?m ≤ 5", .some "Nat"])
+  checkEq "(continue 2)" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?))
+    #[.some "2 ≤ Nat.succ ?m", .some "Nat.succ ?m ≤ 5", .some "Nat"]
   checkTrue "(2 root)" state1b.rootExpr?.get!.hasExprMVar
 
   -- Continuation should fail if the state does not exist:
@@ -268,13 +268,19 @@ def test_partial_continuation: TestM Unit := do
   return ()
 
 def test_branch_unification : TestM Unit := do
-  let .ok expr ← elabTerm (← `(term|∀ (p q : Prop), p → p ∧ (p ∨ q))) .none | unreachable!
-  Meta.forallTelescope expr $ λ _ rootTarget => do
-    let state ← GoalState.create rootTarget
-    let .success state1 _  ← state.tacticOn 0 "exact p" | unreachable!
-    let .success state2 _  ← state.tacticOn 1 "apply Or.inl" | unreachable!
-    let state' := state2.replay state state1
-    return ()
+  let .ok rootTarget ← elabTerm (← `(term|∀ (p q : Prop), p → p ∧ (p ∨ q))) .none | unreachable!
+  let state ← GoalState.create rootTarget
+  let .success state _  ← state.tacticOn' 0 (← `(tactic|intro p q h)) | fail "intro failed to run"
+  let .success state _  ← state.tacticOn' 0 (← `(tactic|apply And.intro)) | fail "apply And.intro failed to run"
+  let .success state1 _  ← state.tacticOn' 0 (← `(tactic|exact h)) | fail "exact h failed to run"
+  let .success state2 _  ← state.tacticOn' 1 (← `(tactic|apply Or.inl)) | fail "apply Or.inl failed to run"
+  assert! state2.goals.length == 1
+  let state' ← state2.replay state state1
+  assert! state'.goals.length == 1
+  let .success stateT _ ← state'.tacticOn' 0 (← `(tactic|exact h)) | fail "exact h failed to run"
+  let .some root := stateT.rootExpr? | fail "Root expression must exist"
+  checkEq "(root)" (toString $ ← Meta.ppExpr root) "fun p q h => ⟨h, Or.inl h⟩"
+  return ()
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
