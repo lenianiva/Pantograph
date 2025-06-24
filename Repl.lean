@@ -303,6 +303,7 @@ def execute (command: Protocol.Command): MainM Json := do
     let state ← getMainState
     let .some goalState := state.goalStates[args.stateId]? |
       Protocol.throw $ errorIndex s!"Invalid state index {args.stateId}"
+    -- FIXME: Allow proper conversion tactic exit even in automatic mode
     let .some goal := goalState.goals[args.goalId]? |
       Protocol.throw $ errorIndex s!"Invalid goal index {args.goalId}"
     let nextGoalState?: Except _ TacticResult ← liftTermElabM do
@@ -323,7 +324,7 @@ def execute (command: Protocol.Command): MainM Json := do
       | .none, .none, .none, .none, .none, .some true, .none => do
         pure <| Except.ok <| ← goalState.conv goal
       | .none, .none, .none, .none, .none, .some false, .none => do
-        pure <| Except.ok <| ← goalState.convExit
+        pure <| Except.ok <| ← goalState.convExit goal
       | .none, .none, .none, .none, .none, .none, .some draft => do
         pure <| Except.ok <| ← goalState.tryDraft goal draft
       | _, _, _, _, _, _, _ =>
@@ -336,12 +337,7 @@ def execute (command: Protocol.Command): MainM Json := do
         | true, .none => do
           pure $ nextGoalState.immediateResume goalState
         | true, .some true => pure nextGoalState
-        | true, .some false => do
-          let .some (_, _, dormantGoals) := goalState.convMVar? |
-            Protocol.throw $ errorIO "If conv exit succeeded this should not fail"
-          let .ok result := nextGoalState.resume (nextGoalState.goals ++ dormantGoals) |
-            Protocol.throw $ errorIO "Resuming known goals"
-          pure result
+        | true, .some false => pure nextGoalState
         | false, _ => pure nextGoalState
       let nextStateId ← newGoalState nextGoalState
       let parentExpr := nextGoalState.parentExpr?.get!

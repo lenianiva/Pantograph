@@ -253,20 +253,33 @@ def test_partial_continuation: TestM Unit := do
       addTest $ assertUnreachable $ msg
       return ()
     | .ok state => pure state
-  addTest $ LSpec.check "(continue 2)" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?) =
-    #[.some "2 ≤ Nat.succ ?m", .some "Nat.succ ?m ≤ 5", .some "Nat"])
+  checkEq "(continue 2)" ((← state1b.serializeGoals (options := ← read)).map (·.target.pp?))
+    #[.some "2 ≤ Nat.succ ?m", .some "Nat.succ ?m ≤ 5", .some "Nat"]
   checkTrue "(2 root)" state1b.rootExpr?.get!.hasExprMVar
 
   -- Continuation should fail if the state does not exist:
   match state0.resume coupled_goals with
-  | .error error => addTest $ LSpec.check "(continuation failure message)" (error = "Goals [_uniq.44, _uniq.45, _uniq.42, _uniq.51] are not in scope")
-  | .ok _ => addTest $ assertUnreachable "(continuation failure)"
+  | .error error => checkEq "(continuation failure message)" error "Goals [_uniq.44, _uniq.45, _uniq.42, _uniq.51] are not in scope"
+  | .ok _ => fail "(continuation should fail)"
   -- Continuation should fail if some goals have not been solved
   match state2.continue state1 with
-  | .error error => addTest $ LSpec.check "(continuation failure message)" (error = "Target state has unresolved goals")
-  | .ok _ => addTest $ assertUnreachable "(continuation failure)"
+  | .error error => checkEq "(continuation failure message)" error "Target state has unresolved goals"
+  | .ok _ => fail "(continuation should fail)"
   return ()
 
+def test_branch_unification : TestM Unit := do
+  let .ok rootTarget ← elabTerm (← `(term|∀ (p q : Prop), p → p ∧ (p ∨ q))) .none | unreachable!
+  let state ← GoalState.create rootTarget
+  let .success state _  ← state.tacticOn' 0 (← `(tactic|intro p q h)) | fail "intro failed to run"
+  let .success state _  ← state.tacticOn' 0 (← `(tactic|apply And.intro)) | fail "apply And.intro failed to run"
+  let .success state1 _  ← state.tacticOn' 0 (← `(tactic|exact h)) | fail "exact h failed to run"
+  let .success state2 _  ← state.tacticOn' 1 (← `(tactic|apply Or.inl)) | fail "apply Or.inl failed to run"
+  checkEq "(state2 goals)" state2.goals.length 1
+  let state' ← state2.replay state state1
+  checkEq "(state' goals)" state'.goals.length 1
+  let .success stateT _ ← state'.tacticOn' 0 (← `(tactic|exact h)) | fail "exact h failed to run"
+  let .some root := stateT.rootExpr? | fail "Root expression must exist"
+  checkEq "(root)" (toString $ ← Meta.ppExpr root) "fun p q h => ⟨h, Or.inl h⟩"
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
@@ -274,7 +287,8 @@ def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
     ("2 < 5", test_m_couple),
     ("2 < 5", test_m_couple_simp),
     ("Proposition Generation", test_proposition_generation),
-    ("Partial Continuation", test_partial_continuation)
+    ("Partial Continuation", test_partial_continuation),
+    ("Branch Unification", test_branch_unification),
   ]
   tests.map (fun (name, test) => (name, proofRunner env test))
 
