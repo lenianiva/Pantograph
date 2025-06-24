@@ -22,8 +22,9 @@ structure GoalState where
   -- Parent state metavariable source
   parentMVar?: Option MVarId := .none
 
-  -- If this is not `.none` there is a partial tactic being executed
-  fragment? : Option TacticFragment := .none
+  -- Any goal associated with a fragment has a partial tactic which has not
+  -- finished executing.
+  fragments : FragmentMap := .empty
 
 @[export pantograph_goal_state_create_m]
 protected def GoalState.create (expr: Expr): Elab.TermElabM GoalState := do
@@ -95,16 +96,12 @@ private def GoalState.restoreTacticM (state: GoalState) (goal: MVarId): Elab.Tac
 
 @[export pantograph_goal_state_focus]
 protected def GoalState.focus (state : GoalState) (goal : MVarId): Option GoalState := do
-  let fragment? := match state.fragment? with
-    | .some { goal := goal', .. } => if goal' == goal then state.fragment? else .none
-    | .none => .none
   return {
     state with
     savedState := {
       state.savedState with
       tactic := { goals := [goal] },
     },
-    fragment?,
   }
 
 /-- Immediately bring all parent goals back into scope. Used in automatic mode -/
@@ -125,10 +122,10 @@ protected def GoalState.immediateResume (state: GoalState) (parent: GoalState): 
   }
 
 /--
-Brings into scope a list of goals. User must ensure `goals` is distinct.
+Brings into scope a list of goals. User must ensure `goals` are distinct.
 -/
 @[export pantograph_goal_state_resume]
-protected def GoalState.resume (state: GoalState) (goals: List MVarId): Except String GoalState := do
+protected def GoalState.resume (state : GoalState) (goals : List MVarId) : Except String GoalState := do
   if ¬ (goals.all (λ goal => state.mvars.contains goal)) then
     let invalid_goals := goals.filter (λ goal => ¬ state.mvars.contains goal) |>.map (·.name.toString)
     .error s!"Goals {invalid_goals} are not in scope"
@@ -147,7 +144,7 @@ protected def GoalState.resume (state: GoalState) (goals: List MVarId): Except S
 Brings into scope all goals from `branch`
 -/
 @[export pantograph_goal_state_continue]
-protected def GoalState.continue (target: GoalState) (branch: GoalState): Except String GoalState :=
+protected def GoalState.continue (target : GoalState) (branch : GoalState) : Except String GoalState :=
   if !target.goals.isEmpty then
     .error s!"Target state has unresolved goals"
   else if target.root != branch.root then
@@ -156,7 +153,7 @@ protected def GoalState.continue (target: GoalState) (branch: GoalState): Except
     target.resume (goals := branch.goals)
 
 @[export pantograph_goal_state_root_expr]
-protected def GoalState.rootExpr? (goalState : GoalState): Option Expr := do
+protected def GoalState.rootExpr? (goalState : GoalState) : Option Expr := do
   if goalState.root.name == .anonymous then
     .none
   let expr ← goalState.mctx.eAssignment.find? goalState.root
@@ -452,14 +449,21 @@ protected def GoalState.tryTacticM
 protected def GoalState.tryTactic (state: GoalState) (goal: MVarId) (tactic: String):
     Elab.TermElabM TacticResult := do
   state.restoreElabM
-  if let .some { goal := goal', fragment } := state.fragment? then
-    if goal == goal' then
-      return ← withCapturingError do
-        let (fragment?', state') ← state.step' goal (fragment.step goal tactic)
-        return { state' with fragment? := fragment?' }
+  /-
+  if let .some fragment := state.fragments[goal]? then
+    return ← withCapturingError do
+      let (moreFragments, state') ← state.step' goal (fragment.step goal tactic)
+      let fragments := moreFragments.fold (init := state.fragments.erase goal) λ acc mvarId f =>
+        acc.insert mvarId f
+      return { state' with fragments } -/
+
+  let catName := match isLHSGoal? (← goal.getType) with
+    | .some _ => `conv
+    | .none => `tactic
+  -- Normal tactic without fragment
   let tactic ← match Parser.runParserCategory
     (env := ← MonadEnv.getEnv)
-    (catName := `tactic)
+    (catName := catName)
     (input := tactic)
     (fileName := ← getFileName) with
     | .ok stx => pure $ stx
@@ -467,6 +471,8 @@ protected def GoalState.tryTactic (state: GoalState) (goal: MVarId) (tactic: Str
   let tacticM := Elab.Tactic.evalTactic tactic
   withCapturingError do
     state.step goal tacticM (guardMVarErrors := true)
+
+-- Specialized Tactics
 
 protected def GoalState.tryAssign (state: GoalState) (goal: MVarId) (expr: String):
       Elab.TermElabM TacticResult := do
@@ -479,8 +485,6 @@ protected def GoalState.tryAssign (state: GoalState) (goal: MVarId) (expr: Strin
     | .ok syn => pure syn
     | .error error => return .parseError error
   state.tryTacticM goal $ Tactic.evalAssign expr
-
--- Specialized Tactics
 
 protected def GoalState.tryLet (state: GoalState) (goal: MVarId) (binderName: String) (type: String):
       Elab.TermElabM TacticResult := do
@@ -495,55 +499,49 @@ protected def GoalState.tryLet (state: GoalState) (goal: MVarId) (binderName: St
   state.tryTacticM goal $ Tactic.evalLet binderName.toName type
 
 /-- Enter conv tactic mode -/
-protected def GoalState.conv (state: GoalState) (goal: MVarId):
+@[export pantograph_goal_state_conv_enter_m]
+protected def GoalState.conv (state : GoalState) (goal : MVarId) :
       Elab.TermElabM TacticResult := do
-  if state.fragment? matches .some { fragment := .conv .., .. } then
+  if let .some (.conv ..) := state.fragments[goal]? then
     return .invalidAction "Already in conv state"
   goal.checkNotAssigned `GoalState.conv
   withCapturingError do
     let (fragment, state') ← state.step' goal Fragment.enterConv
-    let fragment? := .some {
-      goal := state'.goals[0]!,
-      fragment,
-    }
     return {
       state' with
-      fragment?
+      fragments := state'.fragments.insert goal fragment
     }
 
 /-- Exit from `conv` mode. Resumes all goals before the mode starts and applys the conv -/
 @[export pantograph_goal_state_conv_exit_m]
-protected def GoalState.convExit (state: GoalState):
+protected def GoalState.convExit (state : GoalState) (goal : MVarId):
       Elab.TermElabM TacticResult := do
-  let .some { goal, fragment } := state.fragment? |
-    return .invalidAction "Not in conv state"
-  unless fragment matches .conv .. do
+  let .some fragment@(.conv ..) := state.fragments[goal]? |
     return .invalidAction "Not in conv state"
   withCapturingError do
-    let state' ← state.step goal (fragment.exit goal)
+    let (fragments, state') ← state.step' goal (fragment.exit goal state.fragments)
     return {
       state' with
-      fragment? := .none,
+      fragments,
     }
 
-protected def GoalState.calcPrevRhsOf? (state: GoalState) (goal: MVarId): Option Expr := do
-  match state.fragment? with
-  | .some { goal := goal', fragment := .calc prevRhs? } =>
-    if goal == goal' then prevRhs? else .none
-  | .some _ => unreachable!
-  | .none => .none
+protected def GoalState.calcPrevRhsOf? (state : GoalState) (goal : MVarId) : Option Expr := do
+  let .some (.calc prevRhs?) := state.fragments[goal]? | .none
+  prevRhs?
 
 @[export pantograph_goal_state_try_calc_m]
-protected def GoalState.tryCalc (state: GoalState) (goal: MVarId) (pred: String):
-      Elab.TermElabM TacticResult := do
+protected def GoalState.tryCalc (state : GoalState) (goal : MVarId) (pred : String)
+  : Elab.TermElabM TacticResult := do
   let prevRhs? := state.calcPrevRhsOf? goal
   withCapturingError do
-    let (fragment?, state') ← state.step' goal do
+    let (moreFragments, state') ← state.step' goal do
       let fragment := Fragment.calc prevRhs?
       fragment.step goal pred
+    let fragments := moreFragments.fold (init := state.fragments.erase goal) λ acc mvarId f =>
+      acc.insert mvarId f
     return {
       state' with
-      fragment?,
+      fragments,
     }
 
 end Pantograph

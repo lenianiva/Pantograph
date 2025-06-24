@@ -362,6 +362,7 @@ def test_conv: TestM Unit := do
   addTest $ LSpec.check tactic ((← state1.serializeGoals (options := ← read)).map (·.devolatilize) =
     #[interiorGoal [] "a + b + c1 = b + a + c2"])
 
+  let goalConv := state1.goals[0]!
   let state2 ← match ← state1.conv (state1.get! 0) with
     | .success state _ => pure state
     | other => do
@@ -433,7 +434,7 @@ def test_conv: TestM Unit := do
   addTest $ LSpec.check s!"  · {convTactic}" ((← state6.serializeGoals (options := ← read)).map (·.devolatilize) =
     #[])
 
-  let state1_1 ← match ← state6.convExit with
+  let state1_1 ← match ← state6.convExit goalConv with
     | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString

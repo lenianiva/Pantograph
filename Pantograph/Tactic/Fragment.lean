@@ -15,42 +15,50 @@ namespace Pantograph
 inductive Fragment where
   | calc (prevRhs? : Option Expr)
   | conv (rhs : MVarId) (dormant : List MVarId)
+  deriving BEq
+abbrev FragmentMap := Std.HashMap MVarId Fragment
+def FragmentMap.empty : FragmentMap := Std.HashMap.emptyWithCapacity 2
 
 protected def Fragment.enterCalc : Elab.Tactic.TacticM Fragment := do
   return .calc .none
 protected def Fragment.enterConv : Elab.Tactic.TacticM Fragment := do
   let goal ← Elab.Tactic.getMainGoal
-  let convGoal ← goal.withContext do
+  let rhs ← goal.withContext do
     let (rhs, newGoal) ← Elab.Tactic.Conv.mkConvGoalFor (← Elab.Tactic.getMainTarget)
     Elab.Tactic.replaceMainGoal [newGoal.mvarId!]
     pure rhs.mvarId!
   let otherGoals := (← Elab.Tactic.getGoals).filter (· != goal)
-  return .conv convGoal otherGoals
+  return conv rhs otherGoals
 
-protected def Fragment.exit (fragment : Fragment) (goal: MVarId) : Elab.Tactic.TacticM Unit :=
+protected def Fragment.exit (fragment : Fragment) (goal : MVarId) (fragments : FragmentMap)
+  : Elab.Tactic.TacticM FragmentMap :=
   match fragment with
-  | .calc _prevRhs? => Elab.Tactic.setGoals [goal]
+  | .calc .. => do
+    Elab.Tactic.setGoals [goal]
+    return fragments.erase goal
   | .conv rhs otherGoals => do
+    -- FIXME: Only process the goals that are descendants of `goal`
+    let goals := (← Elab.Tactic.getGoals).filter λ goal => true
+      --match fragments[goal]? with
+      --| .some f => fragment == f
+      --| .none => false -- Not a conv goal from this
     -- Close all existing goals with `refl`
-    for mvarId in (← Elab.Tactic.getGoals) do
+    for mvarId in goals do
       liftM <| mvarId.refl <|> mvarId.inferInstance <|> pure ()
     Elab.Tactic.pruneSolvedGoals
-    unless (← Elab.Tactic.getGoals).isEmpty do
-      throwError "convert tactic failed, there are unsolved goals\n{Elab.goalsToMessageData (← Elab.Tactic.getGoals)}"
+    unless (← goals.filterM (·.isAssignedOrDelayedAssigned)).isEmpty do
+      throwError "convert tactic failed, there are unsolved goals\n{Elab.goalsToMessageData (goals)}"
 
     Elab.Tactic.setGoals $ [goal] ++ otherGoals
     let targetNew ← instantiateMVars (.mvar rhs)
     let proof ← instantiateMVars (.mvar goal)
 
     Elab.Tactic.liftMetaTactic1 (·.replaceTargetEq targetNew proof)
-
-structure TacticFragment where
-  -- The goal which the fragment acts on
-  goal : MVarId
-  fragment : Fragment
+    return fragments.erase goal
 
 protected def Fragment.step (fragment : Fragment) (goal : MVarId) (s : String)
-  : Elab.Tactic.TacticM (Option TacticFragment) := goal.withContext do
+  : Elab.Tactic.TacticM FragmentMap := goal.withContext do
+  assert! ¬ (← goal.isAssigned)
   match fragment with
   | .calc prevRhs? => do
     let .ok stx := Parser.runParserCategory
@@ -103,16 +111,9 @@ protected def Fragment.step (fragment : Fragment) (goal : MVarId) (s : String)
     let goals := [ mvarBranch ] ++ remainder?.toList
     Elab.Tactic.setGoals goals
     match remainder? with
-    | .some goal => return .some { goal, fragment := .calc (.some rhs) }
-    | .none => return .none
-  | fragment@(.conv _ _) => do
-    let .ok tactic := Parser.runParserCategory
-      (env := ← MonadEnv.getEnv)
-      (catName := `conv)
-      (input := s)
-      (fileName := ← getFileName) | throwError "Could not parse `conv tactic {s}"
-    Elab.Tactic.evalTactic tactic
-    let goal ← Elab.Tactic.getMainGoal
-    return .some { goal, fragment }
+    | .some goal => return FragmentMap.empty.insert goal $ .calc (.some rhs)
+    | .none => return .empty
+  | .conv .. => do
+    throwError "Direct operation on conversion tactic parent goal is not allowed"
 
 end Pantograph

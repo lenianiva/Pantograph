@@ -36,8 +36,7 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
   - `{ "calc": <expr> }`: Execute one step of a `calc` tactic. Each step must
     be of the form `lhs op rhs`. An `lhs` of `_` indicates that it should be set
     to the previous `rhs`.
-  - `{ "conv": <bool> }`: Enter or exit conversion tactic mode. In the case of
-    exit, the goal id is ignored.
+  - `{ "conv": <bool> }`: Enter or exit conversion tactic mode.
   - `{ "draft": <expr> }`: Draft an expression with `sorry`s, turning them into goals. Coupling is not allowed.
   If the `goals` field does not exist, the tactic execution has failed. Read
   `messages` to find the reason.
