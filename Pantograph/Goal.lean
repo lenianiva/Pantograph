@@ -10,6 +10,27 @@ import Lean
 namespace Pantograph
 open Lean
 
+/-- Determine the acting area of a tactic -/
+inductive Site where
+  | focus (goal : MVarId)
+  | prefer (goal : MVarId)
+  | unfocus
+
+instance : Coe MVarId Site where
+  coe := .focus
+
+protected def Site.runTacticM (site : Site) { m } [Monad m] [MonadLiftT Elab.Tactic.TacticM m] [MonadControlT Elab.Tactic.TacticM m]
+  (f : m α) : m α :=
+  match site with
+  | .focus goal => do
+    Elab.Tactic.setGoals [goal]
+    f
+  | .prefer goal => do
+    let otherGoals := (← Elab.Tactic.getUnsolvedGoals).filter (· != goal)
+    Elab.Tactic.setGoals (goal :: otherGoals)
+    f
+  | .unfocus => f
+
 /--
 Represents an interconnected set of metavariables, or a state in proof search
  -/
