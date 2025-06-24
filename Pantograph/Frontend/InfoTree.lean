@@ -10,7 +10,7 @@ namespace Lean.Elab
 private def elaboratorToString : Name → String
   | .anonymous => ""
   | n => s!"⟨{n}⟩ "
-private def indent (s : String) : String := "\n".intercalate $ s.splitOn "\n" |>.map ("\t" ++ .)
+private def indent (s : String) : String := "\n".intercalate $ s.splitOn "\n" |>.map ("  " ++ .)
 
 /-- The `Syntax` for a `Lean.Elab.Info`, if there is one. -/
 protected def Info.stx? : Info → Option Syntax
