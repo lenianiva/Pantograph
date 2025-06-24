@@ -19,8 +19,8 @@ lean_exe repl {
 }
 
 @[default_target]
-lean_exe tomogram {
-  root := `Tomogram
+lean_exe tomograph {
+  root := `Tomograph
   -- Solves the native symbol not found problem
   supportInterpreter := true
 }
