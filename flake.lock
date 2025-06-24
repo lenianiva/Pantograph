@@ -44,11 +44,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1750275702,
-        "narHash": "sha256-CpwSdtwvrQCR+ZfXZweFHJMG583EYijCRGEeGrgBsjU=",
+        "lastModified": 1750369222,
+        "narHash": "sha256-KFFTVbciXUaHgeGN1yiaUtY88OLGU0gElXx5SfICDKg=",
         "owner": "lenianiva",
         "repo": "lean4-nix",
-        "rev": "95a315f6e7d5e463090ae4977d5e2e6c3b4ef0d0",
+        "rev": "015ecd25206734d582a1b15dd11eb10be35ca555",
         "type": "github"
       },
       "original": {
