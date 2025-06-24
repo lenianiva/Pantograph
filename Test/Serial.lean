@@ -27,7 +27,7 @@ def runCoreM { α } (state : Core.State) (testCoreM : TestT CoreM α) : TestM (�
     set $ (← getThe LSpec.TestSeq) ++ tests
     return (a, state')
 
-def test_environment_pickling : TestM Unit := do
+def test_pickling_environment : TestM Unit := do
   let coreSrc : Core.State := { env := ← getEnv }
   let coreDst : Core.State := { env := ← getEnv }
 
@@ -36,13 +36,13 @@ def test_environment_pickling : TestM Unit := do
   let ((), _) ← runCoreM coreSrc do
     let type: Expr := .forallE `p (.sort 0) (.forallE `h (.bvar 0) (.bvar 1) .default) .default
     let value: Expr := .lam `p (.sort 0) (.lam `h (.bvar 0) (.bvar 0) .default) .default
-    let c := Lean.Declaration.defnDecl <| Lean.mkDefinitionValEx
+    let c := Declaration.defnDecl <| mkDefinitionValEx
       (name := name)
       (levelParams := [])
       (type := type)
       (value := value)
-      (hints := Lean.mkReducibilityHintsRegularEx 1)
-      (safety := Lean.DefinitionSafety.safe)
+      (hints := mkReducibilityHintsRegularEx 1)
+      (safety := .safe)
       (all := [])
     addDecl c
     environmentPickle (← getEnv) envPicklePath
@@ -53,7 +53,7 @@ def test_environment_pickling : TestM Unit := do
     let anotherName := `mystery2
     checkTrue s!"Doesn't have symbol {anotherName}" (env'.find? anotherName).isNone
 
-def test_goal_state_pickling_simple : TestM Unit := do
+def test_goal_state_simple : TestM Unit := do
   let coreSrc : Core.State := { env := ← getEnv }
   let coreDst : Core.State := { env := ← getEnv }
   IO.FS.withTempFile λ _ statePath => do
@@ -72,11 +72,36 @@ def test_goal_state_pickling_simple : TestM Unit := do
     let types ← metaM.run'
     checkTrue "Goals" $ types[0]!.equal type
 
+def test_pickling_env_extensions : TestM Unit := do
+  let coreSrc : Core.State := { env := ← getEnv }
+  let coreDst : Core.State := { env := ← getEnv }
+  IO.FS.withTempFile λ _ statePath => do
+  let ((), _) ← runCoreM coreSrc $ transformTestT runTermElabMInCore do
+    let .ok e ← elabTerm (← `(term|(2: Nat) ≤ 3 ∧ (3: Nat) ≤ 5)) .none | unreachable!
+    let state ← GoalState.create e
+    let .success state _ ← state.tacticOn' 0 (← `(tactic|apply And.intro)) | unreachable!
+
+    let goal := state.goals[0]!
+    let (type, value) ← goal.withContext do
+      let .ok type ← elabTerm (← `(term|(2: Nat) ≤ 3)) (.some $ .sort 0) | unreachable!
+      let .ok value ← elabTerm (← `(term|sorry)) (.some type) | unreachable!
+      pure (type, value)
+    let .success state1 _ ← state.tryTacticM goal (Tactic.assignWithAuxLemma type value) | unreachable!
+    let parentExpr := state1.parentExpr?.get!
+    checkTrue "src has aux lemma" $ parentExpr.getUsedConstants.any λ name => name.isAuxLemma
+    goalStatePickle state1 statePath
+  let ((), _) ← runCoreM coreDst $ transformTestT runTermElabMInCore do
+    let (state1, _) ← goalStateUnpickle statePath (← getEnv)
+    let parentExpr := state1.parentExpr?.get!
+    checkTrue "dst has aux lemma" $ parentExpr.getUsedConstants.any λ name => name.isAuxLemma
+
+  return ()
+
 structure Test where
   name : String
   routine: TestM Unit
 
-protected def Test.run (test: Test) (env: Lean.Environment) : IO LSpec.TestSeq := do
+protected def Test.run (test: Test) (env: Environment) : IO LSpec.TestSeq := do
   -- Create the state
   let state : MultiState := {
     coreContext := ← createCoreContext #[],
@@ -87,10 +112,11 @@ protected def Test.run (test: Test) (env: Lean.Environment) : IO LSpec.TestSeq :
   | .error e =>
     return LSpec.check s!"Emitted exception: {e.toString}" (e.toString == "")
 
-def suite (env : Lean.Environment): List (String × IO LSpec.TestSeq) :=
+def suite (env : Environment): List (String × IO LSpec.TestSeq) :=
   let tests: List Test := [
-    { name := "environment_pickling", routine := test_environment_pickling, },
-    { name := "goal_state_pickling_simple", routine := test_goal_state_pickling_simple, },
+    { name := "environment", routine := test_pickling_environment, },
+    { name := "goal simple", routine := test_goal_state_simple, },
+    { name := "extensions", routine := test_pickling_env_extensions, },
   ]
   tests.map (fun test => (test.name, test.run env))
 

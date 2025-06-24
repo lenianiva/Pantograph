@@ -96,12 +96,14 @@ def runCoreMSeq (env: Environment) (coreM: CoreM LSpec.TestSeq) (options: Array 
   | .ok a            => return a
 def runMetaMSeq (env: Environment) (metaM: MetaM LSpec.TestSeq): IO LSpec.TestSeq :=
   runCoreMSeq env metaM.run'
-def runTermElabMInMeta { α } (termElabM: Lean.Elab.TermElabM α): Lean.MetaM α :=
+def runTermElabMInMeta { α } (termElabM: Elab.TermElabM α): MetaM α :=
   termElabM.run' (ctx := defaultElabContext)
+def runTermElabMInCore { α } (termElabM: Elab.TermElabM α): CoreM α :=
+  (runTermElabMInMeta termElabM).run'
 def runTermElabMSeq (env: Environment) (termElabM: Elab.TermElabM LSpec.TestSeq): IO LSpec.TestSeq :=
   runMetaMSeq env $ termElabM.run' (ctx := defaultElabContext)
 
-def exprToStr (e: Expr): Lean.MetaM String := toString <$> Meta.ppExpr e
+def exprToStr (e: Expr): MetaM String := toString <$> Meta.ppExpr e
 
 def strToTermSyntax (s: String): CoreM Syntax := do
   let .ok stx := Parser.runParserCategory
@@ -159,6 +161,13 @@ end Monadic
 def runTestTermElabM (env: Environment) (t: TestT Elab.TermElabM Unit):
   IO LSpec.TestSeq :=
   runTermElabMSeq env $ runTest t
+def transformTestT { α } { μ μ' : Type → Type }
+    [Monad μ] [Monad μ'] [MonadLiftT (ST IO.RealWorld) μ] [MonadLiftT (ST IO.RealWorld) μ']
+    (tr : {β : Type} → μ β  → μ' β) (m : TestT μ α) : TestT μ' α := do
+  let tests ← get
+  let (a, tests) ← tr (β := α × LSpec.TestSeq) (m.run tests)
+  set tests
+  return a
 
 def cdeclOf (userName: Name) (type: Expr): Condensed.LocalDecl :=
   { userName, type }
@@ -173,6 +182,26 @@ def buildGoal (nameType: List (String × String)) (target: String) (userName?: O
       type? := .some { pp? := .some x.snd },
     })).toArray
   }
+
+namespace Tactic
+
+/-- Create an aux lemma and assigns it to `mvarId`, which is circuitous, but
+exercises the aux lemma generator. -/
+def assignWithAuxLemma (type value : Expr) : Elab.Tactic.TacticM Unit := do
+  let type ← instantiateMVars type
+  let value ← instantiateMVars value
+  if type.hasExprMVar then
+    throwError "Type has expression mvar"
+  if value.hasExprMVar then
+    throwError "value has expression mvar"
+  let goal ← Elab.Tactic.getMainGoal
+  goal.withContext do
+  let name ← Meta.mkAuxLemma [] type value
+  unless ← Meta.isDefEq type (← goal.getType) do
+    throwError "Type provided is incorrect"
+  goal.assign (.const name [])
+
+end Tactic
 
 end Test
 
