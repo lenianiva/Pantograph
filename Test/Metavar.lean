@@ -259,11 +259,11 @@ def test_partial_continuation: TestM Unit := do
 
   -- Continuation should fail if the state does not exist:
   match state0.resume coupled_goals with
-  | .error error => addTest $ LSpec.check "(continuation failure message)" (error = "Goals [_uniq.44, _uniq.45, _uniq.42, _uniq.51] are not in scope")
+  | .error error => checkEq "(continuation failure message)" error "Goals [_uniq.44, _uniq.45, _uniq.42, _uniq.51] are not in scope"
   | .ok _ => fail "(continuation should fail)"
   -- Continuation should fail if some goals have not been solved
   match state2.continue state1 with
-  | .error error => addTest $ LSpec.check "(continuation failure message)" (error = "Target state has unresolved goals")
+  | .error error => checkEq "(continuation failure message)" error "Target state has unresolved goals"
   | .ok _ => fail "(continuation should fail)"
   return ()
 
@@ -274,13 +274,12 @@ def test_branch_unification : TestM Unit := do
   let .success state _  ← state.tacticOn' 0 (← `(tactic|apply And.intro)) | fail "apply And.intro failed to run"
   let .success state1 _  ← state.tacticOn' 0 (← `(tactic|exact h)) | fail "exact h failed to run"
   let .success state2 _  ← state.tacticOn' 1 (← `(tactic|apply Or.inl)) | fail "apply Or.inl failed to run"
-  assert! state2.goals.length == 1
+  checkEq "(state2 goals)" state2.goals.length 1
   let state' ← state2.replay state state1
-  assert! state'.goals.length == 1
+  checkEq "(state' goals)" state'.goals.length 1
   let .success stateT _ ← state'.tacticOn' 0 (← `(tactic|exact h)) | fail "exact h failed to run"
   let .some root := stateT.rootExpr? | fail "Root expression must exist"
   checkEq "(root)" (toString $ ← Meta.ppExpr root) "fun p q h => ⟨h, Or.inl h⟩"
-  return ()
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [

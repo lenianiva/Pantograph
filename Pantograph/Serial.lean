@@ -104,8 +104,7 @@ def goalStatePickle (goalState : GoalState) (path : System.FilePath) : IO Unit :
     }
     root,
     parentMVar?,
-    convMVar?,
-    calcPrevRhs?,
+    fragment?,
   } := goalState
   Pantograph.pickle path (
     env.constants.map₂,
@@ -117,8 +116,7 @@ def goalStatePickle (goalState : GoalState) (path : System.FilePath) : IO Unit :
 
     root,
     parentMVar?,
-    convMVar?,
-    calcPrevRhs?,
+    fragment?,
   )
 
 @[export pantograph_goal_state_unpickle_m]
@@ -134,8 +132,7 @@ def goalStateUnpickle (path : System.FilePath) (env : Environment)
 
     root,
     parentMVar?,
-    convMVar?,
-    calcPrevRhs?,
+    fragment?,
   ), region) ← Pantograph.unpickle (
     PHashMap Name ConstantInfo ×
 
@@ -146,8 +143,7 @@ def goalStateUnpickle (path : System.FilePath) (env : Environment)
 
     MVarId ×
     Option MVarId ×
-    Option (MVarId × MVarId × List MVarId) ×
-    Option (MVarId × Expr)
+    Option TacticFragment
   ) path
   let env ← env.replay (Std.HashMap.ofList map₂.toList)
   let goalState := {
@@ -167,8 +163,7 @@ def goalStateUnpickle (path : System.FilePath) (env : Environment)
     },
     root,
     parentMVar?,
-    convMVar?,
-    calcPrevRhs?,
+    fragment?,
   }
   return (goalState, region)
 

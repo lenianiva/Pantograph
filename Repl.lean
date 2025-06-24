@@ -336,12 +336,7 @@ def execute (command: Protocol.Command): MainM Json := do
         | true, .none => do
           pure $ nextGoalState.immediateResume goalState
         | true, .some true => pure nextGoalState
-        | true, .some false => do
-          let .some (_, _, dormantGoals) := goalState.convMVar? |
-            Protocol.throw $ errorIO "If conv exit succeeded this should not fail"
-          let .ok result := nextGoalState.resume (nextGoalState.goals ++ dormantGoals) |
-            Protocol.throw $ errorIO "Resuming known goals"
-          pure result
+        | true, .some false => pure nextGoalState
         | false, _ => pure nextGoalState
       let nextStateId ← newGoalState nextGoalState
       let parentExpr := nextGoalState.parentExpr?.get!
