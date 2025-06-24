@@ -19,6 +19,16 @@ inductive Fragment where
 abbrev FragmentMap := Std.HashMap MVarId Fragment
 def FragmentMap.empty : FragmentMap := Std.HashMap.emptyWithCapacity 2
 
+protected def Fragment.map (fragment : Fragment) (mapExpr : Expr → CoreM Expr) : CoreM Fragment :=
+  let mapMVarId (mvarId : MVarId) : CoreM MVarId :=
+    return (← mapExpr (.mvar mvarId)) |>.mvarId!
+  match fragment with
+  | .calc prevRhs? => return .calc (← prevRhs?.mapM mapExpr)
+  | .conv rhs dormant => do
+    let rhs' ← mapMVarId rhs
+    let dormant' ← dormant.mapM mapMVarId
+    return .conv rhs' dormant'
+
 protected def Fragment.enterCalc : Elab.Tactic.TacticM Fragment := do
   return .calc .none
 protected def Fragment.enterConv : Elab.Tactic.TacticM Fragment := do

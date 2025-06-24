@@ -218,6 +218,7 @@ protected def GoalState.replay (dst : GoalState) (src src' : GoalState) : CoreM 
     | .mvar { name } => .mvar ⟨mapId name⟩
     | l => l
   let mapExpr (e : Expr) : CoreM Expr := Core.transform e λ
+    | .sort level => pure $ .done $ .sort (mapLevel level)
     | .mvar { name } => pure $ .done $ .mvar ⟨mapId name⟩
     | _ => pure .continue
   let mapDelayedAssignment (d : DelayedMetavarAssignment) : CoreM DelayedMetavarAssignment := do
@@ -335,9 +336,14 @@ protected def GoalState.replay (dst : GoalState) (src src' : GoalState) : CoreM 
         throwError "Conflicting assignment of expr metavariable (d != d) {mvarId.name}"
 
     Meta.saveState
-  -- FIXME: Handle fragments
   let goals :=dst.savedState.tactic.goals ++
     src'.savedState.tactic.goals.map (⟨mapId ·.name⟩)
+  let fragments ← src'.fragments.foldM (init := dst.fragments) λ acc mvarId' fragment' => do
+    let mvarId := ⟨mapId mvarId'.name⟩
+    let fragment ← fragment'.map mapExpr
+    if let .some _fragment0 := acc[mvarId]? then
+      throwError "Conflicting fragments on {mvarId.name}"
+    return acc.insert mvarId fragment
   return {
     dst with
     savedState := {
@@ -349,6 +355,7 @@ protected def GoalState.replay (dst : GoalState) (src src' : GoalState) : CoreM 
         meta := ← m.run',
       },
     },
+    fragments,
   }
 
 --- Tactic execution functions ---
