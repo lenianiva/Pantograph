@@ -190,12 +190,15 @@ its assignment cannot change. -/
 protected def GoalState.replay (dst : GoalState) (src src' : GoalState) : CoreM GoalState := do
   let srcNGen := src.coreState.ngen
   let srcNGen' := src'.coreState.ngen
+  let dstNGen := dst.coreState.ngen
   assert! srcNGen.namePrefix == srcNGen'.namePrefix
-  assert! srcNGen.namePrefix == dst.coreState.ngen.namePrefix
+  assert! srcNGen.namePrefix == dstNGen.namePrefix
   assert! src.mctx.depth == src'.mctx.depth
   assert! src.mctx.depth == dst.mctx.depth
 
   let diffNGenIdx := dst.coreState.ngen.idx - srcNGen.idx
+
+  trace[Pantograph.GoalState.replay] "Merging ngen {srcNGen.idx} -> ({srcNGen'.idx}, {dstNGen.idx})"
   -- True if the name is generated after `src`
   let isNewName : Name → Bool
     | .num pref n =>
@@ -231,6 +234,7 @@ protected def GoalState.replay (dst : GoalState) (src src' : GoalState) : CoreM 
       return ldecl
 
   let { term := savedTerm@{ meta := savedMeta@{ core, meta := meta@{ mctx, .. } }, .. }, .. } := dst.savedState
+  trace[Pantograph.GoalState.replay] "Merging mvars {src.mctx.mvarCounter} -> ({src'.mctx.mvarCounter}, {dst.mctx.mvarCounter})"
   let mctx := {
     mctx with
     mvarCounter := mctx.mvarCounter + (src'.mctx.mvarCounter - src.mctx.mvarCounter),
@@ -307,6 +311,7 @@ protected def GoalState.replay (dst : GoalState) (src src' : GoalState) : CoreM 
         continue
       let .some l ← getLevelMVarAssignment? lmvarId | continue
       let l' := mapLevel l'
+      trace[Pantograph.GoalState.replay] "Merging level assignments on {lmvarId.name}"
       unless ← Meta.isLevelDefEq l l' do
         throwError "Conflicting assignment of level metavariable {lmvarId.name}"
     for (mvarId, e') in src'.mctx.eAssignment do
@@ -316,6 +321,7 @@ protected def GoalState.replay (dst : GoalState) (src src' : GoalState) : CoreM 
         throwError "Conflicting assignment of expr metavariable (e != d) {mvarId.name}"
       let .some e ← getExprMVarAssignment? mvarId | continue
       let e' ← mapExpr e'
+      trace[Pantograph.GoalState.replay] "Merging expr assignments on {mvarId.name}"
       unless ← Meta.isDefEq e e' do
         throwError "Conflicting assignment of expr metavariable (e != e) {mvarId.name}"
     for (mvarId, d') in src'.mctx.dAssignment do
@@ -324,6 +330,7 @@ protected def GoalState.replay (dst : GoalState) (src src' : GoalState) : CoreM 
       if ← mvarId.isAssigned then
         throwError "Conflicting assignment of expr metavariable (d != e) {mvarId.name}"
       let .some d ← getDelayedMVarAssignment? mvarId | continue
+      trace[Pantograph.GoalState.replay] "Merging expr (delayed) assignments on {mvarId.name}"
       unless d == d' do
         throwError "Conflicting assignment of expr metavariable (d != d) {mvarId.name}"
 
@@ -543,5 +550,8 @@ protected def GoalState.tryCalc (state : GoalState) (goal : MVarId) (pred : Stri
       state' with
       fragments,
     }
+
+initialize
+  registerTraceClass `Pantograph.GoalState.replay
 
 end Pantograph
