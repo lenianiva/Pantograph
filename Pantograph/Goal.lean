@@ -19,29 +19,38 @@ inductive Site where
 instance : Coe MVarId Site where
   coe := .focus
 
-protected def Site.runTacticM (site : Site) { m } [Monad m] [MonadLiftT Elab.Tactic.TacticM m] [MonadControlT Elab.Tactic.TacticM m]
-  (f : m α) : m α :=
+/-- Executes a `TacticM` on a site and return affected goals -/
+protected def Site.runTacticM (site : Site)
+  { m } [Monad m] [MonadLiftT Elab.Tactic.TacticM m] [MonadControlT Elab.Tactic.TacticM m] [MonadMCtx m] [MonadError m]
+  (f : m α) : m (α × List MVarId) :=
   match site with
   | .focus goal => do
     Elab.Tactic.setGoals [goal]
-    f
+    let a ← f
+    return (a, [goal])
   | .prefer goal => do
-    let otherGoals := (← Elab.Tactic.getUnsolvedGoals).filter (· != goal)
+    let prev ← Elab.Tactic.getUnsolvedGoals
+    let otherGoals := prev.filter (· != goal)
     Elab.Tactic.setGoals (goal :: otherGoals)
-    f
-  | .unfocus => f
+    let a ← f
+    return (a, ← prev.filterM (·.isAssignedOrDelayedAssigned))
+  | .unfocus => do
+    let prev ← Elab.Tactic.getUnsolvedGoals
+    let a ← f
+    return (a, ← prev.filterM (·.isAssignedOrDelayedAssigned))
 
 /--
-Represents an interconnected set of metavariables, or a state in proof search
+Kernel view of the state of a proof
  -/
 structure GoalState where
+  -- Captured `TacticM` state
   savedState : Elab.Tactic.SavedState
 
-  -- The root hole which is the search target
+  -- The root goal which is the search target
   root: MVarId
 
-  -- Parent state metavariable source
-  parentMVar?: Option MVarId := .none
+  -- Parent goals assigned to produce this state
+  parentMVars : List MVarId := []
 
   -- Any goal associated with a fragment has a partial tactic which has not
   -- finished executing.
@@ -60,7 +69,6 @@ protected def GoalState.create (expr: Expr): Elab.TermElabM GoalState := do
   return {
     root := root.mvarId!,
     savedState,
-    parentMVar? := .none,
   }
 @[export pantograph_goal_state_create_from_mvars_m]
 protected def GoalState.createFromMVars (goals: List MVarId) (root: MVarId): MetaM GoalState := do
@@ -69,7 +77,6 @@ protected def GoalState.createFromMVars (goals: List MVarId) (root: MVarId): Met
   return {
     root,
     savedState,
-    parentMVar? := .none,
   }
 protected def GoalState.goals (state: GoalState): List MVarId :=
   state.savedState.tactic.goals
@@ -93,8 +100,9 @@ protected def GoalState.withContext' (state: GoalState) (mvarId: MVarId) (m: Met
   mvarId.withContext m |>.run' (← read) state.metaState
 protected def GoalState.withContext { m } [MonadControlT MetaM m] [Monad m] (state: GoalState) (mvarId: MVarId) : m α → m α :=
   Meta.mapMetaM <| state.withContext' mvarId
+/-- Uses context of the first parent -/
 protected def GoalState.withParentContext { n } [MonadControlT MetaM n] [Monad n] (state: GoalState): n α → n α :=
-  Meta.mapMetaM <| state.withContext' state.parentMVar?.get!
+  Meta.mapMetaM <| state.withContext' state.parentMVars[0]!
 protected def GoalState.withRootContext { n } [MonadControlT MetaM n] [Monad n] (state: GoalState): n α → n α :=
   Meta.mapMetaM <| state.withContext' state.root
 
@@ -114,16 +122,6 @@ protected def GoalState.restoreElabM (state: GoalState): Elab.TermElabM Unit := 
 private def GoalState.restoreTacticM (state: GoalState) (goal: MVarId): Elab.Tactic.TacticM Unit := do
   state.restoreElabM
   Elab.Tactic.setGoals [goal]
-
-@[export pantograph_goal_state_focus]
-protected def GoalState.focus (state : GoalState) (goal : MVarId): Option GoalState := do
-  return {
-    state with
-    savedState := {
-      state.savedState with
-      tactic := { goals := [goal] },
-    },
-  }
 
 /-- Immediately bring all parent goals back into scope. Used in automatic mode -/
 @[export pantograph_goal_state_immediate_resume]
@@ -186,17 +184,19 @@ protected def GoalState.isSolved (goalState : GoalState) : Bool :=
     | .some e => ¬ e.hasExprMVar
     | .none => true
   goalState.goals.isEmpty && solvedRoot
-@[export pantograph_goal_state_parent_expr]
-protected def GoalState.parentExpr? (goalState: GoalState): Option Expr := do
-  let parent ← goalState.parentMVar?
-  let expr := goalState.mctx.eAssignment.find! parent
-  let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
-  return expr
 @[export pantograph_goal_state_get_mvar_e_assignment]
 protected def GoalState.getMVarEAssignment (goalState: GoalState) (mvarId: MVarId): Option Expr := do
   let expr ← goalState.mctx.eAssignment.find? mvarId
   let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
   return expr
+@[export pantograph_goal_state_parent_exprs]
+protected def GoalState.parentExprs (state : GoalState) : List Expr :=
+  state.parentMVars.map λ goal => state.getMVarEAssignment goal |>.get!
+protected def GoalState.hasUniqueParent (state : GoalState) : Bool :=
+  state.parentMVars.length == 1
+protected def GoalState.parentExpr! (state : GoalState) : Expr :=
+  assert! state.parentMVars.length == 1
+  (state.getMVarEAssignment state.parentMVars[0]!).get!
 
 deriving instance BEq for DelayedMetavarAssignment
 
@@ -232,6 +232,8 @@ protected def GoalState.replay (dst : GoalState) (src src' : GoalState) : CoreM 
       else
         id
     | id => id
+  let mapMVar : MVarId → MVarId
+    | { name } => ⟨mapId name⟩
   let rec mapLevel : Level → Level
     | .succ x => .succ (mapLevel x)
     | .max l1 l2 => .max (mapLevel l1) (mapLevel l2)
@@ -245,7 +247,7 @@ protected def GoalState.replay (dst : GoalState) (src src' : GoalState) : CoreM 
   let mapDelayedAssignment (d : DelayedMetavarAssignment) : CoreM DelayedMetavarAssignment := do
     let { mvarIdPending, fvars } := d
     return {
-      mvarIdPending := ⟨mapId mvarIdPending.name⟩,
+      mvarIdPending := mapMVar mvarIdPending,
       fvars := ← fvars.mapM mapExpr,
     }
   let mapLocalDecl (ldecl : LocalDecl) : CoreM LocalDecl := do
@@ -376,18 +378,21 @@ protected def GoalState.replay (dst : GoalState) (src src' : GoalState) : CoreM 
         meta := ← m.run',
       },
     },
+    parentMVars := dst.parentMVars ++ src.parentMVars.map mapMVar,
     fragments,
   }
 
 --- Tactic execution functions ---
 
--- Mimics `Elab.Term.logUnassignedUsingErrorInfos`
+/--
+These descendants serve as "seed" mvars. If a MVarError's mvar is related to one
+of these seed mvars, it means an error has occurred when a tactic was executing
+on `src`. `evalTactic`, will not capture these mvars, so we need to manually
+find them and save them into the goal list. See the rationales document for the
+inspiration of this function.
+-/
 private def collectAllErroredMVars (src : MVarId) : Elab.TermElabM (List MVarId) := do
-  -- These descendants serve as "seed" mvars. If a MVarError's mvar is related
-  -- to one of these seed mvars, it means an error has occurred when a tactic
-  -- was executing on `src`. `evalTactic`, will not capture these mvars, so we
-  -- need to manually find them and save them into the goal list.
-
+  -- Mimics `Elab.Term.logUnassignedUsingErrorInfos`
   let descendants ←  Meta.getMVars (.mvar src)
   --let _ ← Elab.Term.logUnassignedUsingErrorInfos descendants
   let mut alreadyVisited : MVarIdSet := {}
@@ -411,28 +416,29 @@ Set `guardMVarErrors` to true to capture mvar errors. Lean will not
 automatically collect mvars from text tactics (vide
 `test_tactic_failure_synthesize_placeholder`)
 -/
-protected def GoalState.step' { α } (state: GoalState) (goal: MVarId) (tacticM: Elab.Tactic.TacticM α) (guardMVarErrors : Bool := false)
+protected def GoalState.step' { α } (state : GoalState) (site : Site) (tacticM : Elab.Tactic.TacticM α) (guardMVarErrors : Bool := false)
   : Elab.TermElabM (α × GoalState) := do
-  unless (← getMCtx).decls.contains goal do
-    throwError s!"Goal is not in context: {goal.name}"
-  goal.checkNotAssigned `GoalState.step
-  let (a, { goals }) ← tacticM { elaborator := .anonymous } |>.run { goals := [goal] }
+  let ((a, parentMVars), { goals }) ← site.runTacticM tacticM
+    |>.run { elaborator := .anonymous }
+    |>.run state.savedState.tactic
   let nextElabState ← MonadBacktrack.saveState
   --Elab.Term.synthesizeSyntheticMVarsNoPostponing
 
   let goals ← if guardMVarErrors then
-      pure $ mergeMVarLists goals (← collectAllErroredMVars goal)
+      parentMVars.foldlM (init := goals) λ goals parent => do
+        let errors ← collectAllErroredMVars parent
+        return mergeMVarLists goals errors
     else
       pure goals
   let state' := {
     state with
     savedState := { term := nextElabState, tactic := { goals }, },
-    parentMVar? := .some goal,
+    parentMVars,
   }
   return (a, state')
-protected def GoalState.step (state: GoalState) (goal: MVarId) (tacticM: Elab.Tactic.TacticM Unit) (guardMVarErrors : Bool := false)
+protected def GoalState.step (state : GoalState) (site : Site) (tacticM : Elab.Tactic.TacticM Unit) (guardMVarErrors : Bool := false)
   : Elab.TermElabM GoalState :=
-  Prod.snd <$> GoalState.step' state goal tacticM guardMVarErrors
+  Prod.snd <$> GoalState.step' state site tacticM guardMVarErrors
 
 /-- Response for executing a tactic -/
 inductive TacticResult where
@@ -539,12 +545,12 @@ protected def GoalState.conv (state : GoalState) (goal : MVarId) :
       Elab.TermElabM TacticResult := do
   if let .some (.conv ..) := state.fragments[goal]? then
     return .invalidAction "Already in conv state"
-  goal.checkNotAssigned `GoalState.conv
   withCapturingError do
-    let (fragment, state') ← state.step' goal Fragment.enterConv
+    let (fragments, state') ← state.step' goal Fragment.enterConv
     return {
       state' with
-      fragments := state'.fragments.insert goal fragment
+      fragments := fragments.fold (init := state'.fragments) λ acc goal fragment =>
+        acc.insert goal fragment
     }
 
 /-- Exit from `conv` mode. Resumes all goals before the mode starts and applys the conv -/

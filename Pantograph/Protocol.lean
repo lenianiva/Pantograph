@@ -308,8 +308,8 @@ structure GoalPrint where
 
   -- Print root?
   rootExpr?: Option Bool := .some False
-  -- Print the parent expr?
-  parentExpr?: Option Bool := .some False
+  -- Print the parent expressions
+  parentExprs?: Option Bool := .some False
   -- Print goals?
   goals?: Option Bool := .some False
   -- Print values of extra mvars?
@@ -319,7 +319,7 @@ structure GoalPrintResult where
   -- The root expression
   root?: Option Expression := .none
   -- The filling expression of the parent goal
-  parent?: Option Expression := .none
+  parentExprs?: Option (List Expression) := .none
   goals: Array Goal := #[]
   extraMVars: Array Expression := #[]
 

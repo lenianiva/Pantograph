@@ -530,16 +530,14 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
 
 protected def GoalState.serializeGoals
       (state: GoalState)
-      (parent: Option GoalState := .none)
       (options: @&Protocol.Options := {}):
     MetaM (Array Protocol.Goal):= do
   state.restoreMetaM
   let goals := state.goals.toArray
-  let parentDecl? := parent.bind (λ parentState => parentState.mctx.findDecl? state.parentMVar?.get!)
   goals.mapM fun goal => do
     match state.mctx.findDecl? goal with
     | .some mvarDecl =>
-      let serializedGoal ← serializeGoal options goal mvarDecl (parentDecl? := parentDecl?)
+      let serializedGoal ← serializeGoal options goal mvarDecl (parentDecl? := .none)
       pure serializedGoal
     | .none => throwError s!"Metavariable does not exist in context {goal.name}"
 
@@ -606,7 +604,9 @@ protected def GoalState.diag (goalState: GoalState) (parent?: Option GoalState :
     userNameToString : Name → String
       | .anonymous => ""
       | other => s!"[{other}]"
-    parentHasMVar (mvarId: MVarId): Bool := parent?.map (λ state => state.mctx.decls.contains mvarId) |>.getD true
+    parentHasMVar (mvarId: MVarId): Bool := match parent? with
+      | .some state => state.mctx.decls.contains mvarId
+      | .none => true
 
 initialize
   registerTraceClass `Pantograph.Delate

@@ -340,14 +340,16 @@ def execute (command: Protocol.Command): MainM Json := do
         | true, .some false => pure nextGoalState
         | false, _ => pure nextGoalState
       let nextStateId ← newGoalState nextGoalState
-      let parentExpr := nextGoalState.parentExpr?.get!
-      let goals ← runCoreM $ nextGoalState.serializeGoals (parent := .some goalState) (options := state.options) |>.run'
+      let parentExprs := nextGoalState.parentExprs
+      let hasSorry := parentExprs.any (·.hasSorry)
+      let hasUnsafe := parentExprs.any ((← getEnv).hasUnsafe ·)
+      let goals ← runCoreM $ nextGoalState.serializeGoals (options := state.options) |>.run'
       return {
         nextStateId? := .some nextStateId,
         goals? := .some goals,
         messages? := .some messages,
-        hasSorry := parentExpr.hasSorry,
-        hasUnsafe := (← getEnv).hasUnsafe parentExpr,
+        hasSorry,
+        hasUnsafe,
       }
     | .ok (.parseError message) =>
       return { messages? := .none, parseError? := .some message }
@@ -389,7 +391,7 @@ def execute (command: Protocol.Command): MainM Json := do
     let result ← liftMetaM <| goalPrint
         goalState
         (rootExpr := args.rootExpr?.getD False)
-        (parentExpr := args.parentExpr?.getD False)
+        (parentExprs := args.parentExprs?.getD False)
         (goals := args.goals?.getD False)
         (extraMVars := args.extraMVars?.getD #[])
         (options := state.options)

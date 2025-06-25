@@ -117,10 +117,10 @@ def goalStartExpr (expr: String) : Protocol.FallibleT Elab.TermElabM GoalState :
 
 @[export pantograph_goal_serialize_m]
 def goalSerialize (state: GoalState) (options: @&Protocol.Options): CoreM (Array Protocol.Goal) :=
-  runMetaM <| state.serializeGoals (parent := .none) options
+  runMetaM <| state.serializeGoals options
 
 @[export pantograph_goal_print_m]
-def goalPrint (state: GoalState) (rootExpr: Bool) (parentExpr: Bool) (goals: Bool) (extraMVars : Array String) (options: @&Protocol.Options)
+def goalPrint (state: GoalState) (rootExpr: Bool) (parentExprs: Bool) (goals: Bool) (extraMVars : Array String) (options: @&Protocol.Options)
   : CoreM Protocol.GoalPrintResult := runMetaM do
   state.restoreMetaM
 
@@ -130,9 +130,10 @@ def goalPrint (state: GoalState) (rootExpr: Bool) (parentExpr: Bool) (goals: Boo
         serializeExpression options (← instantiateAll expr)
     else
       pure .none
-  let parent? ← if parentExpr then
-      state.parentExpr?.mapM λ expr => state.withParentContext do
-        serializeExpression options (← instantiateAll expr)
+  let parentExprs? ← if parentExprs then
+      .some <$> state.parentMVars.mapM λ parent => parent.withContext do
+        let val := state.getMVarEAssignment parent |>.get!
+        serializeExpression options (← instantiateAll val)
     else
       pure .none
   let goals ← if goals then
@@ -148,7 +149,7 @@ def goalPrint (state: GoalState) (rootExpr: Bool) (parentExpr: Bool) (goals: Boo
   let env ← getEnv
   return {
     root?,
-    parent?,
+    parentExprs?,
     goals,
     extraMVars,
     rootHasSorry := rootExpr?.map (·.hasSorry) |>.getD false,

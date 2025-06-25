@@ -103,7 +103,7 @@ def goalStatePickle (goalState : GoalState) (path : System.FilePath) : IO Unit :
       tactic
     }
     root,
-    parentMVar?,
+    parentMVars,
     fragments,
   } := goalState
   Pantograph.pickle path (
@@ -115,7 +115,7 @@ def goalStatePickle (goalState : GoalState) (path : System.FilePath) : IO Unit :
     tactic,
 
     root,
-    parentMVar?,
+    parentMVars,
     fragments,
   )
 
@@ -131,7 +131,7 @@ def goalStateUnpickle (path : System.FilePath) (env : Environment)
     tactic,
 
     root,
-    parentMVar?,
+    parentMVars,
     fragments,
   ), region) ← Pantograph.unpickle (
     PHashMap Name ConstantInfo ×
@@ -142,7 +142,7 @@ def goalStateUnpickle (path : System.FilePath) (env : Environment)
     Elab.Tactic.State ×
 
     MVarId ×
-    Option MVarId ×
+    List MVarId ×
     FragmentMap
   ) path
   let env ← env.replay (Std.HashMap.ofList map₂.toList)
@@ -162,7 +162,7 @@ def goalStateUnpickle (path : System.FilePath) (env : Environment)
       tactic,
     },
     root,
-    parentMVar?,
+    parentMVars,
     fragments,
   }
   return (goalState, region)

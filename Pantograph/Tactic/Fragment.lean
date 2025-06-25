@@ -15,30 +15,38 @@ namespace Pantograph
 inductive Fragment where
   | calc (prevRhs? : Option Expr)
   | conv (rhs : MVarId) (dormant : List MVarId)
+  -- This goal is spawned from a `conv`
+  | convSentinel (parent : MVarId)
   deriving BEq
 abbrev FragmentMap := Std.HashMap MVarId Fragment
 def FragmentMap.empty : FragmentMap := Std.HashMap.emptyWithCapacity 2
 
 protected def Fragment.map (fragment : Fragment) (mapExpr : Expr → CoreM Expr) : CoreM Fragment :=
-  let mapMVarId (mvarId : MVarId) : CoreM MVarId :=
+  let mapMVar (mvarId : MVarId) : CoreM MVarId :=
     return (← mapExpr (.mvar mvarId)) |>.mvarId!
   match fragment with
   | .calc prevRhs? => return .calc (← prevRhs?.mapM mapExpr)
   | .conv rhs dormant => do
-    let rhs' ← mapMVarId rhs
-    let dormant' ← dormant.mapM mapMVarId
+    let rhs' ← mapMVar rhs
+    let dormant' ← dormant.mapM mapMVar
     return .conv rhs' dormant'
+  | .convSentinel parent => do
+    return .convSentinel (← mapMVar parent)
 
 protected def Fragment.enterCalc : Elab.Tactic.TacticM Fragment := do
   return .calc .none
-protected def Fragment.enterConv : Elab.Tactic.TacticM Fragment := do
+protected def Fragment.enterConv : Elab.Tactic.TacticM FragmentMap := do
   let goal ← Elab.Tactic.getMainGoal
-  let rhs ← goal.withContext do
-    let (rhs, newGoal) ← Elab.Tactic.Conv.mkConvGoalFor (← Elab.Tactic.getMainTarget)
-    Elab.Tactic.replaceMainGoal [newGoal.mvarId!]
-    pure rhs.mvarId!
+  goal.checkNotAssigned `GoalState.conv
+  let (rhs, newGoal) ← goal.withContext do
+    let target ← instantiateMVars (← goal.getType)
+    let (rhs, newGoal) ← Elab.Tactic.Conv.mkConvGoalFor target
+    pure (rhs.mvarId!, newGoal.mvarId!)
+  Elab.Tactic.replaceMainGoal [newGoal]
   let otherGoals := (← Elab.Tactic.getGoals).filter (· != goal)
-  return conv rhs otherGoals
+  return FragmentMap.empty
+    |>.insert goal (.conv rhs otherGoals)
+    |>.insert newGoal (.convSentinel goal)
 
 protected def Fragment.exit (fragment : Fragment) (goal : MVarId) (fragments : FragmentMap)
   : Elab.Tactic.TacticM FragmentMap :=
@@ -47,11 +55,10 @@ protected def Fragment.exit (fragment : Fragment) (goal : MVarId) (fragments : F
     Elab.Tactic.setGoals [goal]
     return fragments.erase goal
   | .conv rhs otherGoals => do
-    -- FIXME: Only process the goals that are descendants of `goal`
-    let goals := (← Elab.Tactic.getGoals).filter λ goal => true
-      --match fragments[goal]? with
-      --| .some f => fragment == f
-      --| .none => false -- Not a conv goal from this
+    let goals := (← Elab.Tactic.getGoals).filter λ descendant =>
+      match fragments[descendant]? with
+      | .some s => (.convSentinel goal) == s
+      | _ => false -- Not a conv goal from this
     -- Close all existing goals with `refl`
     for mvarId in goals do
       liftM <| mvarId.refl <|> mvarId.inferInstance <|> pure ()
@@ -64,6 +71,8 @@ protected def Fragment.exit (fragment : Fragment) (goal : MVarId) (fragments : F
     let proof ← instantiateMVars (.mvar goal)
 
     Elab.Tactic.liftMetaTactic1 (·.replaceTargetEq targetNew proof)
+    return fragments.erase goal
+  | .convSentinel _ =>
     return fragments.erase goal
 
 protected def Fragment.step (fragment : Fragment) (goal : MVarId) (s : String)
@@ -125,5 +134,19 @@ protected def Fragment.step (fragment : Fragment) (goal : MVarId) (s : String)
     | .none => return .empty
   | .conv .. => do
     throwError "Direct operation on conversion tactic parent goal is not allowed"
+  | fragment@(.convSentinel _) => do
+    let tactic ← match Parser.runParserCategory
+      (env := ← MonadEnv.getEnv)
+      (catName := `conv)
+      (input := s)
+      (fileName := ← getFileName) with
+      | .ok stx => pure $ stx
+      | .error error => throwError error
+    let oldGoals ← Elab.Tactic.getGoals
+    -- Label newly generated goals as conv sentinels
+    Elab.Tactic.evalTactic tactic
+    let newGoals := (← Elab.Tactic.getUnsolvedGoals).filter λ g => ¬ (oldGoals.contains g)
+    return newGoals.foldl (init := FragmentMap.empty) λ acc g =>
+      acc.insert g fragment
 
 end Pantograph
