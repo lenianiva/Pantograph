@@ -135,6 +135,7 @@ protected def Fragment.step (fragment : Fragment) (goal : MVarId) (s : String)
   | .conv .. => do
     throwError "Direct operation on conversion tactic parent goal is not allowed"
   | fragment@(.convSentinel _) => do
+    assert! isLHSGoal? (← goal.getType) |>.isSome
     let tactic ← match Parser.runParserCategory
       (env := ← MonadEnv.getEnv)
       (catName := `conv)

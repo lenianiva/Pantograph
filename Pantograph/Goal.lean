@@ -15,9 +15,15 @@ inductive Site where
   | focus (goal : MVarId)
   | prefer (goal : MVarId)
   | unfocus
+  deriving BEq, Inhabited
 
 instance : Coe MVarId Site where
   coe := .focus
+instance : ToString Site where
+  toString
+    | .focus { name } => s!"[{name}]"
+    | .prefer { name } => s!"[{name},...]"
+    | .unfocus => "[*]"
 
 /-- Executes a `TacticM` on a site and return affected goals -/
 protected def Site.runTacticM (site : Site)
@@ -29,15 +35,19 @@ protected def Site.runTacticM (site : Site)
     let a ← f
     return (a, [goal])
   | .prefer goal => do
-    let prev ← Elab.Tactic.getUnsolvedGoals
-    let otherGoals := prev.filter (· != goal)
+    let before ← Elab.Tactic.getUnsolvedGoals
+    let otherGoals := before.filter (· != goal)
     Elab.Tactic.setGoals (goal :: otherGoals)
     let a ← f
-    return (a, ← prev.filterM (·.isAssignedOrDelayedAssigned))
+    let after ← Elab.Tactic.getUnsolvedGoals
+    let parents := before.filter (¬ after.contains ·)
+    return (a, parents)
   | .unfocus => do
-    let prev ← Elab.Tactic.getUnsolvedGoals
+    let before ← Elab.Tactic.getUnsolvedGoals
     let a ← f
-    return (a, ← prev.filterM (·.isAssignedOrDelayedAssigned))
+    let after ← Elab.Tactic.getUnsolvedGoals
+    let parents := before.filter (¬ after.contains ·)
+    return (a, parents)
 
 /--
 Kernel view of the state of a proof
@@ -55,6 +65,8 @@ structure GoalState where
   -- Any goal associated with a fragment has a partial tactic which has not
   -- finished executing.
   fragments : FragmentMap := .empty
+
+def throwNoGoals { m α } [Monad m] [MonadError m] : m α := throwError "no goals to be solved"
 
 @[export pantograph_goal_state_create_m]
 protected def GoalState.create (expr: Expr): Elab.TermElabM GoalState := do
@@ -78,8 +90,18 @@ protected def GoalState.createFromMVars (goals: List MVarId) (root: MVarId): Met
     root,
     savedState,
   }
+@[always_inline]
 protected def GoalState.goals (state: GoalState): List MVarId :=
   state.savedState.tactic.goals
+@[always_inline]
+protected def GoalState.mainGoal? (state : GoalState) : Option MVarId :=
+  state.goals.head?
+@[always_inline]
+protected def GoalState.actingGoal? (state : GoalState) (site : Site) : Option MVarId := do
+  match site with
+  | .focus goal | .prefer goal => return goal
+  | .unfocus => state.mainGoal?
+
 @[export pantograph_goal_state_goals]
 protected def GoalState.goalsArray (state: GoalState): Array MVarId := state.goals.toArray
 protected def GoalState.mctx (state: GoalState): MetavarContext :=
@@ -91,8 +113,10 @@ protected def GoalState.env (state: GoalState): Environment :=
 protected def GoalState.metaContextOfGoal (state: GoalState) (mvarId: MVarId): Option Meta.Context := do
   let mvarDecl ← state.mctx.findDecl? mvarId
   return { lctx := mvarDecl.lctx, localInstances := mvarDecl.localInstances }
+@[always_inline]
 protected def GoalState.metaState (state: GoalState): Meta.State :=
   state.savedState.term.meta.meta
+@[always_inline]
 protected def GoalState.coreState (state: GoalState): Core.SavedState :=
   state.savedState.term.meta.core
 
@@ -192,8 +216,10 @@ protected def GoalState.getMVarEAssignment (goalState: GoalState) (mvarId: MVarI
 @[export pantograph_goal_state_parent_exprs]
 protected def GoalState.parentExprs (state : GoalState) : List Expr :=
   state.parentMVars.map λ goal => state.getMVarEAssignment goal |>.get!
+@[always_inline]
 protected def GoalState.hasUniqueParent (state : GoalState) : Bool :=
   state.parentMVars.length == 1
+@[always_inline]
 protected def GoalState.parentExpr! (state : GoalState) : Expr :=
   assert! state.parentMVars.length == 1
   (state.getMVarEAssignment state.parentMVars[0]!).get!
@@ -208,7 +234,8 @@ if conflicting assignments exist. We also assume the monotonicity property: In a
 chain of descending goal states, a mvar cannot be unassigned, and once assigned
 its assignment cannot change. -/
 @[export pantograph_goal_state_replay_m]
-protected def GoalState.replay (dst : GoalState) (src src' : GoalState) : CoreM GoalState := do
+protected def GoalState.replay (dst : GoalState) (src src' : GoalState) : CoreM GoalState :=
+  withTraceNode `Pantograph.GoalState.replay (fun _ => return m!"replay") do
   let srcNGen := src.coreState.ngen
   let srcNGen' := src'.coreState.ngen
   let dstNGen := dst.coreState.ngen
@@ -407,6 +434,7 @@ private def collectAllErroredMVars (src : MVarId) : Elab.TermElabM (List MVarId)
         result := mvarDeps.foldl (·.insert ·) result
   return result.toList
 
+/-- Merger of two unique lists -/
 private def mergeMVarLists (li1 li2 : List MVarId) : List MVarId :=
   let li2' := li2.filter (¬ li1.contains ·)
   li1 ++ li2'
@@ -451,7 +479,7 @@ inductive TacticResult where
   -- The given action cannot be executed in the state
   | invalidAction (message : String)
 
-private def dumpMessageLog (prevMessageLength : Nat) : CoreM (Bool × Array String) := do
+private def dumpMessageLog (prevMessageLength : Nat := 0) : CoreM (Bool × Array String) := do
   let newMessages := (← Core.getMessageLog).toList.drop prevMessageLength
   let hasErrors := newMessages.any (·.severity == .error)
   let newMessages ← newMessages.mapM λ m => m.toString
@@ -459,13 +487,12 @@ private def dumpMessageLog (prevMessageLength : Nat) : CoreM (Bool × Array Stri
   return (hasErrors, newMessages.toArray)
 
 def withCapturingError (elabM : Elab.Term.TermElabM GoalState) : Elab.TermElabM TacticResult := do
-  -- FIXME: Maybe message log should be empty
-  let prevMessageLength := (← Core.getMessageLog).toList.length
+  assert! (← Core.getMessageLog).toList.isEmpty
   try
     let state ← elabM
 
     -- Check if error messages have been generated in the core.
-    let (hasError, newMessages) ← dumpMessageLog prevMessageLength
+    let (hasError, newMessages) ← dumpMessageLog
     if hasError then
       return .failure newMessages
     else
@@ -473,62 +500,59 @@ def withCapturingError (elabM : Elab.Term.TermElabM GoalState) : Elab.TermElabM 
   catch exception =>
     match exception with
     | .internal _ =>
-      let (_, messages) ← dumpMessageLog prevMessageLength
+      let (_, messages) ← dumpMessageLog
       return .failure messages
     | _ => return .failure #[← exception.toMessageData.toString]
 
 /-- Executes a `TacticM` monad on this `GoalState`, collecting the errors as necessary -/
 protected def GoalState.tryTacticM
-    (state: GoalState) (goal: MVarId) (tacticM: Elab.Tactic.TacticM Unit)
+    (state: GoalState) (site : Site)
+    (tacticM: Elab.Tactic.TacticM Unit)
     (guardMVarErrors : Bool := false)
-    : Elab.TermElabM TacticResult := do
+    : Elab.TermElabM TacticResult :=
   withCapturingError do
-    state.step goal tacticM guardMVarErrors
+    state.step site tacticM guardMVarErrors
 
 /-- Execute a string tactic on given state. Restores TermElabM -/
 @[export pantograph_goal_state_try_tactic_m]
-protected def GoalState.tryTactic (state: GoalState) (goal: MVarId) (tactic: String):
+protected def GoalState.tryTactic (state: GoalState) (site : Site) (tactic: String):
     Elab.TermElabM TacticResult := do
   state.restoreElabM
-  /-
+  let .some goal := state.actingGoal? site | throwNoGoals
   if let .some fragment := state.fragments[goal]? then
     return ← withCapturingError do
-      let (moreFragments, state') ← state.step' goal (fragment.step goal tactic)
+      let (moreFragments, state') ← state.step' site (fragment.step goal tactic)
       let fragments := moreFragments.fold (init := state.fragments.erase goal) λ acc mvarId f =>
         acc.insert mvarId f
-      return { state' with fragments } -/
-
-  let catName := match isLHSGoal? (← goal.getType) with
-    | .some _ => `conv
-    | .none => `tactic
+      return { state' with fragments }
   -- Normal tactic without fragment
   let tactic ← match Parser.runParserCategory
-    (env := ← MonadEnv.getEnv)
-    (catName := catName)
+    (env := ← getEnv)
+    (catName := `tactic)
     (input := tactic)
     (fileName := ← getFileName) with
     | .ok stx => pure $ stx
     | .error error => return .parseError error
   let tacticM := Elab.Tactic.evalTactic tactic
   withCapturingError do
-    state.step goal tacticM (guardMVarErrors := true)
+    state.step site tacticM (guardMVarErrors := true)
 
 -- Specialized Tactics
 
-protected def GoalState.tryAssign (state: GoalState) (goal: MVarId) (expr: String):
-      Elab.TermElabM TacticResult := do
+protected def GoalState.tryAssign (state : GoalState) (site : Site) (expr : String)
+    : Elab.TermElabM TacticResult := do
   state.restoreElabM
   let expr ← match Parser.runParserCategory
-    (env := ← MonadEnv.getEnv)
+    (env := ← getEnv)
     (catName := `term)
     (input := expr)
     (fileName := ← getFileName) with
     | .ok syn => pure syn
     | .error error => return .parseError error
-  state.tryTacticM goal $ Tactic.evalAssign expr
+  state.tryTacticM site $ Tactic.evalAssign expr
 
-protected def GoalState.tryLet (state: GoalState) (goal: MVarId) (binderName: String) (type: String):
-      Elab.TermElabM TacticResult := do
+protected def GoalState.tryLet (state : GoalState) (site : Site) (binderName : String) (type : String)
+    : Elab.TermElabM TacticResult := do
   state.restoreElabM
   let type ← match Parser.runParserCategory
     (env := ← MonadEnv.getEnv)
@@ -537,23 +561,25 @@ protected def GoalState.tryLet (state: GoalState) (goal: MVarId) (binderName: St
     (fileName := ← getFileName) with
     | .ok syn => pure syn
     | .error error => return .parseError error
-  state.tryTacticM goal $ Tactic.evalLet binderName.toName type
+  state.tryTacticM site $ Tactic.evalLet binderName.toName type
 
 /-- Enter conv tactic mode -/
 @[export pantograph_goal_state_conv_enter_m]
-protected def GoalState.conv (state : GoalState) (goal : MVarId) :
+protected def GoalState.conv (state : GoalState) (site : Site) :
       Elab.TermElabM TacticResult := do
+  let .some goal := state.actingGoal? site | throwNoGoals
   if let .some (.conv ..) := state.fragments[goal]? then
     return .invalidAction "Already in conv state"
   withCapturingError do
-    let (fragments, state') ← state.step' goal Fragment.enterConv
+    let (fragments, state') ← state.step' site Fragment.enterConv
     return {
       state' with
       fragments := fragments.fold (init := state'.fragments) λ acc goal fragment =>
         acc.insert goal fragment
     }
 
-/-- Exit from `conv` mode. Resumes all goals before the mode starts and applys the conv -/
+/-- Exit from `conv` mode, and conclude all conversion tactic sentinels
+descended from `goal`. -/
 @[export pantograph_goal_state_conv_exit_m]
 protected def GoalState.convExit (state : GoalState) (goal : MVarId):
       Elab.TermElabM TacticResult := do
@@ -571,8 +597,9 @@ protected def GoalState.calcPrevRhsOf? (state : GoalState) (goal : MVarId) : Opt
   prevRhs?
 
 @[export pantograph_goal_state_try_calc_m]
-protected def GoalState.tryCalc (state : GoalState) (goal : MVarId) (pred : String)
+protected def GoalState.tryCalc (state : GoalState) (site : Site) (pred : String)
   : Elab.TermElabM TacticResult := do
+  let .some goal := state.actingGoal? site | throwNoGoals
   let prevRhs? := state.calcPrevRhsOf? goal
   withCapturingError do
     let (moreFragments, state') ← state.step' goal do
