@@ -328,7 +328,7 @@ def test_conv: TestM Unit := do
     #[interiorGoal [] "a + b + c1 = b + a + c2"])
 
   let goalConv := state1.goals[0]!
-  let state2 ← match ← state1.conv (state1.get! 0) with
+  let state2 ← match ← state1.convEnter (state1.get! 0) with
     | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -399,7 +399,7 @@ def test_conv: TestM Unit := do
   addTest $ LSpec.check s!"  · {convTactic}" ((← state6.serializeGoals (options := ← read)).map (·.devolatilize) =
     #[])
 
-  let state1_1 ← match ← state6.convExit goalConv with
+  let state1_1 ← match ← state6.fragmentExit goalConv with
     | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -441,7 +441,8 @@ def test_calc: TestM Unit := do
   addTest $ LSpec.check tactic ((← state1.serializeGoals (options := ← read)).map (·.devolatilize) =
     #[interiorGoal [] "a + b = c + d"])
   let pred := "a + b = b + c"
-  let state2 ← match ← state1.tryCalc (state1.get! 0) (pred := pred) with
+  let .success state1 _ ← state1.calcEnter state1.mainGoal?.get! | fail "Could not enter calc"
+  let state2 ← match ← state1.tacticOn 0 pred with
     | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
@@ -466,7 +467,7 @@ def test_calc: TestM Unit := do
       addTest $ expectationFailure "continue" e
       return ()
   let pred := "_ = c + d"
-  let state4 ← match ← state3.tryCalc (state3.get! 0) (pred := pred) with
+  let state4 ← match ← state3.tacticOn 0 pred with
     | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString

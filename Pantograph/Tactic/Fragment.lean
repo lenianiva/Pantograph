@@ -33,8 +33,7 @@ protected def Fragment.map (fragment : Fragment) (mapExpr : Expr → CoreM Expr)
   | .convSentinel parent => do
     return .convSentinel (← mapMVar parent)
 
-protected def Fragment.enterCalc : Elab.Tactic.TacticM Fragment := do
-  return .calc .none
+protected def Fragment.enterCalc : Fragment := .calc .none
 protected def Fragment.enterConv : Elab.Tactic.TacticM FragmentMap := do
   let goal ← Elab.Tactic.getMainGoal
   goal.checkNotAssigned `GoalState.conv

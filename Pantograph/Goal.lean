@@ -565,7 +565,7 @@ protected def GoalState.tryLet (state : GoalState) (site : Site) (binderName : S
 
 /-- Enter conv tactic mode -/
 @[export pantograph_goal_state_conv_enter_m]
-protected def GoalState.conv (state : GoalState) (site : Site) :
+protected def GoalState.convEnter (state : GoalState) (site : Site) :
       Elab.TermElabM TacticResult := do
   let .some goal := state.actingGoal? site | throwNoGoals
   if let .some (.conv ..) := state.fragments[goal]? then
@@ -578,13 +578,13 @@ protected def GoalState.conv (state : GoalState) (site : Site) :
         acc.insert goal fragment
     }
 
-/-- Exit from `conv` mode, and conclude all conversion tactic sentinels
-descended from `goal`. -/
-@[export pantograph_goal_state_conv_exit_m]
-protected def GoalState.convExit (state : GoalState) (goal : MVarId):
+/-- Exit from a tactic fragment. -/
+@[export pantograph_goal_state_fragment_exit_m]
+protected def GoalState.fragmentExit (state : GoalState) (site : Site):
       Elab.TermElabM TacticResult := do
-  let .some fragment@(.conv ..) := state.fragments[goal]? |
-    return .invalidAction "Not in conv state"
+  let .some goal := state.actingGoal? site | throwNoGoals
+  let .some fragment := state.fragments[goal]? |
+    return .invalidAction "Goal does not have a fragment"
   withCapturingError do
     let (fragments, state') ← state.step' goal (fragment.exit goal state.fragments)
     return {
@@ -596,19 +596,17 @@ protected def GoalState.calcPrevRhsOf? (state : GoalState) (goal : MVarId) : Opt
   let .some (.calc prevRhs?) := state.fragments[goal]? | .none
   prevRhs?
 
-@[export pantograph_goal_state_try_calc_m]
-protected def GoalState.tryCalc (state : GoalState) (site : Site) (pred : String)
+@[export pantograph_goal_state_calc_enter_m]
+protected def GoalState.calcEnter (state : GoalState) (site : Site)
   : Elab.TermElabM TacticResult := do
   let .some goal := state.actingGoal? site | throwNoGoals
-  let prevRhs? := state.calcPrevRhsOf? goal
+  if let .some _ := state.fragments[goal]? then
+    return .invalidAction "Goal already has a fragment"
   withCapturingError do
-    let (moreFragments, state') ← state.step' goal do
-      let fragment := Fragment.calc prevRhs?
-      fragment.step goal pred
-    let fragments := moreFragments.fold (init := state.fragments.erase goal) λ acc mvarId f =>
-      acc.insert mvarId f
+    let fragment := Fragment.enterCalc
+    let fragments := state.fragments.insert goal fragment
     return {
-      state' with
+      state with
       fragments,
     }
 

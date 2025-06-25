@@ -87,6 +87,7 @@ structure InteractionError where
   deriving Lean.ToJson
 
 def errorIndex (desc: String): InteractionError := { error := "index", desc }
+def errorOperation (desc: String): InteractionError := { error := "operation", desc }
 def errorExpr (desc: String): InteractionError := { error := "expr", desc }
 
 
@@ -248,17 +249,17 @@ structure GoalStartResult where
   root: String
   deriving Lean.ToJson
 structure GoalTactic where
-  -- Identifiers for tree, state, and goal
   stateId: Nat
-  goalId: Nat := 0
+  -- If omitted, act on the first goal
+  goalId?: Option Nat := .none
+  -- If set to true, goal will not go dormant. Defaults to `automaticMode`
+  autoResume?: Option Bool := .none
   -- One of the fields here must be filled
   tactic?: Option String := .none
+  mode?: Option String := .none -- Changes the current category to {"tactic", "calc", "conv"}
   expr?: Option String := .none
   have?: Option String := .none
   let?: Option String := .none
-  calc?: Option String := .none
-  -- true to enter `conv`, `false` to exit. In case of exit the `goalId` is ignored.
-  conv?: Option Bool := .none
   draft?: Option String := .none
 
   -- In case of the `have` tactic, the new free variable name is provided here
