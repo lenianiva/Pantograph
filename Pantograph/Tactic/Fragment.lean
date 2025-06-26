@@ -25,8 +25,15 @@ inductive Fragment where
   -- This goal is spawned from a `conv`
   | convSentinel (parent : MVarId)
   deriving BEq, Inhabited
+
 abbrev FragmentMap := Std.HashMap MVarId Fragment
 def FragmentMap.empty : FragmentMap := Std.HashMap.emptyWithCapacity 2
+protected def FragmentMap.filter (map : FragmentMap) (pred : MVarId → Fragment → Bool) : FragmentMap :=
+  map.fold (init := FragmentMap.empty) λ acc mvarId fragment =>
+    if pred mvarId fragment then
+      acc.insert mvarId fragment
+    else
+      acc
 
 protected def Fragment.map (fragment : Fragment) (mapExpr : Expr → CoreM Expr) : CoreM Fragment :=
   let mapMVar (mvarId : MVarId) : CoreM MVarId :=
@@ -80,8 +87,8 @@ protected partial def Fragment.exit (fragment : Fragment) (goal : MVarId) (fragm
     let mvarId ← Elab.Tactic.getMainGoal
     liftM <| mvarId.refl <|> mvarId.inferInstance <|> pure ()
     Elab.Tactic.pruneSolvedGoals
-    -- FIXME: Erase all sibling fragments
-    return fragments.erase goal
+    return fragments.filter λ mvarId fragment =>
+      !(mvarId == goal || fragment == .convSentinel goal)
   | .convSentinel parent =>
     let parentFragment := fragments[parent]!
     parentFragment.exit parent (fragments.erase goal)
