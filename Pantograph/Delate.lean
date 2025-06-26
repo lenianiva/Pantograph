@@ -454,7 +454,6 @@ def serializeExpression (options: @&Protocol.Options) (e: Expr): MetaM Protocol.
     dependentMVars?,
   }
 
-
 /-- Adapted from ppGoal -/
 def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl := .none)
       : MetaM Protocol.Goal := do
@@ -520,7 +519,6 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
     return {
       name := goal.name.toString,
       userName? := if mvarDecl.userName == .anonymous then .none else .some (ofName mvarDecl.userName),
-      isConversion := isLHSGoal? mvarDecl.type |>.isSome,
       target := (← serializeExpression options (← instantiate mvarDecl.type)),
       vars := vars.reverse.toArray
     }
@@ -530,17 +528,20 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
 
 protected def GoalState.serializeGoals
       (state: GoalState)
-      (parent: Option GoalState := .none)
       (options: @&Protocol.Options := {}):
     MetaM (Array Protocol.Goal):= do
   state.restoreMetaM
   let goals := state.goals.toArray
-  let parentDecl? := parent.bind (λ parentState => parentState.mctx.findDecl? state.parentMVar?.get!)
   goals.mapM fun goal => do
+    let fragment := match state.fragments[goal]? with
+      | .none => .tactic
+      | .some $ .calc .. => .calc
+      | .some $ .conv .. => .conv
+      | .some $ .convSentinel .. => .conv
     match state.mctx.findDecl? goal with
     | .some mvarDecl =>
-      let serializedGoal ← serializeGoal options goal mvarDecl (parentDecl? := parentDecl?)
-      pure serializedGoal
+      let serializedGoal ← serializeGoal options goal mvarDecl (parentDecl? := .none)
+      pure { serializedGoal with fragment }
     | .none => throwError s!"Metavariable does not exist in context {goal.name}"
 
 /-- Print the metavariables in a readable format -/
@@ -606,7 +607,9 @@ protected def GoalState.diag (goalState: GoalState) (parent?: Option GoalState :
     userNameToString : Name → String
       | .anonymous => ""
       | other => s!"[{other}]"
-    parentHasMVar (mvarId: MVarId): Bool := parent?.map (λ state => state.mctx.decls.contains mvarId) |>.getD true
+    parentHasMVar (mvarId: MVarId): Bool := match parent? with
+      | .some state => state.mctx.decls.contains mvarId
+      | .none => true
 
 initialize
   registerTraceClass `Pantograph.Delate

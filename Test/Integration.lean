@@ -88,10 +88,10 @@ def test_tactic : Test := do
    ({ stateId := 0, root := "_uniq.9" }: Protocol.GoalStartResult)
   step "goal.tactic" ({ stateId := 0, tactic? := .some "intro x" }: Protocol.GoalTactic)
    ({ nextStateId? := .some 1, goals? := #[goal1], }: Protocol.GoalTacticResult)
-  step "goal.print" ({ stateId := 1, parentExpr? := .some true, rootExpr? := .some true }: Protocol.GoalPrint)
+  step "goal.print" ({ stateId := 1, parentExprs? := .some true, rootExpr? := .some true }: Protocol.GoalPrint)
    ({
      root? := .some { pp? := "fun x => ?m.11"},
-     parent? := .some { pp? := .some "fun x => ?m.11" },
+     parentExprs? := .some [{ pp? := .some "fun x => ?m.11" }],
    }: Protocol.GoalPrintResult)
   step "goal.tactic" ({ stateId := 1, tactic? := .some "intro y" }: Protocol.GoalTactic)
    ({ nextStateId? := .some 2, goals? := #[goal2], }: Protocol.GoalTacticResult)
