@@ -5,10 +5,9 @@ open Lean
 
 namespace Pantograph.Test.Tactic.Fragment
 
-private def buildGoal (nameType: List (String × String)) (target: String) (userName?: Option String := .none):
+private def buildGoal (nameType: List (String × String)) (target: String):
     Protocol.Goal :=
   {
-    userName?,
     target := { pp? := .some target},
     vars := (nameType.map fun x => ({
       userName := x.fst,
@@ -133,6 +132,55 @@ def test_conv: TestM Unit := do
       let free := [("a", "Nat"), ("b", "Nat"), ("c1", "Nat"), ("c2", "Nat"), ("h", h)] ++ free
       buildGoal free target
 
+example (p : Prop) (x y z : Nat) : p → (p → x = y) → x + z = y + z ∧ p := by
+  intro hp hi
+  apply And.intro
+  conv =>
+    rhs
+    arg 1
+    rw [←hi]
+    rfl
+    tactic => exact hp
+  exact hp
+
+def test_conv_unshielded : TestM Unit := do
+  let rootTarget ← parseSentence "∀ (p : Prop) (x y z : Nat), p → (p → x = y) → x + z = y + z ∧ p"
+  let state ← GoalState.create rootTarget
+  let tactic := "intro p x y z hp hi"
+  let .success state _ ← state.tacticOn 0 tactic | fail "intro failed"
+  let tactic := "apply And.intro"
+  let .success state _ ← state.tacticOn 0 tactic | fail "apply failed"
+  let .success state _ ← state.convEnter (.prefer state.goals[0]!) | fail "Cannot enter conversion tactic mode"
+  let .success state _ ← state.tryTacticOnMain "rhs" | fail "rhs failed"
+  let tactic := "arg 1"
+  let .success state _ ← state.tryTacticOnMain tactic | fail s!"{tactic} failed"
+  checkEq s!"  {tactic}" ((← state.serializeGoals).map (·.devolatilize))
+    #[
+      { interiorGoal [] "y" with isConversion := true },
+      { interiorGoal [] "p" with userName? := "right", },
+    ]
+  let tactic := "rw [←hi]"
+  let .success state _ ← state.tryTacticOnMain tactic | fail s!"{tactic} failed"
+  checkEq s!"  {tactic}" state.goals.length 3
+  let tactic := "rfl"
+  let .success state _ ← state.tryTacticOnMain tactic | fail s!"{tactic} failed"
+  checkEq s!"  {tactic}" ((← state.serializeGoals).map (·.devolatilize))
+    #[
+      interiorGoal [] "p",
+      { interiorGoal [] "p" with userName? := "right", },
+    ]
+  checkEq "  (n goals)" state.goals.length 2
+  let tactic := "exact hp"
+  let .success state _ ← state.tryTacticOnMain tactic | fail s!"{tactic} failed"
+  let tactic := "exact hp"
+  let .success state _ ← state.tryTacticOnMain tactic | fail s!"{tactic} failed"
+  let root? := state.rootExpr?
+  checkTrue "root" root?.isSome
+  where
+  interiorGoal (free: List (String × String)) (target: String) :=
+    let free := [("p", "Prop"), ("x", "Nat"), ("y", "Nat"), ("z", "Nat"), ("hp", "p"), ("hi", "p → x = y")] ++ free
+    buildGoal free target
+
 example : ∀ (a b c d: Nat), a + b = b + c → b + c = c + d → a + b = c + d := by
   intro a b c d h1 h2
   calc a + b = b + c := by apply h1
@@ -158,7 +206,7 @@ def test_calc: TestM Unit := do
       return ()
   addTest $ LSpec.check s!"calc {pred} := _" ((← state2.serializeGoals).map (·.devolatilize) =
     #[
-      interiorGoal [] "a + b = b + c" (.some "calc"),
+      { interiorGoal [] "a + b = b + c" with userName? := .some "calc" },
       interiorGoal [] "b + c = c + d"
     ])
   addTest $ LSpec.test "(2.0 prev rhs)" (state2.calcPrevRhsOf? (state2.get! 0) |>.isNone)
@@ -183,7 +231,7 @@ def test_calc: TestM Unit := do
       return ()
   addTest $ LSpec.check s!"calc {pred} := _" ((← state4.serializeGoals).map (·.devolatilize) =
     #[
-      interiorGoal [] "b + c = c + d" (.some "calc")
+      { interiorGoal [] "b + c = c + d" with userName? := .some "calc" },
     ])
   addTest $ LSpec.test "(4.0 prev rhs)" (state4.calcPrevRhsOf? (state4.get! 0) |>.isNone)
   let tactic := "apply h2"
@@ -194,14 +242,15 @@ def test_calc: TestM Unit := do
       return ()
   addTest $ LSpec.test "(4m root)" state4m.rootExpr?.isSome
   where
-    interiorGoal (free: List (String × String)) (target: String) (userName?: Option String := .none) :=
+    interiorGoal (free: List (String × String)) (target: String) :=
       let free := [("a", "Nat"), ("b", "Nat"), ("c", "Nat"), ("d", "Nat"),
         ("h1", "a + b = b + c"), ("h2", "b + c = c + d")] ++ free
-      buildGoal free target userName?
+      buildGoal free target
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   [
     ("conv", test_conv),
+    ("conv unshielded", test_conv_unshielded),
     ("calc", test_calc),
   ] |>.map (λ (name, t) => (name, runTestTermElabM env t))
 

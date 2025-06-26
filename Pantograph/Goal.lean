@@ -521,9 +521,8 @@ protected def GoalState.tryTactic (state: GoalState) (site : Site) (tactic: Stri
   let .some goal := state.actingGoal? site | throwNoGoals
   if let .some fragment := state.fragments[goal]? then
     return ← withCapturingError do
-      let (moreFragments, state') ← state.step' site (fragment.step goal tactic)
-      let fragments := moreFragments.fold (init := state.fragments.erase goal) λ acc mvarId f =>
-        acc.insert mvarId f
+      let (fragments, state') ← state.step' site do
+        fragment.step goal tactic $ state.fragments.erase goal
       return { state' with fragments }
   -- Normal tactic without fragment
   let tactic ← match Parser.runParserCategory

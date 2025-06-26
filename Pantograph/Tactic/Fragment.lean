@@ -72,7 +72,7 @@ protected def Fragment.exit (fragment : Fragment) (goal : MVarId) (fragments : F
   | .convSentinel _ =>
     return fragments.erase goal
 
-protected def Fragment.step (fragment : Fragment) (goal : MVarId) (s : String)
+protected def Fragment.step (fragment : Fragment) (goal : MVarId) (s : String) (map : FragmentMap)
   : Elab.Tactic.TacticM FragmentMap := goal.withContext do
   assert! ¬ (← goal.isAssigned)
   match fragment with
@@ -127,11 +127,11 @@ protected def Fragment.step (fragment : Fragment) (goal : MVarId) (s : String)
     let goals := [ mvarBranch ] ++ remainder?.toList
     Elab.Tactic.setGoals goals
     match remainder? with
-    | .some goal => return FragmentMap.empty.insert goal $ .calc (.some rhs)
-    | .none => return .empty
+    | .some goal => return map.erase goal |>.insert goal $ .calc (.some rhs)
+    | .none => return map
   | .conv .. => do
     throwError "Direct operation on conversion tactic parent goal is not allowed"
-  | fragment@(.convSentinel _) => do
+  | fragment@(.convSentinel parent) => do
     assert! isLHSGoal? (← goal.getType) |>.isSome
     let tactic ← match Parser.runParserCategory
       (env := ← MonadEnv.getEnv)
@@ -143,8 +143,14 @@ protected def Fragment.step (fragment : Fragment) (goal : MVarId) (s : String)
     let oldGoals ← Elab.Tactic.getGoals
     -- Label newly generated goals as conv sentinels
     Elab.Tactic.evalTactic tactic
-    let newGoals := (← Elab.Tactic.getUnsolvedGoals).filter λ g => ¬ (oldGoals.contains g)
-    return newGoals.foldl (init := FragmentMap.empty) λ acc g =>
+    let newGoals ← (← Elab.Tactic.getUnsolvedGoals).filterM λ g => do
+      -- conv tactic might generate non-conv goals
+      if oldGoals.contains g then
+        return false
+      let target ← g.getType
+      return isLHSGoal? (← g.getType) |>.isSome
+    -- FIXME: Conclude the conv by exiting the parent fragment if new goals is empty
+    return newGoals.foldl (init := map) λ acc g =>
       acc.insert g fragment
 
 end Pantograph
