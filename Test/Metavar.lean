@@ -291,6 +291,7 @@ def test_replay_environment : TestM Unit := do
     pure type
   let .success state1 _  ← state.tryTacticM goal (Tactic.assignWithAuxLemma type) | fail "left"
 
+  state.restoreMetaM
   let goal := state.goals[1]!
   let type ← goal.withContext do
     let .ok type ← elabTerm (← `(term|(3: Nat) ≤ 5)) (.some $ .sort 0) | unreachable!
