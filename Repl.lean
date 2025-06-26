@@ -97,16 +97,7 @@ def liftTermElabM { α } (termElabM : Elab.TermElabM α) (levelNames : List Name
   }
   runCoreM $ termElabM.run' context state |>.run'
 
-section Frontend
-
-structure CompilationUnit where
-  -- Environment immediately before the unit
-  env : Environment
-  boundary : Nat × Nat
-  invocations : List Protocol.InvokedTactic
-  sorrys : List Frontend.InfoWithContext
-  messages : Array String
-  newConstants : List Name
+section Goal
 
 def goal_tactic (args: Protocol.GoalTactic): EMainM Protocol.GoalTacticResult := do
   let state ← getMainState
@@ -174,6 +165,19 @@ def goal_tactic (args: Protocol.GoalTactic): EMainM Protocol.GoalTacticResult :=
     Protocol.throw $ errorI "invalid" message
   | .ok (.failure messages) =>
     return { messages? := .some messages }
+
+end Goal
+
+section Frontend
+
+structure CompilationUnit where
+  -- Environment immediately before the unit
+  env : Environment
+  boundary : Nat × Nat
+  invocations : List Protocol.InvokedTactic
+  sorrys : List Frontend.InfoWithContext
+  messages : Array String
+  newConstants : List Name
 
 def frontend_process (args: Protocol.FrontendProcess): EMainM Protocol.FrontendProcessResult := do
   let options := (← getMainState).options
