@@ -46,7 +46,7 @@ def test_conv_simple: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check "conv => ..." ((← state2.serializeGoals).map (·.devolatilize) =
-    #[{ interiorGoal [] "a + b + c1 = b + a + c2" with isConversion := true }])
+    #[{ interiorGoal [] "a + b + c1 = b + a + c2" with fragment := .conv }])
 
   let convTactic := "rhs"
   let state3R ← match ← state2.tacticOn (goalId := 0) convTactic with
@@ -55,7 +55,7 @@ def test_conv_simple: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check s!"  {convTactic} (discard)" ((← state3R.serializeGoals).map (·.devolatilize) =
-    #[{ interiorGoal [] "b + a + c2" with isConversion := true }])
+    #[{ interiorGoal [] "b + a + c2" with fragment := .conv }])
 
   let convTactic := "lhs"
   let state3L ← match ← state2.tacticOn (goalId := 0) convTactic with
@@ -64,7 +64,7 @@ def test_conv_simple: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check s!"  {convTactic}" ((← state3L.serializeGoals).map (·.devolatilize) =
-    #[{ interiorGoal [] "a + b + c1" with isConversion := true }])
+    #[{ interiorGoal [] "a + b + c1" with fragment := .conv }])
 
   let convTactic := "congr"
   let state4 ← match ← state3L.tacticOn (goalId := 0) convTactic with
@@ -74,8 +74,8 @@ def test_conv_simple: TestM Unit := do
       return ()
   addTest $ LSpec.check s!"  {convTactic}" ((← state4.serializeGoals).map (·.devolatilize) =
     #[
-      { interiorGoal [] "a + b" with isConversion := true, userName? := .some "a" },
-      { interiorGoal [] "c1" with isConversion := true, userName? := .some "a" }
+      { interiorGoal [] "a + b" with fragment := .conv, userName? := .some "a" },
+      { interiorGoal [] "c1" with fragment := .conv, userName? := .some "a" }
     ])
 
   let convTactic := "rw [Nat.add_comm]"
@@ -85,7 +85,7 @@ def test_conv_simple: TestM Unit := do
       addTest $ assertUnreachable $ other.toString
       return ()
   addTest $ LSpec.check s!"  · {convTactic}" ((← state5_1.serializeGoals).map (·.devolatilize) =
-    #[{ interiorGoal [] "b + a" with isConversion := true, userName? := .some "a" }])
+    #[{ interiorGoal [] "b + a" with fragment := .conv, userName? := .some "a" }])
 
   let convTactic := "rfl"
   let state6_1 ← match ← state5_1.tacticOn (goalId := 0) convTactic with
@@ -159,7 +159,7 @@ def test_conv_unshielded : TestM Unit := do
   let .success state _ ← state.tryTactic .unfocus tactic | fail s!"{tactic} failed"
   checkEq s!"  {tactic}" ((← state.serializeGoals).map (·.devolatilize))
     #[
-      { interiorGoal [] "y" with isConversion := true },
+      { interiorGoal [] "y" with fragment := .conv },
       { interiorGoal [] "p" with userName? := "right", },
     ]
   let tactic := "rw [←hi]"
@@ -206,13 +206,13 @@ def test_conv_unfinished : TestM Unit := do
   let .success state _ ← state.tryTactic .unfocus tactic | fail s!"{tactic} failed"
   checkEq s!"  {tactic}" ((← state.serializeGoals).map (·.devolatilize))
     #[
-      { interiorGoal [] "y" with isConversion := true },
+      { interiorGoal [] "y" with fragment := .conv },
     ]
   let tactic := "rw [hyz]"
   let .success state _ ← state.tryTactic .unfocus tactic | fail s!"{tactic} failed"
   checkEq s!"  {tactic}" ((← state.serializeGoals).map (·.devolatilize))
     #[
-      { interiorGoal [] "z" with isConversion := true },
+      { interiorGoal [] "z" with fragment := .conv },
     ]
   checkTrue "  (fragment)" $ state.fragments.contains state.mainGoal?.get!
   checkTrue "  (fragment parent)" $ state.fragments.contains convParent
@@ -260,7 +260,7 @@ def test_calc: TestM Unit := do
   addTest $ LSpec.check s!"calc {pred} := _" ((← state2.serializeGoals).map (·.devolatilize) =
     #[
       { interiorGoal [] "a + b = b + c" with userName? := .some "calc" },
-      interiorGoal [] "b + c = c + d"
+      { interiorGoal [] "b + c = c + d" with fragment := .calc },
     ])
   addTest $ LSpec.test "(2.0 prev rhs)" (state2.calcPrevRhsOf? (state2.get! 0) |>.isNone)
   addTest $ LSpec.test "(2.1 prev rhs)" (state2.calcPrevRhsOf? (state2.get! 1) |>.isSome)

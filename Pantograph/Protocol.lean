@@ -60,16 +60,21 @@ structure Variable where
   type?: Option Expression  := .none
   value?: Option Expression := .none
   deriving Lean.ToJson
+inductive Fragment where
+  | tactic
+  | conv
+  | calc
+  deriving BEq, DecidableEq, Repr, Lean.ToJson
 structure Goal where
-  name: String := ""
   /-- Name of the metavariable -/
-  userName?: Option String  := .none
-  /-- Is the goal in conversion mode -/
-  isConversion: Bool        := false
+  name : String := ""
+  /-- User-facing name -/
+  userName? : Option String  := .none
+  fragment : Fragment := .tactic
   /-- target expression type -/
-  target: Expression
+  target : Expression
   /-- Variables -/
-  vars: Array Variable      := #[]
+  vars : Array Variable      := #[]
   deriving Lean.ToJson
 
 

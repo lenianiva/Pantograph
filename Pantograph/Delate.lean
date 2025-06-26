@@ -454,7 +454,6 @@ def serializeExpression (options: @&Protocol.Options) (e: Expr): MetaM Protocol.
     dependentMVars?,
   }
 
-
 /-- Adapted from ppGoal -/
 def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: MetavarDecl) (parentDecl?: Option MetavarDecl := .none)
       : MetaM Protocol.Goal := do
@@ -520,7 +519,6 @@ def serializeGoal (options: @&Protocol.Options) (goal: MVarId) (mvarDecl: Metava
     return {
       name := goal.name.toString,
       userName? := if mvarDecl.userName == .anonymous then .none else .some (ofName mvarDecl.userName),
-      isConversion := isLHSGoal? mvarDecl.type |>.isSome,
       target := (← serializeExpression options (← instantiate mvarDecl.type)),
       vars := vars.reverse.toArray
     }
@@ -535,10 +533,15 @@ protected def GoalState.serializeGoals
   state.restoreMetaM
   let goals := state.goals.toArray
   goals.mapM fun goal => do
+    let fragment := match state.fragments[goal]? with
+      | .none => .tactic
+      | .some $ .calc .. => .calc
+      | .some $ .conv .. => .conv
+      | .some $ .convSentinel .. => .conv
     match state.mctx.findDecl? goal with
     | .some mvarDecl =>
       let serializedGoal ← serializeGoal options goal mvarDecl (parentDecl? := .none)
-      pure serializedGoal
+      pure { serializedGoal with fragment }
     | .none => throwError s!"Metavariable does not exist in context {goal.name}"
 
 /-- Print the metavariables in a readable format -/
