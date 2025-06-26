@@ -412,10 +412,10 @@ def execute (command: Protocol.Command): MainM Json := do
     let state ← getMainState
     let .some goalState := state.goalStates[args.id]? |
       Protocol.throw $ Protocol.errorIndex s!"Invalid state index {args.id}"
-    goalStatePickle goalState args.path
+    goalStatePickle goalState args.path (background? := .some $ ← getEnv)
     return {}
   goal_load (args: Protocol.GoalLoad): EMainM Protocol.GoalLoadResult := do
-    let (goalState, _) ← goalStateUnpickle args.path (← MonadEnv.getEnv)
+    let (goalState, _) ← goalStateUnpickle args.path (background? := .some $ ← getEnv)
     let id ← newGoalState goalState
     return { id }
 

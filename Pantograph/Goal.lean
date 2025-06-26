@@ -335,6 +335,9 @@ protected def GoalState.replay (dst : GoalState) (src src' : GoalState) : CoreM 
     core := {
       core with
       ngen,
+      env := ← core.env.replayConsts src.env src'.env (skipExisting := true),
+      -- Reset the message log when declaration uses `sorry`
+      messages := {}
     }
     meta := {
       meta with
@@ -476,7 +479,10 @@ private def dumpMessageLog (prevMessageLength : Nat := 0) : CoreM (Bool × Array
 
 /-- Execute a `TermElabM` producing a goal state, capturing the error and turn it into a `TacticResult` -/
 def withCapturingError (elabM : Elab.Term.TermElabM GoalState) : Elab.TermElabM TacticResult := do
-  assert! (← Core.getMessageLog).toList.isEmpty
+  let messageLog ← Core.getMessageLog
+  unless messageLog.toList.isEmpty do
+    IO.eprintln s!"{← messageLog.toList.mapM (·.toString)}"
+    assert! messageLog.toList.isEmpty
   try
     let state ← elabM
 
