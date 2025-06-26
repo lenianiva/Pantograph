@@ -110,6 +110,7 @@ def test_conv_simple: TestM Unit := do
       return ()
   addTest $ LSpec.check s!"  · {convTactic}" ((← state1_1.serializeGoals).map (·.devolatilize) =
     #[interiorGoal [] "b + a + c1 = b + a + c2"])
+  checkEq "(fragments)" state1_1.fragments.size 0
 
   /-
   let state1_1 ← match ← state6.fragmentExit goalConv with
@@ -171,7 +172,8 @@ def test_conv_unshielded : TestM Unit := do
       interiorGoal [] "p",
       { interiorGoal [] "p" with userName? := "right", },
     ]
-  checkEq "  (n goals)" state.goals.length 2
+  checkEq "(n goals)" state.goals.length 2
+  checkEq "(fragments)" state.fragments.size 0
   let tactic := "exact hp"
   let .success state _ ← state.tryTactic .unfocus tactic | fail s!"{tactic} failed"
   let tactic := "exact hp"
@@ -216,16 +218,12 @@ def test_conv_unfinished : TestM Unit := do
   checkTrue "  (fragment parent)" $ state.fragments.contains convParent
   checkTrue "  (main goal)" state.mainGoal?.isSome
   let tactic := "rfl"
-  let state? ← state.tryTactic .unfocus tactic
-  let state ← match state? with
-    | .success state _ => pure state
-    | .failure messages => fail s!"rfl {messages}"; return
-    | .invalidAction messages => fail s!"rfl {messages}"; return
-    | .parseError messages => fail s!"rfl {messages}"; return
+  let .success state _ ← state.tryTactic .unfocus tactic | fail s!"{tactic} failed"
   checkEq s!"  {tactic}" ((← state.serializeGoals).map (·.devolatilize))
     #[
       interiorGoal [] "x + z = w",
     ]
+  checkEq "(fragments)" state.fragments.size 0
   checkEq s!"  {tactic}" state.goals.length 1
   let tactic := "exact hxzw"
   let .success state _ ← state.tryTactic .unfocus tactic | fail s!"{tactic} failed"
@@ -295,6 +293,7 @@ def test_calc: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
+  checkEq "(fragments)" state4m.fragments.size 0
   addTest $ LSpec.test "(4m root)" state4m.rootExpr?.isSome
   where
     interiorGoal (free: List (String × String)) (target: String) :=
