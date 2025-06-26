@@ -128,7 +128,7 @@ def goalStatePickle (goalState : GoalState) (path : System.FilePath) (background
       tactic
     }
     root,
-    parentMVar?,
+    parentMVars,
     fragments,
   } := goalState
   pickle path (
@@ -140,7 +140,7 @@ def goalStatePickle (goalState : GoalState) (path : System.FilePath) (background
     tactic,
 
     root,
-    parentMVar?,
+    parentMVars,
     fragments,
   )
 
@@ -156,7 +156,7 @@ def goalStateUnpickle (path : System.FilePath) (background? : Option Environment
     tactic,
 
     root,
-    parentMVar?,
+    parentMVars,
     fragments,
   ), region) ← Pantograph.unpickle (
     DistilledEnvironment ×
@@ -167,7 +167,7 @@ def goalStateUnpickle (path : System.FilePath) (background? : Option Environment
     Elab.Tactic.State ×
 
     MVarId ×
-    Option MVarId ×
+    List MVarId ×
     FragmentMap
   ) path
   let env ← resurrectEnvironment distilledEnv background?
@@ -187,7 +187,7 @@ def goalStateUnpickle (path : System.FilePath) (background? : Option Environment
       tactic,
     },
     root,
-    parentMVar?,
+    parentMVars,
     fragments,
   }
   return (goalState, region)

@@ -13,7 +13,7 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
   only the values of definitions are printed.
 * `env.save { "path": <fileName> }`, `env.load { "path": <fileName> }`: Save/Load the
   current environment to/from a file
-* `env.module_read { "module": <name }`: Reads a list of symbols from a module
+* `env.module_read { "module": <name> }`: Reads a list of symbols from a module
 * `env.describe {}`: Describes the imports and modules in the current environment
 * `options.set { key: value, ... }`: Set one or more options (not Lean options; those
   have to be set via command line arguments.), for options, see `Pantograph/Protocol.lean`
@@ -28,16 +28,19 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
 * `options.print`: Display the current set of options
 * `goal.start {["name": <name>], ["expr": <expr>], ["levels": [<levels>]], ["copyFrom": <symbol>]}`:
   Start a new proof from a given expression or symbol
-* `goal.tactic {"stateId": <id>, "goalId": <id>, ...}`: Execute a tactic string on a
-  given goal. The tactic is supplied as additional key-value pairs in one of the following formats:
-  - `{ "tactic": <tactic> }`: Execute an ordinary tactic
-  - `{ "expr": <expr> }`: Assign the given proof term to the current goal
-  - `{ "have": <expr>, "binderName": <name> }`: Execute `have` and creates a branch goal
-  - `{ "calc": <expr> }`: Execute one step of a `calc` tactic. Each step must
+* `goal.tactic {"stateId": <id>, ["goalId": <id>], ["autoResume": <bool>], ...}`:
+  Execute a tactic string on a given goal site. The tactic is supplied as additional
+  key-value pairs in one of the following formats:
+  - `{ "tactic": <tactic> }`: Executes a tactic in the current mode
+  - `{ "mode": <mode> }`: Enter a different tactic mode. The permitted values
+    are `tactic` (default), `conv`, `calc`. In case of `calc`, each step must
     be of the form `lhs op rhs`. An `lhs` of `_` indicates that it should be set
     to the previous `rhs`.
-  - `{ "conv": <bool> }`: Enter or exit conversion tactic mode.
-  - `{ "draft": <expr> }`: Draft an expression with `sorry`s, turning them into goals. Coupling is not allowed.
+  - `{ "expr": <expr> }`: Assign the given proof term to the current goal
+  - `{ "have": <expr>, "binderName": <name> }`: Execute `have` and creates a branch goal
+  - `{ "let": <expr>, "binderName": <name> }`: Execute `let` and creates a branch goal
+  - `{ "draft": <expr> }`: Draft an expression with `sorry`s, turning them into
+    goals. Coupling is not allowed.
   If the `goals` field does not exist, the tactic execution has failed. Read
   `messages` to find the reason.
 * `goal.continue {"stateId": <id>, ["branch": <id>], ["goals": <names>]}`:
