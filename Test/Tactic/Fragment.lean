@@ -26,7 +26,7 @@ example : ∀ (a b c1 c2: Nat), (b + a) + c1 = (b + a) + c2 → (a + b) + c1 = (
     . rfl
   exact h
 
-def test_conv: TestM Unit := do
+def test_conv_simple: TestM Unit := do
   let rootTarget ← parseSentence "∀ (a b c1 c2: Nat), (b + a) + c1 = (b + a) + c2 → (a + b) + c1 = (b + a) + c2"
   let state0 ← GoalState.create rootTarget
 
@@ -103,19 +103,21 @@ def test_conv: TestM Unit := do
       return ()
 
   let convTactic := "rfl"
-  let state6 ← match ← state4_1.tacticOn (goalId := 0) convTactic with
+  let state1_1 ← match ← state4_1.tacticOn (goalId := 0) convTactic with
     | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.check s!"  · {convTactic}" ((← state6.serializeGoals).map (·.devolatilize) =
-    #[])
+  addTest $ LSpec.check s!"  · {convTactic}" ((← state1_1.serializeGoals).map (·.devolatilize) =
+    #[interiorGoal [] "b + a + c1 = b + a + c2"])
 
+  /-
   let state1_1 ← match ← state6.fragmentExit goalConv with
     | .success state _ => pure state
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
+  -/
 
   let tactic := "exact h"
   let stateF ← match ← state1_1.tacticOn (goalId := 0) (tactic := tactic) with
@@ -151,19 +153,19 @@ def test_conv_unshielded : TestM Unit := do
   let tactic := "apply And.intro"
   let .success state _ ← state.tacticOn 0 tactic | fail "apply failed"
   let .success state _ ← state.convEnter (.prefer state.goals[0]!) | fail "Cannot enter conversion tactic mode"
-  let .success state _ ← state.tryTacticOnMain "rhs" | fail "rhs failed"
+  let .success state _ ← state.tryTactic .unfocus "rhs" | fail "rhs failed"
   let tactic := "arg 1"
-  let .success state _ ← state.tryTacticOnMain tactic | fail s!"{tactic} failed"
+  let .success state _ ← state.tryTactic .unfocus tactic | fail s!"{tactic} failed"
   checkEq s!"  {tactic}" ((← state.serializeGoals).map (·.devolatilize))
     #[
       { interiorGoal [] "y" with isConversion := true },
       { interiorGoal [] "p" with userName? := "right", },
     ]
   let tactic := "rw [←hi]"
-  let .success state _ ← state.tryTacticOnMain tactic | fail s!"{tactic} failed"
+  let .success state _ ← state.tryTactic .unfocus tactic | fail s!"{tactic} failed"
   checkEq s!"  {tactic}" state.goals.length 3
   let tactic := "rfl"
-  let .success state _ ← state.tryTacticOnMain tactic | fail s!"{tactic} failed"
+  let .success state _ ← state.tryTactic .unfocus tactic | fail s!"{tactic} failed"
   checkEq s!"  {tactic}" ((← state.serializeGoals).map (·.devolatilize))
     #[
       interiorGoal [] "p",
@@ -171,14 +173,67 @@ def test_conv_unshielded : TestM Unit := do
     ]
   checkEq "  (n goals)" state.goals.length 2
   let tactic := "exact hp"
-  let .success state _ ← state.tryTacticOnMain tactic | fail s!"{tactic} failed"
+  let .success state _ ← state.tryTactic .unfocus tactic | fail s!"{tactic} failed"
   let tactic := "exact hp"
-  let .success state _ ← state.tryTacticOnMain tactic | fail s!"{tactic} failed"
+  let .success state _ ← state.tryTactic .unfocus tactic | fail s!"{tactic} failed"
   let root? := state.rootExpr?
   checkTrue "root" root?.isSome
   where
   interiorGoal (free: List (String × String)) (target: String) :=
     let free := [("p", "Prop"), ("x", "Nat"), ("y", "Nat"), ("z", "Nat"), ("hp", "p"), ("hi", "p → x = y")] ++ free
+    buildGoal free target
+
+example : ∀ (x y z w : Nat), y = z → x + z = w → x + y = w := by
+  intro x y z w hyz hxzw
+  conv =>
+    lhs
+    arg 2
+    rw [hyz]
+    rfl
+  exact hxzw
+
+def test_conv_unfinished : TestM Unit := do
+  let rootTarget ← parseSentence "∀ (x y z w : Nat), y = z → x + z = w → x + y = w"
+  let state ← GoalState.create rootTarget
+  let tactic := "intro x y z w hyz hxzw"
+  let .success state _ ← state.tacticOn 0 tactic | fail "intro failed"
+  let convParent := state.goals[0]!
+  let .success state _ ← state.convEnter (.prefer convParent) | fail "Cannot enter conversion tactic mode"
+  let .success state _ ← state.tryTactic .unfocus "lhs" | fail "rhs failed"
+  let tactic := "arg 2"
+  let .success state _ ← state.tryTactic .unfocus tactic | fail s!"{tactic} failed"
+  checkEq s!"  {tactic}" ((← state.serializeGoals).map (·.devolatilize))
+    #[
+      { interiorGoal [] "y" with isConversion := true },
+    ]
+  let tactic := "rw [hyz]"
+  let .success state _ ← state.tryTactic .unfocus tactic | fail s!"{tactic} failed"
+  checkEq s!"  {tactic}" ((← state.serializeGoals).map (·.devolatilize))
+    #[
+      { interiorGoal [] "z" with isConversion := true },
+    ]
+  checkTrue "  (fragment)" $ state.fragments.contains state.mainGoal?.get!
+  checkTrue "  (fragment parent)" $ state.fragments.contains convParent
+  checkTrue "  (main goal)" state.mainGoal?.isSome
+  let tactic := "rfl"
+  let state? ← state.tryTactic .unfocus tactic
+  let state ← match state? with
+    | .success state _ => pure state
+    | .failure messages => fail s!"rfl {messages}"; return
+    | .invalidAction messages => fail s!"rfl {messages}"; return
+    | .parseError messages => fail s!"rfl {messages}"; return
+  checkEq s!"  {tactic}" ((← state.serializeGoals).map (·.devolatilize))
+    #[
+      interiorGoal [] "x + z = w",
+    ]
+  checkEq s!"  {tactic}" state.goals.length 1
+  let tactic := "exact hxzw"
+  let .success state _ ← state.tryTactic .unfocus tactic | fail s!"{tactic} failed"
+  let root? := state.rootExpr?
+  checkTrue "root" root?.isSome
+  where
+  interiorGoal (free: List (String × String)) (target: String) :=
+    let free := [("x", "Nat"), ("y", "Nat"), ("z", "Nat"), ("w", "Nat"), ("hyz", "y = z"), ("hxzw", "x + z = w")] ++ free
     buildGoal free target
 
 example : ∀ (a b c d: Nat), a + b = b + c → b + c = c + d → a + b = c + d := by
@@ -249,8 +304,9 @@ def test_calc: TestM Unit := do
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   [
-    ("conv", test_conv),
+    ("conv simple", test_conv_simple),
     ("conv unshielded", test_conv_unshielded),
+    ("conv unfinished", test_conv_unfinished),
     ("calc", test_calc),
   ] |>.map (λ (name, t) => (name, runTestTermElabM env t))
 

@@ -71,8 +71,6 @@ def GoalState.get! (state: GoalState) (i: Nat): MVarId := state.goals[i]!
 def GoalState.tacticOn (state: GoalState) (goalId: Nat) (tactic: String) := state.tryTactic (state.get! goalId) tactic
 def GoalState.tacticOn' (state: GoalState) (goalId: Nat) (tactic: TSyntax `tactic) :=
   state.tryTacticM (state.get! goalId) (Elab.Tactic.evalTactic tactic) true
-def GoalState.tryTacticOnMain (state : GoalState) (tactic : String) :=
-  state.tryTactic (.prefer state.goals[0]!) tactic
 
 def TacticResult.toString : TacticResult → String
   | .success state _messages => s!".success ({state.goals.length} goals)"

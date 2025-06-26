@@ -4,6 +4,13 @@ Here, a unified system handles all fragments.
 
 Inside a tactic fragment, the parser category may be different. An incomplete
 fragmented tactic may not be elaboratable..
+
+In line with continuation/resumption paradigms, the exit function of a fragment
+tactic is responsible for resuming incomplete goals with fragments. For example,
+when a conversion tactic finishes, the sentinels should resume the root of the
+conversion tactic goal. The user cannot be expected to execute this resumption,
+since the root is automatically dormanted at the entry of the conversion tactic
+mode.
 -/
 import Lean.Meta
 import Lean.Elab
@@ -17,7 +24,7 @@ inductive Fragment where
   | conv (rhs : MVarId)
   -- This goal is spawned from a `conv`
   | convSentinel (parent : MVarId)
-  deriving BEq
+  deriving BEq, Inhabited
 abbrev FragmentMap := Std.HashMap MVarId Fragment
 def FragmentMap.empty : FragmentMap := Std.HashMap.emptyWithCapacity 2
 
@@ -45,7 +52,7 @@ protected def Fragment.enterConv : Elab.Tactic.TacticM FragmentMap := do
     |>.insert goal (.conv rhs)
     |>.insert newGoal (.convSentinel goal)
 
-protected def Fragment.exit (fragment : Fragment) (goal : MVarId) (fragments : FragmentMap)
+protected partial def Fragment.exit (fragment : Fragment) (goal : MVarId) (fragments : FragmentMap)
   : Elab.Tactic.TacticM FragmentMap :=
   match fragment with
   | .calc .. => do
@@ -59,18 +66,25 @@ protected def Fragment.exit (fragment : Fragment) (goal : MVarId) (fragments : F
     -- Close all existing goals with `refl`
     for mvarId in goals do
       liftM <| mvarId.refl <|> mvarId.inferInstance <|> pure ()
-    Elab.Tactic.pruneSolvedGoals
     unless (← goals.filterM (·.isAssignedOrDelayedAssigned)).isEmpty do
       throwError "convert tactic failed, there are unsolved goals\n{Elab.goalsToMessageData (goals)}"
 
-    Elab.Tactic.replaceMainGoal [goal]
+    -- Ensure the meta tactic runs on `goal` even if its dormant by forcing resumption
+    Elab.Tactic.setGoals $ goal :: (← Elab.Tactic.getGoals)
     let targetNew ← instantiateMVars (.mvar rhs)
     let proof ← instantiateMVars (.mvar goal)
 
     Elab.Tactic.liftMetaTactic1 (·.replaceTargetEq targetNew proof)
+
+    -- Try to solve maiinline by rfl
+    let mvarId ← Elab.Tactic.getMainGoal
+    liftM <| mvarId.refl <|> mvarId.inferInstance <|> pure ()
+    Elab.Tactic.pruneSolvedGoals
+    -- FIXME: Erase all sibling fragments
     return fragments.erase goal
-  | .convSentinel _ =>
-    return fragments.erase goal
+  | .convSentinel parent =>
+    let parentFragment := fragments[parent]!
+    parentFragment.exit parent (fragments.erase goal)
 
 protected def Fragment.step (fragment : Fragment) (goal : MVarId) (s : String) (map : FragmentMap)
   : Elab.Tactic.TacticM FragmentMap := goal.withContext do
@@ -143,14 +157,25 @@ protected def Fragment.step (fragment : Fragment) (goal : MVarId) (s : String) (
     let oldGoals ← Elab.Tactic.getGoals
     -- Label newly generated goals as conv sentinels
     Elab.Tactic.evalTactic tactic
-    let newGoals ← (← Elab.Tactic.getUnsolvedGoals).filterM λ g => do
+    let newConvGoals ← (← Elab.Tactic.getUnsolvedGoals).filterM λ g => do
       -- conv tactic might generate non-conv goals
       if oldGoals.contains g then
         return false
-      let target ← g.getType
       return isLHSGoal? (← g.getType) |>.isSome
-    -- FIXME: Conclude the conv by exiting the parent fragment if new goals is empty
-    return newGoals.foldl (init := map) λ acc g =>
+    -- Conclude the conv by exiting the parent fragment if new goals is empty
+    if newConvGoals.isEmpty then
+      let hasSiblingFragment := map.fold (init := false) λ flag _ fragment =>
+        if flag then
+          true
+        else match fragment with
+          | .convSentinel parent' => parent == parent'
+          | _ => false
+      if ¬ hasSiblingFragment then
+        -- This fragment must exist since we have conv goals
+        let parentFragment := map[parent]!
+        -- All descendants exhausted. Exit from the parent conv.
+        return ← parentFragment.exit parent map
+    return newConvGoals.foldl (init := map) λ acc g =>
       acc.insert g fragment
 
 end Pantograph
