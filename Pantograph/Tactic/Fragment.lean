@@ -14,7 +14,7 @@ namespace Pantograph
 
 inductive Fragment where
   | calc (prevRhs? : Option Expr)
-  | conv (rhs : MVarId) (dormant : List MVarId)
+  | conv (rhs : MVarId)
   -- This goal is spawned from a `conv`
   | convSentinel (parent : MVarId)
   deriving BEq
@@ -26,10 +26,9 @@ protected def Fragment.map (fragment : Fragment) (mapExpr : Expr → CoreM Expr)
     return (← mapExpr (.mvar mvarId)) |>.mvarId!
   match fragment with
   | .calc prevRhs? => return .calc (← prevRhs?.mapM mapExpr)
-  | .conv rhs dormant => do
+  | .conv rhs => do
     let rhs' ← mapMVar rhs
-    let dormant' ← dormant.mapM mapMVar
-    return .conv rhs' dormant'
+    return .conv rhs'
   | .convSentinel parent => do
     return .convSentinel (← mapMVar parent)
 
@@ -42,9 +41,8 @@ protected def Fragment.enterConv : Elab.Tactic.TacticM FragmentMap := do
     let (rhs, newGoal) ← Elab.Tactic.Conv.mkConvGoalFor target
     pure (rhs.mvarId!, newGoal.mvarId!)
   Elab.Tactic.replaceMainGoal [newGoal]
-  let otherGoals := (← Elab.Tactic.getGoals).filter (· != goal)
   return FragmentMap.empty
-    |>.insert goal (.conv rhs otherGoals)
+    |>.insert goal (.conv rhs)
     |>.insert newGoal (.convSentinel goal)
 
 protected def Fragment.exit (fragment : Fragment) (goal : MVarId) (fragments : FragmentMap)
@@ -53,7 +51,7 @@ protected def Fragment.exit (fragment : Fragment) (goal : MVarId) (fragments : F
   | .calc .. => do
     Elab.Tactic.setGoals [goal]
     return fragments.erase goal
-  | .conv rhs otherGoals => do
+  | .conv rhs => do
     let goals := (← Elab.Tactic.getGoals).filter λ descendant =>
       match fragments[descendant]? with
       | .some s => (.convSentinel goal) == s
@@ -65,7 +63,7 @@ protected def Fragment.exit (fragment : Fragment) (goal : MVarId) (fragments : F
     unless (← goals.filterM (·.isAssignedOrDelayedAssigned)).isEmpty do
       throwError "convert tactic failed, there are unsolved goals\n{Elab.goalsToMessageData (goals)}"
 
-    Elab.Tactic.setGoals $ [goal] ++ otherGoals
+    Elab.Tactic.replaceMainGoal [goal]
     let targetNew ← instantiateMVars (.mvar rhs)
     let proof ← instantiateMVars (.mvar goal)
 
