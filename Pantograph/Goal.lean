@@ -10,10 +10,13 @@ import Lean
 namespace Pantograph
 open Lean
 
-/-- Determine the acting area of a tactic -/
+/-- The acting area of a tactic -/
 inductive Site where
+  -- Dormant all other goals
   | focus (goal : MVarId)
+  -- Move the goal to the first in the list
   | prefer (goal : MVarId)
+  -- Execute as-is, no goals go dormant
   | unfocus
   deriving BEq, Inhabited
 
@@ -41,12 +44,14 @@ protected def Site.runTacticM (site : Site)
     let a ← f
     let after ← Elab.Tactic.getUnsolvedGoals
     let parents := before.filter (¬ after.contains ·)
+    Elab.Tactic.pruneSolvedGoals
     return (a, parents)
   | .unfocus => do
     let before ← Elab.Tactic.getUnsolvedGoals
     let a ← f
     let after ← Elab.Tactic.getUnsolvedGoals
     let parents := before.filter (¬ after.contains ·)
+    Elab.Tactic.pruneSolvedGoals
     return (a, parents)
 
 /--
@@ -130,13 +135,12 @@ protected def GoalState.withParentContext { n } [MonadControlT MetaM n] [Monad n
 protected def GoalState.withRootContext { n } [MonadControlT MetaM n] [Monad n] (state: GoalState): n α → n α :=
   Meta.mapMetaM <| state.withContext' state.root
 
-private def GoalState.mvars (state: GoalState): SSet MVarId :=
-  state.mctx.decls.foldl (init := .empty) fun acc k _ => acc.insert k
--- Restore the name generator and macro scopes of the core state
-protected def GoalState.restoreCoreMExtra (state: GoalState): CoreM Unit := do
-  let savedCore := state.coreState
+private def restoreCoreMExtra (state : Core.SavedState) : CoreM Unit :=
   modifyGetThe Core.State (fun st => ((),
-    { st with nextMacroScope := savedCore.nextMacroScope, ngen := savedCore.ngen }))
+    { st with nextMacroScope := state.nextMacroScope, ngen := state.ngen }))
+-- Restore the name generator and macro scopes of the core state
+protected def GoalState.restoreCoreMExtra (state: GoalState): CoreM Unit :=
+  restoreCoreMExtra state.coreState
 protected def GoalState.restoreMetaM (state: GoalState): MetaM Unit := do
   state.restoreCoreMExtra
   state.savedState.term.meta.restore
@@ -147,30 +151,13 @@ private def GoalState.restoreTacticM (state: GoalState) (goal: MVarId): Elab.Tac
   state.restoreElabM
   Elab.Tactic.setGoals [goal]
 
-/-- Immediately bring all parent goals back into scope. Used in automatic mode -/
-@[export pantograph_goal_state_immediate_resume]
-protected def GoalState.immediateResume (state: GoalState) (parent: GoalState): GoalState :=
-  -- Prune parents solved goals
-  let mctx := state.mctx
-  let parentGoals := parent.goals.filter λ goal =>
-    let isDuplicate := state.goals.contains goal
-    let isSolved := mctx.eAssignment.contains goal || mctx.dAssignment.contains goal
-    (¬ isDuplicate) && (¬ isSolved)
-  {
-    state with
-    savedState := {
-      state.savedState with
-      tactic := { goals := state.goals ++ parentGoals },
-    },
-  }
-
 /--
 Brings into scope a list of goals. User must ensure `goals` are distinct.
 -/
 @[export pantograph_goal_state_resume]
 protected def GoalState.resume (state : GoalState) (goals : List MVarId) : Except String GoalState := do
-  if ¬ (goals.all (λ goal => state.mvars.contains goal)) then
-    let invalid_goals := goals.filter (λ goal => ¬ state.mvars.contains goal) |>.map (·.name.toString)
+  if ¬ (goals.all (state.mctx.decls.contains ·)) then
+    let invalid_goals := goals.filter (λ goal => ¬ state.mctx.decls.contains goal) |>.map (·.name.toString)
     .error s!"Goals {invalid_goals} are not in scope"
   -- Set goals to the goals that have not been assigned yet, similar to the `focus` tactic.
   let unassigned := goals.filter λ goal =>
@@ -355,6 +342,7 @@ protected def GoalState.replay (dst : GoalState) (src src' : GoalState) : CoreM 
     }
   }
   let m : MetaM Meta.SavedState := Meta.withMCtx mctx do
+    restoreCoreMExtra savedMeta.core
     savedMeta.restore
 
     for (lmvarId, l') in src'.mctx.lAssignment do
@@ -386,7 +374,7 @@ protected def GoalState.replay (dst : GoalState) (src src' : GoalState) : CoreM 
         throwError "Conflicting assignment of expr metavariable (d != d) {mvarId.name}"
 
     Meta.saveState
-  let goals :=dst.savedState.tactic.goals ++
+  let goals := dst.savedState.tactic.goals ++
     src'.savedState.tactic.goals.map (⟨mapId ·.name⟩)
   let fragments ← src'.fragments.foldM (init := dst.fragments) λ acc mvarId' fragment' => do
     let mvarId := ⟨mapId mvarId'.name⟩
@@ -486,6 +474,7 @@ private def dumpMessageLog (prevMessageLength : Nat := 0) : CoreM (Bool × Array
   Core.resetMessageLog
   return (hasErrors, newMessages.toArray)
 
+/-- Execute a `TermElabM` producing a goal state, capturing the error and turn it into a `TacticResult` -/
 def withCapturingError (elabM : Elab.Term.TermElabM GoalState) : Elab.TermElabM TacticResult := do
   assert! (← Core.getMessageLog).toList.isEmpty
   try
