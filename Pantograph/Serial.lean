@@ -1,18 +1,18 @@
-import Lean.Environment
-import Lean.Replay
-import Init.System.IOError
-import Std.Data.HashMap
 import Pantograph.Goal
 
+import Lean.Environment
+import Lean.Replay
+import Std.Data.HashMap
+
+open Lean
+
 /-!
-Input/Output functions
+Input/Output functions borrowed from REPL
 
 # Pickling and unpickling objects
 
 By abusing `saveModuleData` and `readModuleData` we can pickle and unpickle objects to disk.
 -/
-
-open Lean
 
 namespace Pantograph
 
@@ -46,6 +46,21 @@ unsafe def withUnpickle [Monad m] [MonadLiftT IO m] {α β : Type}
   region.free
   pure r
 
+abbrev ConstArray := Array (Name × ConstantInfo)
+abbrev DistilledEnvironment := Array Import × ConstArray
+
+/-- Boil an environment down to minimal components -/
+def distillEnvironment (env : Environment) (background? : Option Environment := .none)
+  : DistilledEnvironment :=
+  let filter : Name → Bool := match background? with
+    | .some env => (¬ env.contains ·)
+    | .none => λ _ => true
+  let constants : ConstArray := env.constants.map₂.foldl (init := #[]) λ acc name info =>
+    if filter name then
+      acc.push (name, info)
+    else
+      acc
+  (env.header.imports, constants)
 /--
 Pickle an `Environment` to disk.
 
@@ -56,15 +71,23 @@ and when unpickling, we build a fresh `Environment` from the imports,
 and then add the new constants.
 -/
 @[export pantograph_env_pickle_m]
-def environmentPickle (env : Environment) (path : System.FilePath) : IO Unit :=
-  Pantograph.pickle path (env.header.imports, env.constants.map₂)
+def environmentPickle (env : Environment) (path : System.FilePath) (background? : Option Environment := .none)
+  : IO Unit :=
+  pickle path $ distillEnvironment env background?
+
+deriving instance BEq for Import
 
 def resurrectEnvironment
-  (imports : Array Import)
-  (map₂ : PHashMap Name ConstantInfo)
+  (distilled : DistilledEnvironment)
+  (background? : Option Environment := .none)
   : IO Environment := do
-  let env ← importModules imports {} 0 (loadExts := true)
-  env.replay (Std.HashMap.ofList map₂.toList)
+  let (imports, constArray) := distilled
+  let env ← match background? with
+    | .none => importModules imports {} 0 (loadExts := true)
+    | .some env =>
+      assert! env.imports == imports
+      pure env
+  env.replay (Std.HashMap.ofList constArray.toList)
 /--
 Unpickle an `Environment` from disk.
 
@@ -72,9 +95,10 @@ We construct a fresh `Environment` with the relevant imports,
 and then replace the new constants.
 -/
 @[export pantograph_env_unpickle_m]
-def environmentUnpickle (path : System.FilePath) : IO (Environment × CompactedRegion) := unsafe do
-  let ((imports, map₂), region) ← Pantograph.unpickle (Array Import × PHashMap Name ConstantInfo) path
-  return (← resurrectEnvironment imports map₂, region)
+def environmentUnpickle (path : System.FilePath) (background? : Option Environment := .none)
+  : IO (Environment × CompactedRegion) := unsafe do
+  let (distilled, region) ← unpickle (Array Import × ConstArray) path
+  return (← resurrectEnvironment distilled background?, region)
 
 
 open Lean.Core in
@@ -88,7 +112,8 @@ structure CompactCoreState where
   -- infoState       : Elab.InfoState := {}
 
 @[export pantograph_goal_state_pickle_m]
-def goalStatePickle (goalState : GoalState) (path : System.FilePath) : IO Unit :=
+def goalStatePickle (goalState : GoalState) (path : System.FilePath) (background? : Option Environment := .none)
+  : IO Unit :=
   let {
     savedState := {
       term := {
@@ -106,8 +131,8 @@ def goalStatePickle (goalState : GoalState) (path : System.FilePath) : IO Unit :
     parentMVar?,
     fragments,
   } := goalState
-  Pantograph.pickle path (
-    env.constants.map₂,
+  pickle path (
+    distillEnvironment env background?,
 
     ({ nextMacroScope, ngen } : CompactCoreState),
     meta,
@@ -120,10 +145,10 @@ def goalStatePickle (goalState : GoalState) (path : System.FilePath) : IO Unit :
   )
 
 @[export pantograph_goal_state_unpickle_m]
-def goalStateUnpickle (path : System.FilePath) (env : Environment)
+def goalStateUnpickle (path : System.FilePath) (background? : Option Environment := .none)
     : IO (GoalState × CompactedRegion) := unsafe do
   let ((
-    map₂,
+    distilledEnv,
 
     compactCore,
     meta,
@@ -134,7 +159,7 @@ def goalStateUnpickle (path : System.FilePath) (env : Environment)
     parentMVar?,
     fragments,
   ), region) ← Pantograph.unpickle (
-    PHashMap Name ConstantInfo ×
+    DistilledEnvironment ×
 
     CompactCoreState ×
     Meta.State ×
@@ -145,7 +170,7 @@ def goalStateUnpickle (path : System.FilePath) (env : Environment)
     Option MVarId ×
     FragmentMap
   ) path
-  let env ← env.replay (Std.HashMap.ofList map₂.toList)
+  let env ← resurrectEnvironment distilledEnv background?
   let goalState := {
     savedState := {
       term := {
