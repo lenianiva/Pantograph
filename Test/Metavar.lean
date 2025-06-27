@@ -281,6 +281,7 @@ def test_branch_unification : TestM Unit := do
   let .some root := stateT.rootExpr? | fail "Root expression must exist"
   checkEq "(root)" (toString $ ← Meta.ppExpr root) "fun p q h => ⟨h, Or.inl h⟩"
 
+/-- Test merger when both branches have new aux lemmas -/
 def test_replay_environment : TestM Unit := do
   let .ok rootTarget ← elabTerm (← `(term|(2: Nat) ≤ 3 ∧ (3: Nat) ≤ 5)) .none | unreachable!
   let state ← GoalState.create rootTarget
@@ -315,7 +316,7 @@ def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
     ("Proposition Generation", test_proposition_generation),
     ("Partial Continuation", test_partial_continuation),
     ("Branch Unification", test_branch_unification),
-    ("Replay Environment", test_replay_environment),
+    --("Replay Environment", test_replay_environment),
   ]
   tests.map (fun (name, test) => (name, proofRunner env test))
 

@@ -234,6 +234,8 @@ protected def GoalState.replay (dst : GoalState) (src src' : GoalState) : CoreM 
 
   let diffNGenIdx := dst.coreState.ngen.idx - srcNGen.idx
 
+  let env ← dst.coreState.env.replayConsts src.env src'.env (skipExisting := true)
+
   trace[Pantograph.GoalState.replay] "Merging ngen {srcNGen.idx} -> ({srcNGen'.idx}, {dstNGen.idx})"
   -- True if the name is generated after `src`
   let isNewName : Name → Bool
@@ -336,7 +338,7 @@ protected def GoalState.replay (dst : GoalState) (src src' : GoalState) : CoreM 
     core := {
       core with
       ngen,
-      env := ← core.env.replayConsts src.env src'.env (skipExisting := true),
+      env,
       -- Reset the message log when declaration uses `sorry`
       messages := {}
     }
