@@ -136,8 +136,9 @@ protected def GoalState.withRootContext { n } [MonadControlT MetaM n] [Monad n] 
   Meta.mapMetaM <| state.withContext' state.root
 
 private def restoreCoreMExtra (state : Core.SavedState) : CoreM Unit :=
+  let { nextMacroScope, ngen, .. } := state
   modifyGetThe Core.State (fun st => ((),
-    { st with nextMacroScope := state.nextMacroScope, ngen := state.ngen }))
+    { st with nextMacroScope, ngen }))
 -- Restore the name generator and macro scopes of the core state
 protected def GoalState.restoreCoreMExtra (state: GoalState): CoreM Unit :=
   restoreCoreMExtra state.coreState
@@ -232,6 +233,8 @@ protected def GoalState.replay (dst : GoalState) (src src' : GoalState) : CoreM 
   assert! src.mctx.depth == dst.mctx.depth
 
   let diffNGenIdx := dst.coreState.ngen.idx - srcNGen.idx
+
+  let env ← dst.coreState.env.replayConsts src.env src'.env (skipExisting := true)
 
   trace[Pantograph.GoalState.replay] "Merging ngen {srcNGen.idx} -> ({srcNGen'.idx}, {dstNGen.idx})"
   -- True if the name is generated after `src`
@@ -335,6 +338,9 @@ protected def GoalState.replay (dst : GoalState) (src src' : GoalState) : CoreM 
     core := {
       core with
       ngen,
+      env,
+      -- Reset the message log when declaration uses `sorry`
+      messages := {}
     }
     meta := {
       meta with
@@ -476,7 +482,10 @@ private def dumpMessageLog (prevMessageLength : Nat := 0) : CoreM (Bool × Array
 
 /-- Execute a `TermElabM` producing a goal state, capturing the error and turn it into a `TacticResult` -/
 def withCapturingError (elabM : Elab.Term.TermElabM GoalState) : Elab.TermElabM TacticResult := do
-  assert! (← Core.getMessageLog).toList.isEmpty
+  let messageLog ← Core.getMessageLog
+  unless messageLog.toList.isEmpty do
+    IO.eprintln s!"{← messageLog.toList.mapM (·.toString)}"
+    assert! messageLog.toList.isEmpty
   try
     let state ← elabM
 
