@@ -64,7 +64,11 @@ structure GoalState where
   -- The root goal which is the search target
   root: MVarId
 
-  -- Parent goals assigned to produce this state
+  /--
+  Parent goals which became assigned or fragmented to produce this state.
+  Note that due to the existence of tactic fragments, parent goals do not
+  necessarily have an expression assignment.
+  -/
   parentMVars : List MVarId := []
 
   -- Any goal associated with a fragment has a partial tactic which has not
@@ -202,8 +206,11 @@ protected def GoalState.getMVarEAssignment (goalState: GoalState) (mvarId: MVarI
   let (expr, _) := instantiateMVarsCore (mctx := goalState.mctx) (e := expr)
   return expr
 @[export pantograph_goal_state_parent_exprs]
-protected def GoalState.parentExprs (state : GoalState) : List Expr :=
-  state.parentMVars.map λ goal => state.getMVarEAssignment goal |>.get!
+protected def GoalState.parentExprs (state : GoalState) : List (Except Fragment Expr) :=
+  state.parentMVars.map λ goal => match state.getMVarEAssignment goal with
+    | .some e => .ok e
+    -- A parent goal which is not assigned must have a fragment
+    | .none => .error state.fragments[goal]!
 @[always_inline]
 protected def GoalState.hasUniqueParent (state : GoalState) : Bool :=
   state.parentMVars.length == 1
