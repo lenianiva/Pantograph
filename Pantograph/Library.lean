@@ -132,8 +132,9 @@ def goalPrint (state: GoalState) (rootExpr: Bool) (parentExprs: Bool) (goals: Bo
       pure .none
   let parentExprs? ← if parentExprs then
       .some <$> state.parentMVars.mapM λ parent => parent.withContext do
-        let val := state.getMVarEAssignment parent |>.get!
-        serializeExpression options (← instantiateAll val)
+        let val? := state.getMVarEAssignment parent
+        val?.mapM λ val => do
+          serializeExpression options (← instantiateAll val)
     else
       pure .none
   let goals ← if goals then

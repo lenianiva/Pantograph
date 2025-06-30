@@ -91,7 +91,7 @@ def test_tactic : Test := do
   step "goal.print" ({ stateId := 1, parentExprs? := .some true, rootExpr? := .some true }: Protocol.GoalPrint)
    ({
      root? := .some { pp? := "fun x => ?m.11"},
-     parentExprs? := .some [{ pp? := .some "fun x => ?m.11" }],
+     parentExprs? := .some [.some { pp? := .some "fun x => ?m.11" }],
    }: Protocol.GoalPrintResult)
   step "goal.tactic" ({ stateId := 1, tactic? := .some "intro y" }: Protocol.GoalTactic)
    ({ nextStateId? := .some 2, goals? := #[goal2], }: Protocol.GoalTacticResult)
@@ -163,6 +163,48 @@ def test_automatic_mode (automatic: Bool): Test := do
   let goals? := if automatic then #[goal3l, goal2r] else #[goal3l]
   step "goal.tactic" ({ stateId := 2, tactic? := .some "apply Or.inr" }: Protocol.GoalTactic)
    ({ nextStateId? := .some 3, goals?, }: Protocol.GoalTacticResult)
+
+def test_conv_calc : Test := do
+  step "options.set" ({automaticMode? := .some false}: Protocol.OptionsSet)
+   ({}: Protocol.OptionsSetResult)
+  step "goal.start" ({ expr := "∀ (a b: Nat), (b = 2) -> 1 + a + 1 = a + b"} : Protocol.GoalStart)
+   ({ stateId := 0, root := "_uniq.163" }: Protocol.GoalStartResult)
+  let vars := #[
+    { name := "_uniq.164", userName := "a", type? := .some { pp? := .some "Nat" }},
+    { name := "_uniq.167", userName := "b", type? := .some { pp? := .some "Nat" }},
+    { name := "_uniq.170", userName := "h", type? := .some { pp? := .some "b = 2" }},
+  ]
+  let goal : Protocol.Goal := {
+    vars,
+    name := "_uniq.171",
+    target := { pp? := "1 + a + 1 = a + b" },
+  }
+  step "goal.tactic" ({ stateId := 0, tactic? := .some "intro a b h" }: Protocol.GoalTactic)
+   ({ nextStateId? := .some 1, goals? := #[goal], }: Protocol.GoalTacticResult)
+  step "goal.tactic" ({ stateId := 1, mode? := .some "calc" }: Protocol.GoalTactic)
+   ({ nextStateId? := .some 2, goals? := #[{ goal with fragment := .calc }], }: Protocol.GoalTacticResult)
+  let goalCalc : Protocol.Goal := {
+    vars,
+    name := "_uniq.363",
+    userName? := .some "calc",
+    target := { pp? := "1 + a + 1 = a + 1 + 1" },
+  }
+  let goalMain : Protocol.Goal := {
+    vars,
+    name := "_uniq.382",
+    fragment := .calc,
+    target := { pp? := "a + 1 + 1 = a + b" },
+  }
+  step "goal.tactic" ({ stateId := 2, tactic? := .some "1 + a + 1 = a + 1 + 1" }: Protocol.GoalTactic)
+   ({ nextStateId? := .some 3, goals? := #[goalCalc, goalMain], }: Protocol.GoalTacticResult)
+  let goalConv : Protocol.Goal := {
+    goalCalc with
+    fragment := .conv,
+    userName? := .none,
+    name := "_uniq.450",
+  }
+  step "goal.tactic" ({ stateId := 3, mode? := .some "conv" }: Protocol.GoalTactic)
+   ({ nextStateId? := .some 4, goals? := #[goalConv], }: Protocol.GoalTacticResult)
 
 def test_env_add_inspect : Test := do
   let name1 := "Pantograph.mystery"
@@ -343,6 +385,7 @@ def suite (env : Lean.Environment): List (String × IO LSpec.TestSeq) :=
     ("Tactic Timeout", test_tactic_timeout),
     ("Manual Mode", test_automatic_mode false),
     ("Automatic Mode", test_automatic_mode true),
+    ("Conv-Calc", test_conv_calc),
     ("env.add env.inspect", test_env_add_inspect),
     ("frontend.process invocation", test_frontend_process),
     ("frontend.process sorry", test_frontend_process_sorry),

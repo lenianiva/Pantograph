@@ -147,10 +147,15 @@ def goal_tactic (args: Protocol.GoalTactic): EMainM Protocol.GoalTacticResult :=
   match nextGoalState? with
   | .error error => Protocol.throw error
   | .ok (.success nextGoalState messages) => do
+    let env ← getEnv
     let nextStateId ← newGoalState nextGoalState
     let parentExprs := nextGoalState.parentExprs
-    let hasSorry := parentExprs.any (·.hasSorry)
-    let hasUnsafe := parentExprs.any ((← getEnv).hasUnsafe ·)
+    let hasSorry := parentExprs.any λ
+      | .ok e => e.hasSorry
+      | .error _ => false
+    let hasUnsafe := parentExprs.any λ
+      | .ok e => env.hasUnsafe e
+      | .error _ => false
     let goals ← runCoreM $ nextGoalState.serializeGoals (options := state.options) |>.run'
     return {
       nextStateId? := .some nextStateId,

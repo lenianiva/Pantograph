@@ -84,7 +84,7 @@ def test_pickling_env_extensions : TestM Unit := do
     let goal := state.goals[0]!
     let type ← goal.withContext do
       let .ok type ← elabTerm (← `(term|(2: Nat) ≤ 3)) (.some $ .sort 0) | unreachable!
-      pure type
+      instantiateMVars type
     let .success state1 _ ← state.tryTacticM goal (Tactic.assignWithAuxLemma type) | unreachable!
     let parentExpr := state1.parentExpr!
     checkTrue "src has aux lemma" $ parentExpr.getUsedConstants.any (·.isAuxLemma)
