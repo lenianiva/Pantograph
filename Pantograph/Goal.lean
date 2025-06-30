@@ -507,7 +507,8 @@ protected def GoalState.tryTacticM
     (state: GoalState) (site : Site)
     (tacticM: Elab.Tactic.TacticM Unit)
     (guardMVarErrors : Bool := false)
-    : Elab.TermElabM TacticResult :=
+    : Elab.TermElabM TacticResult := do
+  state.restoreElabM
   withCapturingError do
     state.step site tacticM guardMVarErrors
 
@@ -567,6 +568,7 @@ protected def GoalState.convEnter (state : GoalState) (site : Site) :
   let .some goal := state.actingGoal? site | throwNoGoals
   if let .some (.conv ..) := state.fragments[goal]? then
     return .invalidAction "Already in conv state"
+  state.restoreElabM
   withCapturingError do
     let (fragments, state') ← state.step' site Fragment.enterConv
     return {
@@ -582,6 +584,7 @@ protected def GoalState.fragmentExit (state : GoalState) (site : Site):
   let .some goal := state.actingGoal? site | throwNoGoals
   let .some fragment := state.fragments[goal]? |
     return .invalidAction "Goal does not have a fragment"
+  state.restoreElabM
   withCapturingError do
     let (fragments, state') ← state.step' goal (fragment.exit goal state.fragments)
     return {
@@ -599,6 +602,7 @@ protected def GoalState.calcEnter (state : GoalState) (site : Site)
   let .some goal := state.actingGoal? site | throwNoGoals
   if let .some _ := state.fragments[goal]? then
     return .invalidAction "Goal already has a fragment"
+  state.restoreElabM
   withCapturingError do
     let fragment := Fragment.enterCalc
     let fragments := state.fragments.insert goal fragment
