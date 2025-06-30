@@ -60,11 +60,11 @@ Example proving a theorem: (alternatively use `goal.start {"copyFrom": "Nat.add_
 ```
 $ pantograph Init
 goal.start {"expr": "∀ (n m : Nat), n + m = m + n"}
-goal.tactic {"stateId": 0, "goalId": 0, "tactic": "intro n m"}
-goal.tactic {"stateId": 1, "goalId": 0, "tactic": "assumption"}
+goal.tactic {"stateId": 0, "tactic": "intro n m"}
+goal.tactic {"stateId": 1, "tactic": "assumption"}
 goal.delete {"stateIds": [0]}
 stat {}
-goal.tactic {"stateId": 1, "goalId": 0, "tactic": "rw [Nat.add_comm]"}
+goal.tactic {"stateId": 1, "tactic": "rw [Nat.add_comm]"}
 stat
 ```
 where the application of `assumption` should lead to a failure.
