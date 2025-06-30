@@ -325,7 +325,7 @@ structure GoalPrintResult where
   -- The root expression
   root?: Option Expression := .none
   -- The filling expression of the parent goal
-  parentExprs?: Option (List Expression) := .none
+  parentExprs?: Option (List (Option Expression)) := .none
   goals: Array Goal := #[]
   extraMVars: Array Expression := #[]
 

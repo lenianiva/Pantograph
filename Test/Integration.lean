@@ -91,7 +91,7 @@ def test_tactic : Test := do
   step "goal.print" ({ stateId := 1, parentExprs? := .some true, rootExpr? := .some true }: Protocol.GoalPrint)
    ({
      root? := .some { pp? := "fun x => ?m.11"},
-     parentExprs? := .some [{ pp? := .some "fun x => ?m.11" }],
+     parentExprs? := .some [.some { pp? := .some "fun x => ?m.11" }],
    }: Protocol.GoalPrintResult)
   step "goal.tactic" ({ stateId := 1, tactic? := .some "intro y" }: Protocol.GoalTactic)
    ({ nextStateId? := .some 2, goals? := #[goal2], }: Protocol.GoalTacticResult)
