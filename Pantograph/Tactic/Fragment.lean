@@ -144,11 +144,12 @@ protected def Fragment.step (fragment : Fragment) (goal : MVarId) (s : String) (
       unless ← Meta.isDefEq proofType target do throwFailed
       remainder? := .some lastStepGoal.mvarId!
     goal.assign proof
+    let map := map.erase goal
 
     let goals := [ mvarBranch ] ++ remainder?.toList
     Elab.Tactic.setGoals goals
     match remainder? with
-    | .some goal => return map.erase goal |>.insert goal $ .calc (.some rhs)
+    | .some goal => return map.insert goal $ .calc (.some rhs)
     | .none => return map
   | .conv .. => do
     throwError "Direct operation on conversion tactic parent goal is not allowed"
