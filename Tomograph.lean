@@ -1,5 +1,6 @@
 /- A tool for analysing Lean source code. -/
 import Pantograph.Frontend
+import Pantograph.Library
 
 open Lean
 
@@ -18,6 +19,8 @@ def dissect (args: List String): IO UInt32 := do
       IO.println s!"🐈 {step.stx.getKind.toString}"
       for (tree, i) in step.trees.zipIdx do
         IO.println s!"🌲[{i}] {← tree.toString}"
+      for (msg, i) in step.msgs.zipIdx do
+        IO.println s!"🔈[{i}] {← msg.toString}"
   let (_, _) ← frontendM.run context |>.run state
   return 0
 
@@ -31,6 +34,8 @@ def help : IO UInt32 := do
 
 def main (args : List String) : IO UInt32 := do
   let command :: args := args | help
+  unsafe do
+    Pantograph.initSearch ""
   match command with
   | "dissect" => dissect args
   | _ => fail s!"Unknown command {command}"
