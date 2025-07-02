@@ -168,15 +168,15 @@ def test_conv_calc : Test := do
   step "options.set" ({automaticMode? := .some false}: Protocol.OptionsSet)
    ({}: Protocol.OptionsSetResult)
   step "goal.start" ({ expr := "∀ (a b: Nat), (b = 2) -> 1 + a + 1 = a + b"} : Protocol.GoalStart)
-   ({ stateId := 0, root := "_uniq.163" }: Protocol.GoalStartResult)
+   ({ stateId := 0, root := "_uniq.171" }: Protocol.GoalStartResult)
   let vars := #[
-    { name := "_uniq.164", userName := "a", type? := .some { pp? := .some "Nat" }},
-    { name := "_uniq.167", userName := "b", type? := .some { pp? := .some "Nat" }},
-    { name := "_uniq.170", userName := "h", type? := .some { pp? := .some "b = 2" }},
+    { name := "_uniq.172", userName := "a", type? := .some { pp? := .some "Nat" }},
+    { name := "_uniq.175", userName := "b", type? := .some { pp? := .some "Nat" }},
+    { name := "_uniq.178", userName := "h", type? := .some { pp? := .some "b = 2" }},
   ]
   let goal : Protocol.Goal := {
     vars,
-    name := "_uniq.171",
+    name := "_uniq.179",
     target := { pp? := "1 + a + 1 = a + b" },
   }
   step "goal.tactic" ({ stateId := 0, tactic? := .some "intro a b h" }: Protocol.GoalTactic)
@@ -185,13 +185,13 @@ def test_conv_calc : Test := do
    ({ nextStateId? := .some 2, goals? := #[{ goal with fragment := .calc }], }: Protocol.GoalTacticResult)
   let goalCalc : Protocol.Goal := {
     vars,
-    name := "_uniq.363",
+    name := "_uniq.381",
     userName? := .some "calc",
     target := { pp? := "1 + a + 1 = a + 1 + 1" },
   }
   let goalMain : Protocol.Goal := {
     vars,
-    name := "_uniq.382",
+    name := "_uniq.400",
     fragment := .calc,
     target := { pp? := "a + 1 + 1 = a + b" },
   }
@@ -201,7 +201,7 @@ def test_conv_calc : Test := do
     goalCalc with
     fragment := .conv,
     userName? := .none,
-    name := "_uniq.450",
+    name := "_uniq.468",
   }
   step "goal.tactic" ({ stateId := 3, mode? := .some "conv" }: Protocol.GoalTactic)
    ({ nextStateId? := .some 4, goals? := #[goalConv], }: Protocol.GoalTacticResult)
