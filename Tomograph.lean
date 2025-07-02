@@ -10,7 +10,7 @@ def fail (s : String) : IO UInt32 := do
   IO.eprintln s
   return 2
 
-def dissect (args: List String): IO UInt32 := do
+def dissect (args : List String) : IO UInt32 := do
   let fileName :: _args := args | fail s!"Must supply a file name"
   let file ← IO.FS.readFile fileName
   let (context, state) ← do Frontend.createContextStateFromFile file fileName (env? := .none) {}
