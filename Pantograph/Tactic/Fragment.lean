@@ -4,6 +4,13 @@ Here, a unified system handles all fragments.
 
 Inside a tactic fragment, the parser category may be different. An incomplete
 fragmented tactic may not be elaboratable..
+
+In line with continuation/resumption paradigms, the exit function of a fragment
+tactic is responsible for resuming incomplete goals with fragments. For example,
+when a conversion tactic finishes, the sentinels should resume the root of the
+conversion tactic goal. The user cannot be expected to execute this resumption,
+since the root is automatically dormanted at the entry of the conversion tactic
+mode.
 -/
 import Lean.Meta
 import Lean.Elab
@@ -14,59 +21,79 @@ namespace Pantograph
 
 inductive Fragment where
   | calc (prevRhs? : Option Expr)
-  | conv (rhs : MVarId) (dormant : List MVarId)
-  deriving BEq
+  | conv (rhs : MVarId)
+  -- This goal is spawned from a `conv`
+  | convSentinel (parent : MVarId)
+  deriving BEq, Inhabited
+
 abbrev FragmentMap := Std.HashMap MVarId Fragment
 def FragmentMap.empty : FragmentMap := Std.HashMap.emptyWithCapacity 2
+protected def FragmentMap.filter (map : FragmentMap) (pred : MVarId → Fragment → Bool) : FragmentMap :=
+  map.fold (init := FragmentMap.empty) λ acc mvarId fragment =>
+    if pred mvarId fragment then
+      acc.insert mvarId fragment
+    else
+      acc
 
 protected def Fragment.map (fragment : Fragment) (mapExpr : Expr → CoreM Expr) : CoreM Fragment :=
-  let mapMVarId (mvarId : MVarId) : CoreM MVarId :=
+  let mapMVar (mvarId : MVarId) : CoreM MVarId :=
     return (← mapExpr (.mvar mvarId)) |>.mvarId!
   match fragment with
   | .calc prevRhs? => return .calc (← prevRhs?.mapM mapExpr)
-  | .conv rhs dormant => do
-    let rhs' ← mapMVarId rhs
-    let dormant' ← dormant.mapM mapMVarId
-    return .conv rhs' dormant'
+  | .conv rhs => do
+    let rhs' ← mapMVar rhs
+    return .conv rhs'
+  | .convSentinel parent => do
+    return .convSentinel (← mapMVar parent)
 
-protected def Fragment.enterCalc : Elab.Tactic.TacticM Fragment := do
-  return .calc .none
-protected def Fragment.enterConv : Elab.Tactic.TacticM Fragment := do
+protected def Fragment.enterCalc : Fragment := .calc .none
+protected def Fragment.enterConv : Elab.Tactic.TacticM FragmentMap := do
   let goal ← Elab.Tactic.getMainGoal
-  let rhs ← goal.withContext do
-    let (rhs, newGoal) ← Elab.Tactic.Conv.mkConvGoalFor (← Elab.Tactic.getMainTarget)
-    Elab.Tactic.replaceMainGoal [newGoal.mvarId!]
-    pure rhs.mvarId!
-  let otherGoals := (← Elab.Tactic.getGoals).filter (· != goal)
-  return conv rhs otherGoals
+  goal.checkNotAssigned `GoalState.conv
+  let (rhs, newGoal) ← goal.withContext do
+    let target ← instantiateMVars (← goal.getType)
+    let (rhs, newGoal) ← Elab.Tactic.Conv.mkConvGoalFor target
+    pure (rhs.mvarId!, newGoal.mvarId!)
+  Elab.Tactic.replaceMainGoal [newGoal]
+  return FragmentMap.empty
+    |>.insert goal (.conv rhs)
+    |>.insert newGoal (.convSentinel goal)
 
-protected def Fragment.exit (fragment : Fragment) (goal : MVarId) (fragments : FragmentMap)
+protected partial def Fragment.exit (fragment : Fragment) (goal : MVarId) (fragments : FragmentMap)
   : Elab.Tactic.TacticM FragmentMap :=
   match fragment with
   | .calc .. => do
     Elab.Tactic.setGoals [goal]
     return fragments.erase goal
-  | .conv rhs otherGoals => do
-    -- FIXME: Only process the goals that are descendants of `goal`
-    let goals := (← Elab.Tactic.getGoals).filter λ goal => true
-      --match fragments[goal]? with
-      --| .some f => fragment == f
-      --| .none => false -- Not a conv goal from this
+  | .conv rhs => do
+    let goals := (← Elab.Tactic.getGoals).filter λ descendant =>
+      match fragments[descendant]? with
+      | .some s => (.convSentinel goal) == s
+      | _ => false -- Not a conv goal from this
     -- Close all existing goals with `refl`
     for mvarId in goals do
       liftM <| mvarId.refl <|> mvarId.inferInstance <|> pure ()
-    Elab.Tactic.pruneSolvedGoals
     unless (← goals.filterM (·.isAssignedOrDelayedAssigned)).isEmpty do
       throwError "convert tactic failed, there are unsolved goals\n{Elab.goalsToMessageData (goals)}"
 
-    Elab.Tactic.setGoals $ [goal] ++ otherGoals
+    -- Ensure the meta tactic runs on `goal` even if its dormant by forcing resumption
+    Elab.Tactic.setGoals $ goal :: (← Elab.Tactic.getGoals)
     let targetNew ← instantiateMVars (.mvar rhs)
     let proof ← instantiateMVars (.mvar goal)
 
     Elab.Tactic.liftMetaTactic1 (·.replaceTargetEq targetNew proof)
-    return fragments.erase goal
 
-protected def Fragment.step (fragment : Fragment) (goal : MVarId) (s : String)
+    -- Try to solve maiinline by rfl
+    let mvarId ← Elab.Tactic.getMainGoal
+    liftM <| mvarId.refl <|> mvarId.inferInstance <|> pure ()
+    Elab.Tactic.pruneSolvedGoals
+    return fragments.filter λ mvarId fragment =>
+      !(mvarId == goal || fragment == .convSentinel goal)
+  | .convSentinel parent =>
+    let parentFragment := fragments[parent]!
+    parentFragment.exit parent (fragments.erase goal)
+
+protected def Fragment.step (fragment : Fragment) (goal : MVarId) (s : String) (map : FragmentMap)
   : Elab.Tactic.TacticM FragmentMap := goal.withContext do
   assert! ¬ (← goal.isAssigned)
   match fragment with
@@ -121,9 +148,41 @@ protected def Fragment.step (fragment : Fragment) (goal : MVarId) (s : String)
     let goals := [ mvarBranch ] ++ remainder?.toList
     Elab.Tactic.setGoals goals
     match remainder? with
-    | .some goal => return FragmentMap.empty.insert goal $ .calc (.some rhs)
-    | .none => return .empty
+    | .some goal => return map.erase goal |>.insert goal $ .calc (.some rhs)
+    | .none => return map
   | .conv .. => do
     throwError "Direct operation on conversion tactic parent goal is not allowed"
+  | fragment@(.convSentinel parent) => do
+    assert! isLHSGoal? (← goal.getType) |>.isSome
+    let tactic ← match Parser.runParserCategory
+      (env := ← MonadEnv.getEnv)
+      (catName := `conv)
+      (input := s)
+      (fileName := ← getFileName) with
+      | .ok stx => pure $ stx
+      | .error error => throwError error
+    let oldGoals ← Elab.Tactic.getGoals
+    -- Label newly generated goals as conv sentinels
+    Elab.Tactic.evalTactic tactic
+    let newConvGoals ← (← Elab.Tactic.getUnsolvedGoals).filterM λ g => do
+      -- conv tactic might generate non-conv goals
+      if oldGoals.contains g then
+        return false
+      return isLHSGoal? (← g.getType) |>.isSome
+    -- Conclude the conv by exiting the parent fragment if new goals is empty
+    if newConvGoals.isEmpty then
+      let hasSiblingFragment := map.fold (init := false) λ flag _ fragment =>
+        if flag then
+          true
+        else match fragment with
+          | .convSentinel parent' => parent == parent'
+          | _ => false
+      if ¬ hasSiblingFragment then
+        -- This fragment must exist since we have conv goals
+        let parentFragment := map[parent]!
+        -- All descendants exhausted. Exit from the parent conv.
+        return ← parentFragment.exit parent map
+    return newConvGoals.foldl (init := map) λ acc g =>
+      acc.insert g fragment
 
 end Pantograph

@@ -187,9 +187,11 @@ namespace Tactic
 
 /-- Create an aux lemma and assigns it to `mvarId`, which is circuitous, but
 exercises the aux lemma generator. -/
-def assignWithAuxLemma (type value : Expr) : Elab.Tactic.TacticM Unit := do
+def assignWithAuxLemma (type : Expr) (value? : Option Expr := .none) : Elab.Tactic.TacticM Unit := do
   let type ← instantiateMVars type
-  let value ← instantiateMVars value
+  let value ← match value? with
+    | .some value => instantiateMVars value
+    | .none => Meta.mkSorry type (synthetic := false)
   if type.hasExprMVar then
     throwError "Type has expression mvar"
   if value.hasExprMVar then
@@ -200,6 +202,7 @@ def assignWithAuxLemma (type value : Expr) : Elab.Tactic.TacticM Unit := do
   unless ← Meta.isDefEq type (← goal.getType) do
     throwError "Type provided is incorrect"
   goal.assign (.const name [])
+  Elab.Tactic.pruneSolvedGoals
 
 end Tactic
 

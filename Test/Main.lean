@@ -55,6 +55,7 @@ def main (args: List String) := do
     ("Delate", Delate.suite),
     ("Serial", Serial.suite),
     ("Tactic/Assign", Tactic.Assign.suite),
+    ("Tactic/Fragment", Tactic.Fragment.suite),
     ("Tactic/Prograde", Tactic.Prograde.suite),
     ("Tactic/Special", Tactic.Special.suite),
   ]

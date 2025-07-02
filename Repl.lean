@@ -97,6 +97,82 @@ def liftTermElabM { α } (termElabM : Elab.TermElabM α) (levelNames : List Name
   }
   runCoreM $ termElabM.run' context state |>.run'
 
+section Goal
+
+def goal_tactic (args: Protocol.GoalTactic): EMainM Protocol.GoalTacticResult := do
+  let state ← getMainState
+  let .some goalState := state.goalStates[args.stateId]? |
+    Protocol.throw $ Protocol.errorIndex s!"Invalid state index {args.stateId}"
+  let unshielded := args.autoResume?.getD state.options.automaticMode
+  let site ← match args.goalId?, unshielded with
+    | .some goalId, true => do
+      let .some goal := goalState.goals[goalId]? |
+        Protocol.throw $ Protocol.errorIndex s!"Invalid goal index {goalId}"
+      pure (.prefer goal)
+    | .some goalId, false => do
+      let .some goal := goalState.goals[goalId]? |
+        Protocol.throw $ Protocol.errorIndex s!"Invalid goal index {goalId}"
+      pure (.focus goal)
+    | .none, true => pure .unfocus
+    | .none, false => do
+      let .some goal := goalState.mainGoal? |
+        Protocol.throw $ Protocol.errorIndex s!"No goals to be solved"
+      pure (.focus goal)
+  let nextGoalState?: Except _ TacticResult ← liftTermElabM do
+    -- NOTE: Should probably use a macro to handle this...
+    match args.tactic?, args.mode?, args.expr?, args.have?, args.let?, args.draft?  with
+    | .some tactic, .none, .none, .none, .none, .none => do
+      pure $ Except.ok $ ← goalState.tryTactic site tactic
+    | .none, .some mode, .none, .none, .none, .none => match mode with
+      | "tactic" => do -- Exit from the current fragment
+        pure $ Except.ok $ ← goalState.fragmentExit site
+      | "conv" => do
+        pure $ Except.ok $ ← goalState.convEnter site
+      | "calc" => do
+        pure $ Except.ok $ ← goalState.calcEnter site
+      | _ => pure $ .error $ Protocol.errorOperation s!"Invalid mode {mode}"
+    | .none, .none, .some expr, .none, .none, .none => do
+      pure $ Except.ok $ ← goalState.tryAssign site expr
+    | .none, .none, .none, .some type, .none, .none => do
+      let binderName := args.binderName?.getD ""
+      pure $ Except.ok $ ← goalState.tryHave site binderName type
+    | .none, .none, .none, .none, .some type, .none => do
+      let binderName := args.binderName?.getD ""
+      pure $ Except.ok $ ← goalState.tryLet site binderName type
+    | .none, .none, .none, .none, .none, .some draft => do
+      pure $ Except.ok $ ← goalState.tryDraft site draft
+    | _, _, _, _, _, _ =>
+      pure $ .error $ Protocol.errorOperation
+        "Exactly one of {tactic, mode, expr, have, let, draft} must be supplied"
+  match nextGoalState? with
+  | .error error => Protocol.throw error
+  | .ok (.success nextGoalState messages) => do
+    let env ← getEnv
+    let nextStateId ← newGoalState nextGoalState
+    let parentExprs := nextGoalState.parentExprs
+    let hasSorry := parentExprs.any λ
+      | .ok e => e.hasSorry
+      | .error _ => false
+    let hasUnsafe := parentExprs.any λ
+      | .ok e => env.hasUnsafe e
+      | .error _ => false
+    let goals ← runCoreM $ nextGoalState.serializeGoals (options := state.options) |>.run'
+    return {
+      nextStateId? := .some nextStateId,
+      goals? := .some goals,
+      messages? := .some messages,
+      hasSorry,
+      hasUnsafe,
+    }
+  | .ok (.parseError message) =>
+    return { messages? := .none, parseError? := .some message }
+  | .ok (.invalidAction message) =>
+    Protocol.throw $ errorI "invalid" message
+  | .ok (.failure messages) =>
+    return { messages? := .some messages }
+
+end Goal
+
 section Frontend
 
 structure CompilationUnit where
@@ -225,7 +301,6 @@ def execute (command: Protocol.Command): MainM Json := do
     return toJson error
   where
   errorCommand := errorI "command"
-  errorIndex := errorI "index"
   errorIO := errorI "io"
   -- Command Functions
   reset (_: Protocol.Reset): EMainM Protocol.StatResult := do
@@ -290,7 +365,7 @@ def execute (command: Protocol.Command): MainM Json := do
       | .some expr, .none => goalStartExpr expr |>.run
       | .none, .some copyFrom => do
         (match (← getEnv).find? <| copyFrom.toName with
-        | .none => return .error <| errorIndex s!"Symbol not found: {copyFrom}"
+        | .none => return .error <| Protocol.errorIndex s!"Symbol not found: {copyFrom}"
         | .some cInfo => return .ok (← GoalState.create cInfo.type))
       | _, _ =>
         return .error <| errorI "arguments" "Exactly one of {expr, copyFrom} must be supplied"
@@ -299,70 +374,14 @@ def execute (command: Protocol.Command): MainM Json := do
     | .ok goalState =>
       let stateId ← newGoalState goalState
       return { stateId, root := goalState.root.name.toString }
-  goal_tactic (args: Protocol.GoalTactic): EMainM Protocol.GoalTacticResult := do
-    let state ← getMainState
-    let .some goalState := state.goalStates[args.stateId]? |
-      Protocol.throw $ errorIndex s!"Invalid state index {args.stateId}"
-    -- FIXME: Allow proper conversion tactic exit even in automatic mode
-    let .some goal := goalState.goals[args.goalId]? |
-      Protocol.throw $ errorIndex s!"Invalid goal index {args.goalId}"
-    let nextGoalState?: Except _ TacticResult ← liftTermElabM do
-      -- NOTE: Should probably use a macro to handle this...
-      match args.tactic?, args.expr?, args.have?, args.let?, args.calc?, args.conv?, args.draft?  with
-      | .some tactic, .none, .none, .none, .none, .none, .none => do
-        pure <| Except.ok <| ← goalState.tryTactic goal tactic
-      | .none, .some expr, .none, .none, .none, .none, .none => do
-        pure <| Except.ok <| ← goalState.tryAssign goal expr
-      | .none, .none, .some type, .none, .none, .none, .none => do
-        let binderName := args.binderName?.getD ""
-        pure <| Except.ok <| ← goalState.tryHave goal binderName type
-      | .none, .none, .none, .some type, .none, .none, .none => do
-        let binderName := args.binderName?.getD ""
-        pure <| Except.ok <| ← goalState.tryLet goal binderName type
-      | .none, .none, .none, .none, .some pred, .none, .none => do
-        pure <| Except.ok <| ← goalState.tryCalc goal pred
-      | .none, .none, .none, .none, .none, .some true, .none => do
-        pure <| Except.ok <| ← goalState.conv goal
-      | .none, .none, .none, .none, .none, .some false, .none => do
-        pure <| Except.ok <| ← goalState.convExit goal
-      | .none, .none, .none, .none, .none, .none, .some draft => do
-        pure <| Except.ok <| ← goalState.tryDraft goal draft
-      | _, _, _, _, _, _, _ =>
-        let error := errorI "arguments" "Exactly one of {tactic, expr, have, let, calc, conv, draft} must be supplied"
-        pure $ .error error
-    match nextGoalState? with
-    | .error error => Protocol.throw error
-    | .ok (.success nextGoalState messages) => do
-      let nextGoalState ← match state.options.automaticMode, args.conv? with
-        | true, .none => do
-          pure $ nextGoalState.immediateResume goalState
-        | true, .some true => pure nextGoalState
-        | true, .some false => pure nextGoalState
-        | false, _ => pure nextGoalState
-      let nextStateId ← newGoalState nextGoalState
-      let parentExpr := nextGoalState.parentExpr?.get!
-      let goals ← runCoreM $ nextGoalState.serializeGoals (parent := .some goalState) (options := state.options) |>.run'
-      return {
-        nextStateId? := .some nextStateId,
-        goals? := .some goals,
-        messages? := .some messages,
-        hasSorry := parentExpr.hasSorry,
-        hasUnsafe := (← getEnv).hasUnsafe parentExpr,
-      }
-    | .ok (.parseError message) =>
-      return { messages? := .none, parseError? := .some message }
-    | .ok (.invalidAction message) =>
-      Protocol.throw $ errorI "invalid" message
-    | .ok (.failure messages) =>
-      return { messages? := .some messages }
   goal_continue (args: Protocol.GoalContinue): EMainM Protocol.GoalContinueResult := do
     let state ← getMainState
     let .some target := state.goalStates[args.target]? |
-      Protocol.throw $ errorIndex s!"Invalid state index {args.target}"
+      Protocol.throw $ Protocol.errorIndex s!"Invalid state index {args.target}"
     let nextGoalState? : GoalState  ← match args.branch?, args.goals? with
       | .some branchId, .none => do
         match state.goalStates[branchId]? with
-        | .none => Protocol.throw $ errorIndex s!"Invalid state index {branchId}"
+        | .none => Protocol.throw $ Protocol.errorIndex s!"Invalid state index {branchId}"
         | .some branch => pure $ target.continue branch
       | .none, .some goals =>
         let goals := goals.toList.map (λ n => { name := n.toName })
@@ -385,11 +404,11 @@ def execute (command: Protocol.Command): MainM Json := do
   goal_print (args: Protocol.GoalPrint): EMainM Protocol.GoalPrintResult := do
     let state ← getMainState
     let .some goalState := state.goalStates[args.stateId]? |
-      Protocol.throw $ errorIndex s!"Invalid state index {args.stateId}"
+      Protocol.throw $ Protocol.errorIndex s!"Invalid state index {args.stateId}"
     let result ← liftMetaM <| goalPrint
         goalState
         (rootExpr := args.rootExpr?.getD False)
-        (parentExpr := args.parentExpr?.getD False)
+        (parentExprs := args.parentExprs?.getD False)
         (goals := args.goals?.getD False)
         (extraMVars := args.extraMVars?.getD #[])
         (options := state.options)
@@ -397,11 +416,11 @@ def execute (command: Protocol.Command): MainM Json := do
   goal_save (args: Protocol.GoalSave): EMainM Protocol.GoalSaveResult := do
     let state ← getMainState
     let .some goalState := state.goalStates[args.id]? |
-      Protocol.throw $ errorIndex s!"Invalid state index {args.id}"
-    goalStatePickle goalState args.path
+      Protocol.throw $ Protocol.errorIndex s!"Invalid state index {args.id}"
+    goalStatePickle goalState args.path (background? := .some $ ← getEnv)
     return {}
   goal_load (args: Protocol.GoalLoad): EMainM Protocol.GoalLoadResult := do
-    let (goalState, _) ← goalStateUnpickle args.path (← MonadEnv.getEnv)
+    let (goalState, _) ← goalStateUnpickle args.path (background? := .some $ ← getEnv)
     let id ← newGoalState goalState
     return { id }
 

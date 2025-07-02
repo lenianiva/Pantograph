@@ -281,6 +281,33 @@ def test_branch_unification : TestM Unit := do
   let .some root := stateT.rootExpr? | fail "Root expression must exist"
   checkEq "(root)" (toString $ ← Meta.ppExpr root) "fun p q h => ⟨h, Or.inl h⟩"
 
+/-- Test merger when both branches have new aux lemmas -/
+def test_replay_environment : TestM Unit := do
+  let .ok rootTarget ← elabTerm (← `(term|(2: Nat) ≤ 3 ∧ (3: Nat) ≤ 5)) .none | unreachable!
+  let state ← GoalState.create rootTarget
+  let .success state _  ← state.tacticOn' 0 (← `(tactic|apply And.intro)) | fail "apply And.intro failed to run"
+  let goal := state.goals[0]!
+  let type ← goal.withContext do
+    let .ok type ← elabTerm (← `(term|(2: Nat) ≤ 3)) (.some $ .sort 0) | unreachable!
+    pure type
+  let .success state1 _  ← state.tryTacticM goal (Tactic.assignWithAuxLemma type) | fail "left"
+
+  state.restoreMetaM
+  let goal := state.goals[1]!
+  let type ← goal.withContext do
+    let .ok type ← elabTerm (← `(term|(3: Nat) ≤ 5)) (.some $ .sort 0) | unreachable!
+    pure type
+  let .success state2 _  ← state.tryTacticM goal (Tactic.assignWithAuxLemma type) | fail "right"
+  checkEq "(state1 goals)" state1.goals.length 0
+  checkEq "(state2 goals)" state2.goals.length 0
+  let stateT ← state2.replay state state1
+  checkEq "(stateT goals)" stateT.goals.length 0
+  let .some root := stateT.rootExpr? | fail "Root expression must exist"
+  checkTrue "root has aux lemma" $ root.getUsedConstants.any (·.isAuxLemma)
+  checkEq "(root)" (toString $ ← Meta.ppExpr root) "⟨_proof_1, _proof_2⟩"
+  let root ← unfoldAuxLemmas root
+  checkEq "(root unfold)" (toString $ ← Meta.ppExpr root) "⟨sorry, sorry⟩"
+
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   let tests := [
     ("Instantiate", test_instantiate_mvar),
@@ -289,6 +316,7 @@ def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
     ("Proposition Generation", test_proposition_generation),
     ("Partial Continuation", test_partial_continuation),
     ("Branch Unification", test_branch_unification),
+    --("Replay Environment", test_replay_environment),
   ]
   tests.map (fun (name, test) => (name, proofRunner env test))
 

@@ -117,10 +117,10 @@ def goalStartExpr (expr: String) : Protocol.FallibleT Elab.TermElabM GoalState :
 
 @[export pantograph_goal_serialize_m]
 def goalSerialize (state: GoalState) (options: @&Protocol.Options): CoreM (Array Protocol.Goal) :=
-  runMetaM <| state.serializeGoals (parent := .none) options
+  runMetaM <| state.serializeGoals options
 
 @[export pantograph_goal_print_m]
-def goalPrint (state: GoalState) (rootExpr: Bool) (parentExpr: Bool) (goals: Bool) (extraMVars : Array String) (options: @&Protocol.Options)
+def goalPrint (state: GoalState) (rootExpr: Bool) (parentExprs: Bool) (goals: Bool) (extraMVars : Array String) (options: @&Protocol.Options)
   : CoreM Protocol.GoalPrintResult := runMetaM do
   state.restoreMetaM
 
@@ -130,9 +130,11 @@ def goalPrint (state: GoalState) (rootExpr: Bool) (parentExpr: Bool) (goals: Boo
         serializeExpression options (← instantiateAll expr)
     else
       pure .none
-  let parent? ← if parentExpr then
-      state.parentExpr?.mapM λ expr => state.withParentContext do
-        serializeExpression options (← instantiateAll expr)
+  let parentExprs? ← if parentExprs then
+      .some <$> state.parentMVars.mapM λ parent => parent.withContext do
+        let val? := state.getMVarEAssignment parent
+        val?.mapM λ val => do
+          serializeExpression options (← instantiateAll val)
     else
       pure .none
   let goals ← if goals then
@@ -148,7 +150,7 @@ def goalPrint (state: GoalState) (rootExpr: Bool) (parentExpr: Bool) (goals: Boo
   let env ← getEnv
   return {
     root?,
-    parent?,
+    parentExprs?,
     goals,
     extraMVars,
     rootHasSorry := rootExpr?.map (·.hasSorry) |>.getD false,
@@ -157,26 +159,26 @@ def goalPrint (state: GoalState) (rootExpr: Bool) (parentExpr: Bool) (goals: Boo
   }
 
 @[export pantograph_goal_have_m]
-protected def GoalState.tryHave (state: GoalState) (goal: MVarId) (binderName: String) (type: String): Elab.TermElabM TacticResult := do
+protected def GoalState.tryHave (state: GoalState) (site : Site) (binderName: String) (type: String): Elab.TermElabM TacticResult := do
   let type ← match (← parseTermM type) with
     | .ok syn => pure syn
     | .error error => return .parseError error
   state.restoreElabM
-  state.tryTacticM goal $ Tactic.evalHave binderName.toName type
+  state.tryTacticM site $ Tactic.evalHave binderName.toName type
 @[export pantograph_goal_try_define_m]
-protected def GoalState.tryDefine (state: GoalState) (goal: MVarId) (binderName: String) (expr: String): Elab.TermElabM TacticResult := do
+protected def GoalState.tryDefine (state: GoalState) (site : Site) (binderName: String) (expr: String): Elab.TermElabM TacticResult := do
   let expr ← match (← parseTermM expr) with
     | .ok syn => pure syn
     | .error error => return .parseError error
   state.restoreElabM
-  state.tryTacticM goal (Tactic.evalDefine binderName.toName expr)
+  state.tryTacticM site $ Tactic.evalDefine binderName.toName expr
 @[export pantograph_goal_try_draft_m]
-protected def GoalState.tryDraft (state: GoalState) (goal: MVarId) (expr: String): Elab.TermElabM TacticResult := do
+protected def GoalState.tryDraft (state: GoalState) (site : Site) (expr: String): Elab.TermElabM TacticResult := do
   let expr ← match (← parseTermM expr) with
     | .ok syn => pure syn
     | .error error => return .parseError error
   state.restoreElabM
-  state.tryTacticM goal (Tactic.evalDraft expr)
+  state.tryTacticM site $ Tactic.evalDraft expr
 
 -- Cancel the token after a timeout.
 @[export pantograph_run_cancel_token_with_timeout_m]

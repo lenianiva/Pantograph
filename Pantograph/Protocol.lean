@@ -60,16 +60,21 @@ structure Variable where
   type?: Option Expression  := .none
   value?: Option Expression := .none
   deriving Lean.ToJson
+inductive Fragment where
+  | tactic
+  | conv
+  | calc
+  deriving BEq, DecidableEq, Repr, Lean.ToJson
 structure Goal where
-  name: String := ""
   /-- Name of the metavariable -/
-  userName?: Option String  := .none
-  /-- Is the goal in conversion mode -/
-  isConversion: Bool        := false
+  name : String := ""
+  /-- User-facing name -/
+  userName? : Option String  := .none
+  fragment : Fragment := .tactic
   /-- target expression type -/
-  target: Expression
+  target : Expression
   /-- Variables -/
-  vars: Array Variable      := #[]
+  vars : Array Variable      := #[]
   deriving Lean.ToJson
 
 
@@ -87,6 +92,7 @@ structure InteractionError where
   deriving Lean.ToJson
 
 def errorIndex (desc: String): InteractionError := { error := "index", desc }
+def errorOperation (desc: String): InteractionError := { error := "operation", desc }
 def errorExpr (desc: String): InteractionError := { error := "expr", desc }
 
 
@@ -248,17 +254,17 @@ structure GoalStartResult where
   root: String
   deriving Lean.ToJson
 structure GoalTactic where
-  -- Identifiers for tree, state, and goal
   stateId: Nat
-  goalId: Nat := 0
+  -- If omitted, act on the first goal
+  goalId?: Option Nat := .none
+  -- If set to true, goal will not go dormant. Defaults to `automaticMode`
+  autoResume?: Option Bool := .none
   -- One of the fields here must be filled
   tactic?: Option String := .none
+  mode?: Option String := .none -- Changes the current category to {"tactic", "calc", "conv"}
   expr?: Option String := .none
   have?: Option String := .none
   let?: Option String := .none
-  calc?: Option String := .none
-  -- true to enter `conv`, `false` to exit. In case of exit the `goalId` is ignored.
-  conv?: Option Bool := .none
   draft?: Option String := .none
 
   -- In case of the `have` tactic, the new free variable name is provided here
@@ -308,8 +314,8 @@ structure GoalPrint where
 
   -- Print root?
   rootExpr?: Option Bool := .some False
-  -- Print the parent expr?
-  parentExpr?: Option Bool := .some False
+  -- Print the parent expressions
+  parentExprs?: Option Bool := .some False
   -- Print goals?
   goals?: Option Bool := .some False
   -- Print values of extra mvars?
@@ -319,7 +325,7 @@ structure GoalPrintResult where
   -- The root expression
   root?: Option Expression := .none
   -- The filling expression of the parent goal
-  parent?: Option Expression := .none
+  parentExprs?: Option (List (Option Expression)) := .none
   goals: Array Goal := #[]
   extraMVars: Array Expression := #[]
 
