@@ -303,7 +303,7 @@ def test_replay_environment : TestM Unit := do
   let stateT ← state2.replay state state1
   checkEq "(stateT goals)" stateT.goals.length 0
   let .some root := stateT.rootExpr? | fail "Root expression must exist"
-  checkTrue "root has aux lemma" $ root.getUsedConstants.any (·.isAuxLemma)
+  checkTrue "root has aux lemma" $ root.getUsedConstants.any isAuxLemma
   checkEq "(root)" (toString $ ← Meta.ppExpr root) "⟨_proof_1, _proof_2⟩"
   let root ← unfoldAuxLemmas root
   checkEq "(root unfold)" (toString $ ← Meta.ppExpr root) "⟨sorry, sorry⟩"
