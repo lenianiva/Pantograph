@@ -10,7 +10,7 @@ namespace Lean.Elab
 private def elaboratorToString : Name → String
   | .anonymous => ""
   | n => s!"⟨{n}⟩ "
-private def indent (s : String) : String := "\n".intercalate $ s.splitOn "\n" |>.map ("\t" ++ .)
+private def indent (s : String) : String := "\n".intercalate $ s.splitOn "\n" |>.map ("  " ++ .)
 
 /-- The `Syntax` for a `Lean.Elab.Info`, if there is one. -/
 protected def Info.stx? : Info → Option Syntax
@@ -131,16 +131,16 @@ partial def InfoTree.toString (t : InfoTree) (ctx?: Option Elab.ContextInfo := .
   | .node info children =>
     if let some ctx := ctx? then
       let node : String ← match info with
-      | .ofTermInfo    info => pure s!"[term] {(← info.toString ctx)}"
-      | .ofCommandInfo info => pure s!"[command] {(← info.toString ctx)}"
-      | .ofTacticInfo  info => pure s!"[tactic] {(← info.toString ctx)}"
+      | .ofTermInfo    info => pure s!"[term] {info.stx}"
+      | .ofCommandInfo info => pure s!"[command] {info.stx}"
+      | .ofTacticInfo  info => pure s!"[tactic] {info.stx}"
       | .ofMacroExpansionInfo _ => pure "[macro_exp]"
-      | .ofOptionInfo _ => pure "[option]"
+      | .ofOptionInfo info => pure s!"[option] {info.stx}"
       | .ofFieldInfo _ => pure "[field]"
-      | .ofCompletionInfo _ => pure "[completion]"
+      | .ofCompletionInfo info => pure s!"[completion] {info.stx}"
       | .ofUserWidgetInfo _ => pure "[user_widget]"
       | .ofCustomInfo _ => pure "[custom]"
-      | .ofFVarAliasInfo _ => pure "[fvar]"
+      | .ofFVarAliasInfo _ => pure "[fvar_alias]"
       | .ofFieldRedeclInfo _ => pure "[field_redecl]"
       | .ofChoiceInfo _ => pure "[choice]"
       | .ofPartialTermInfo  _ => pure "[partial_term]"

@@ -10,9 +10,17 @@ lean_lib Pantograph {
 
 lean_lib Repl {
 }
+
 @[default_target]
 lean_exe repl {
   root := `Main
+  -- Solves the native symbol not found problem
+  supportInterpreter := true
+}
+
+@[default_target]
+lean_exe tomograph {
+  root := `Tomograph
   -- Solves the native symbol not found problem
   supportInterpreter := true
 }
