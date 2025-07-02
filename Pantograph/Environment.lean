@@ -14,7 +14,7 @@ namespace Pantograph.Environment
 @[export pantograph_is_name_internal]
 def isNameInternal (n: Name): Bool :=
   -- Returns true if the name is an implementation detail which should not be shown to the user.
-  n.isAuxLemma ∨ n.hasMacroScopes
+  isAuxLemma n ∨ n.hasMacroScopes
 
 /-- Catalog all the non-internal and safe names -/
 @[export pantograph_environment_catalog]

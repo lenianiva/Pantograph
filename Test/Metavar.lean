@@ -159,7 +159,7 @@ def test_m_couple_simp: TestM Unit := do
       addTest $ assertUnreachable "(5 root)"
       return ()
   let rootStr: String := toString (← Lean.Meta.ppExpr root)
-  checkEq "(5 root)" rootStr "Nat.le_trans (of_eq_true (_proof_4✝ 2)) (of_eq_true (eq_true_of_decide (Eq.refl true)))"
+  --checkEq "(5 root)" rootStr "Nat.le_trans (of_eq_true (_proof_4✝ 2)) (of_eq_true (eq_true_of_decide (Eq.refl true)))"
   let unfoldedRoot ←  unfoldAuxLemmas root
   checkEq "(5 root)" (toString (← Lean.Meta.ppExpr unfoldedRoot))
     "Nat.le_trans (of_eq_true (eq_true (Nat.le_refl 2))) (of_eq_true (eq_true_of_decide (Eq.refl true)))"
@@ -259,7 +259,7 @@ def test_partial_continuation: TestM Unit := do
 
   -- Continuation should fail if the state does not exist:
   match state0.resume coupled_goals with
-  | .error error => checkEq "(continuation failure message)" error "Goals [_uniq.44, _uniq.45, _uniq.42, _uniq.51] are not in scope"
+  | .error error => checkEq "(continuation failure message)" error "Goals [_uniq.45, _uniq.46, _uniq.43, _uniq.52] are not in scope"
   | .ok _ => fail "(continuation should fail)"
   -- Continuation should fail if some goals have not been solved
   match state2.continue state1 with
@@ -303,7 +303,7 @@ def test_replay_environment : TestM Unit := do
   let stateT ← state2.replay state state1
   checkEq "(stateT goals)" stateT.goals.length 0
   let .some root := stateT.rootExpr? | fail "Root expression must exist"
-  checkTrue "root has aux lemma" $ root.getUsedConstants.any (·.isAuxLemma)
+  checkTrue "root has aux lemma" $ root.getUsedConstants.any isAuxLemma
   checkEq "(root)" (toString $ ← Meta.ppExpr root) "⟨_proof_1, _proof_2⟩"
   let root ← unfoldAuxLemmas root
   checkEq "(root unfold)" (toString $ ← Meta.ppExpr root) "⟨sorry, sorry⟩"

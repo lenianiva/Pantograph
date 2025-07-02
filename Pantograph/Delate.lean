@@ -63,15 +63,16 @@ def exprProjToApp (env : Environment) (e : Expr) : Expr :=
       (List.range numFields)
     mkAppN callee (typeArgs ++ [motive, major, induct]).toArray
 
-def _root_.Lean.Name.isAuxLemma (n : Name) : Bool :=
+def isAuxLemma (n : Name) : Bool :=
   match n with
-  | .str _ s => "_proof_".isPrefixOf s
+  -- `mkAuxLemma` generally allows for arbitrary prefixes but these are the ones produced by core.
+  | .str _ s => "_proof_".isPrefixOf s || "_simp_".isPrefixOf s
   | _ => false
 
 /-- Unfold all lemmas created by `Lean.Meta.mkAuxLemma`. These end in `_auxLemma.nn` where `nn` is a number. -/
 @[export pantograph_unfold_aux_lemmas_m]
-def unfoldAuxLemmas : Expr → CoreM Expr :=
-  (Meta.deltaExpand · Lean.Name.isAuxLemma)
+def unfoldAuxLemmas (e : Expr) : CoreM Expr := do
+  Meta.deltaExpand e isAuxLemma
 /-- Unfold all matcher applications -/
 @[export pantograph_unfold_matchers_m]
 def unfoldMatchers (expr : Expr) : CoreM Expr :=
