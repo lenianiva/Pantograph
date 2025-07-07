@@ -126,8 +126,8 @@ def test_conv_simple: TestM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.check tactic ((← stateF.serializeGoals).map (·.devolatilize) =
-    #[])
+  checkEq tactic ((← stateF.serializeGoals).map (·.devolatilize)) #[]
+  checkEq "fragments" stateF.fragments.size 0
 
   where
     h := "b + a + c1 = b + a + c2"
@@ -180,6 +180,7 @@ def test_conv_unshielded : TestM Unit := do
   let .success state _ ← state.tryTactic .unfocus tactic | fail s!"{tactic} failed"
   let root? := state.rootExpr?
   checkTrue "root" root?.isSome
+  checkEq "fragments" state.fragments.size 0
   where
   interiorGoal (free: List (String × String)) (target: String) :=
     let free := [("p", "Prop"), ("x", "Nat"), ("y", "Nat"), ("z", "Nat"), ("hp", "p"), ("hi", "p → x = y")] ++ free
