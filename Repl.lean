@@ -269,7 +269,7 @@ def execute (command: Protocol.Command): MainM Json := do
       | .ok args => do
         let (msg, result) ← IO.FS.withIsolatedStreams (isolateStderr := false) $ comm args
         if !msg.isEmpty then
-          IO.eprintln s!"stdout: {msg}"
+          IO.eprint s!"stdout: {msg}"
         match result with
         | .ok result =>  return toJson result
         | .error ierror => return toJson ierror
