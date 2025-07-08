@@ -267,7 +267,10 @@ def execute (command: Protocol.Command): MainM Json := do
     try
       match fromJson? command.payload with
       | .ok args => do
-        match (← comm args |>.run) with
+        let (msg, result) ← IO.FS.withIsolatedStreams (isolateStderr := false) $ comm args
+        if !msg.isEmpty then
+          IO.eprintln s!"stdout: {msg}"
+        match result with
         | .ok result =>  return toJson result
         | .error ierror => return toJson ierror
       | .error error => return toJson $ errorCommand s!"Unable to parse json: {error}"
