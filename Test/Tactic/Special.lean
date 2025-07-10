@@ -13,7 +13,9 @@ def test_exact_q : TestT Elab.TermElabM Unit := do
   let tactic := "exact?"
   let state1? ← state0.tacticOn (goalId := 0) (tactic := tactic)
   let .failure messages := state1? | fail "Must fail"
-  checkEq "messages" messages #["`exact?` could not close the goal. Try `apply?` to see partial suggestions."]
+  checkEq "messages"
+    (← messages.mapM (·.toString))
+    #[s!"{← getFileName}:0:0: error: `exact?` could not close the goal. Try `apply?` to see partial suggestions.\n"]
 
 def suite (env: Environment): List (String × IO LSpec.TestSeq) :=
   [

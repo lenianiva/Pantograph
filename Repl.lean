@@ -157,6 +157,7 @@ def goal_tactic (args: Protocol.GoalTactic): EMainM Protocol.GoalTacticResult :=
       | .ok e => env.hasUnsafe e
       | .error _ => false
     let goals ← runCoreM $ nextGoalState.serializeGoals (options := state.options) |>.run'
+    let messages ← messages.mapM (·.serialize)
     return {
       nextStateId? := .some nextStateId,
       goals? := .some goals,
@@ -169,6 +170,7 @@ def goal_tactic (args: Protocol.GoalTactic): EMainM Protocol.GoalTacticResult :=
   | .ok (.invalidAction message) =>
     Protocol.throw $ errorI "invalid" message
   | .ok (.failure messages) =>
+    let messages ← messages.mapM (·.serialize)
     return { messages? := .some messages }
 
 end Goal
@@ -181,7 +183,7 @@ structure CompilationUnit where
   boundary : Nat × Nat
   invocations : List Protocol.InvokedTactic
   sorrys : List Frontend.InfoWithContext
-  messages : Array String
+  messages : Array SerialMessage
   newConstants : List Name
 
 def frontend_process (args: Protocol.FrontendProcess): EMainM Protocol.FrontendProcessResult := do
@@ -209,7 +211,7 @@ def frontend_process (args: Protocol.FrontendProcess): EMainM Protocol.FrontendP
         Frontend.collectSorrys step (options := { collectTypeErrors := args.typeErrorsAsGoals })
       else
         pure []
-    let messages ← step.messageStrings
+    let messages ← step.msgs.toArray.mapM (·.serialize)
     let newConstants ← if args.newConstants then
         Frontend.collectNewDefinedConstants step
       else

@@ -185,8 +185,7 @@ def test_have_proof : TestT Elab.TermElabM Unit := do
     | other => do
       addTest $ assertUnreachable $ other.toString
       return ()
-  addTest $ LSpec.check s!":= {expr}" ((← state4.serializeGoals).map (·.devolatilize) =
-    #[])
+  checkEq s!":= {expr}" ((← state4.serializeGoals).map (·.devolatilize)) #[]
 
   let .some rootExpr := state4.rootExpr? | addTest $ assertUnreachable "Root expr"
   addTest $ LSpec.check "root" ((toString $ ← Meta.ppExpr rootExpr) = "fun p q h y => Or.inl y")
@@ -264,9 +263,11 @@ def test_let (specialized: Bool): TestT Elab.TermElabM Unit := do
   let tactic := "exact h"
   match ← state3r.tacticOn (goalId := 0) (tactic := tactic) with
   | .failure #[message] =>
-    addTest $ LSpec.check tactic  (message = s!"type mismatch\n  h\nhas type\n  a : Prop\nbut is expected to have type\n  {mainTarget} : Prop")
+    checkEq tactic
+      (← message.toString)
+      s!"{← getFileName}:0:0: error: type mismatch\n  h\nhas type\n  a : Prop\nbut is expected to have type\n  {mainTarget} : Prop\n"
   | other => do
-    addTest $ assertUnreachable $ other.toString
+    fail s!"Should be a failure: {other.toString}"
 
   let tactic := "exact Or.inl (Or.inl h)"
   let state4 ← match ← state3r.tacticOn (goalId := 0) (tactic := tactic) with

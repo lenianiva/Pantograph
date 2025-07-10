@@ -472,20 +472,19 @@ protected def GoalState.step (state : GoalState) (site : Site) (tacticM : Elab.T
 /-- Response for executing a tactic -/
 inductive TacticResult where
   -- Goes to next state
-  | success (state : GoalState) (messages : Array String)
+  | success (state : GoalState) (messages : Array Message)
   -- Tactic failed with messages
-  | failure (messages : Array String)
+  | failure (messages : Array Message)
   -- Could not parse tactic
   | parseError (message : String)
   -- The given action cannot be executed in the state
   | invalidAction (message : String)
 
-private def dumpMessageLog (prevMessageLength : Nat := 0) : CoreM (Bool × Array String) := do
+private def dumpMessageLog (prevMessageLength : Nat := 0) : CoreM (Bool × List Message) := do
   let newMessages := (← Core.getMessageLog).toList.drop prevMessageLength
   let hasErrors := newMessages.any (·.severity == .error)
-  let newMessages ← newMessages.mapM λ m => m.toString
   Core.resetMessageLog
-  return (hasErrors, newMessages.toArray)
+  return (hasErrors, newMessages)
 
 /-- Execute a `TermElabM` producing a goal state, capturing the error and turn it into a `TacticResult` -/
 def withCapturingError (elabM : Elab.Term.TermElabM GoalState) : Elab.TermElabM TacticResult := do
@@ -499,15 +498,22 @@ def withCapturingError (elabM : Elab.Term.TermElabM GoalState) : Elab.TermElabM 
     -- Check if error messages have been generated in the core.
     let (hasError, newMessages) ← dumpMessageLog
     if hasError then
-      return .failure newMessages
+      return .failure newMessages.toArray
     else
-      return .success state newMessages
+      return .success state newMessages.toArray
   catch exception =>
     match exception with
     | .internal _ =>
       let (_, messages) ← dumpMessageLog
-      return .failure messages
-    | _ => return .failure #[← exception.toMessageData.toString]
+      return .failure messages.toArray
+    | _ =>
+      let (_, messages) ← dumpMessageLog
+      let message := {
+        fileName := ← getFileName,
+        pos := ← getRefPosition,
+        data := exception.toMessageData,
+      }
+      return .failure (message :: messages).toArray
 
 /-- Executes a `TacticM` monad on this `GoalState`, collecting the errors as necessary -/
 protected def GoalState.tryTacticM

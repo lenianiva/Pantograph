@@ -105,9 +105,11 @@ def test_nat_add_comm (manual: Bool): TestM Unit := do
 
   match ← state1.tacticOn 0 "assumption" with
   | .failure #[message] =>
-    addTest $ LSpec.check "assumption" (message = "tactic 'assumption' failed\nn m : Nat\n⊢ n + m = m + n")
+    checkEq "assumption"
+      (← message.toString)
+      s!"{← getFileName}:0:0: error: tactic 'assumption' failed\nn m : Nat\n⊢ n + m = m + n\n"
   | other => do
-    addTest $ assertUnreachable $ other.toString
+    addTest $ assertUnreachable other.toString
 
   let state2 ← match ← state1.tacticOn 0 "rw [Nat.add_comm]" with
     | .success state _ => pure state
@@ -317,8 +319,10 @@ def test_tactic_failure_unresolved_goals : TestM Unit := do
       return ()
 
   let tactic := "exact ⟨0, by simp⟩"
-  let .failure messages ← state1.tacticOn 0 tactic | addTest $ assertUnreachable s!"{tactic} should fail"
-  checkEq s!"{tactic} fails" messages #[s!"{← getFileName}:0:12: error: unsolved goals\np : Nat → Prop\n⊢ p 0\n"]
+  let .failure #[message] ← state1.tacticOn 0 tactic
+    | fail s!"{tactic} should fail with 1 message"
+  checkEq s!"{tactic} fails" (← message.toString)
+    s!"{← getFileName}:0:12: error: unsolved goals\np : Nat → Prop\n⊢ p 0\n"
 
 def test_tactic_failure_synthesize_placeholder : TestM Unit := do
   let state? ← startProof (.expr "∀ (p q r : Prop) (h : p → q), q ∧ r")
@@ -348,9 +352,10 @@ def test_tactic_failure_synthesize_placeholder : TestM Unit := do
   --  buildGoal [("p", "Prop"), ("q", "Prop"), ("r", "Prop"), ("h", "p → q")] "p ∧ r"
   --]
 
-  let .failure messages ← state1.tacticOn 0 tactic | addTest $ assertUnreachable s!"{tactic} should fail"
-  let message := s!"<Pantograph>:0:31: error: don't know how to synthesize placeholder\ncontext:\np q r : Prop\nh : p → q\n⊢ p ∧ r\n"
-  checkEq s!"{tactic} fails" messages #[message]
+  let .failure #[message] ← state1.tacticOn 0 tactic
+    | addTest $ assertUnreachable s!"{tactic} should fail"
+  checkEq s!"{tactic} fails" (← message.toString)
+    s!"{← getFileName}:0:31: error: don't know how to synthesize placeholder\ncontext:\np q r : Prop\nh : p → q\n⊢ p ∧ r\n"
 
 def test_deconstruct : TestM Unit := do
   let state? ← startProof (.expr "∀ (p q : Prop) (h : And p q), And q p")

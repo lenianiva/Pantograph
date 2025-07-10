@@ -75,8 +75,7 @@ def GoalState.tacticOn' (state: GoalState) (goalId: Nat) (tactic: TSyntax `tacti
 def TacticResult.toString : TacticResult → String
   | .success state _messages => s!".success ({state.goals.length} goals)"
   | .failure messages =>
-    let messages := "\n".intercalate messages.toList
-    s!".failure {messages}"
+    s!".failure ({messages.size} messages)"
   | .parseError error => s!".parseError {error}"
   | .invalidAction error => s!".invalidAction {error}"
 

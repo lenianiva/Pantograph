@@ -23,6 +23,9 @@ deriving instance Lean.ToJson for Protocol.FrontendData
 abbrev TestM α := TestT MainM α
 abbrev Test := TestM Unit
 
+def getFileName : TestM String := do
+  return (← read).coreContext.fileName
+
 def step { α β } [Lean.ToJson α] [Lean.ToJson β] (cmd: String) (payload: α)
     (expected: β) (name? : Option String := .none) : TestM Unit := do
   let payload := Lean.toJson payload
@@ -96,8 +99,14 @@ def test_tactic : Test := do
   step "goal.tactic" ({ stateId := 1, tactic? := .some "intro y" }: Protocol.GoalTactic)
    ({ nextStateId? := .some 2, goals? := #[goal2], }: Protocol.GoalTacticResult)
   step "goal.tactic" ({ stateId := 1, tactic? := .some "apply Nat.le_of_succ_le" }: Protocol.GoalTactic)
-   ({ messages? := .some #["tactic 'apply' failed, could not unify the conclusion of `@Nat.le_of_succ_le`\n  ∀ {m : Nat}, Nat.succ ?n ≤ m → ?n ≤ m\nwith the goal\n  ∀ (q : Prop), x ∨ q → q ∨ x\n\nNote: The full type of `@Nat.le_of_succ_le` is\n  ∀ {n m : Nat}, n.succ ≤ m → n ≤ m\nx : Prop\n⊢ ∀ (q : Prop), x ∨ q → q ∨ x"] }:
-    Protocol.GoalTacticResult)
+    ({
+      messages? := .some #[{
+        fileName := ← getFileName,
+        kind := .anonymous,
+        pos := ⟨0, 0⟩,
+        data := "tactic 'apply' failed, could not unify the conclusion of `@Nat.le_of_succ_le`\n  ∀ {m : Nat}, Nat.succ ?n ≤ m → ?n ≤ m\nwith the goal\n  ∀ (q : Prop), x ∨ q → q ∨ x\n\nNote: The full type of `@Nat.le_of_succ_le` is\n  ∀ {n m : Nat}, n.succ ≤ m → n ≤ m\nx : Prop\n⊢ ∀ (q : Prop), x ∨ q → q ∨ x",
+      }]
+    }: Protocol.GoalTacticResult)
   step "goal.tactic" ({ stateId := 0, tactic? := .some "sorry" }: Protocol.GoalTactic)
    ({ nextStateId? := .some 3, goals? := .some #[], hasSorry := true }: Protocol.GoalTacticResult)
 example : (1 : Nat) + (2 * 3) = 1 + (4 - 3) + (6 - 4) + 3 := by
@@ -312,7 +321,14 @@ def test_frontend_process_sorry : Test := do
        goalStateId? := .some 0,
        goals? := .some #[goal1],
        goalSrcBoundaries? := .some #[(57, 62)],
-       messages := #["<anonymous>:2:0: warning: declaration uses 'sorry'\n"],
+       messages := #[{
+         fileName := "<anonymous>",
+         kind := `hasSorry,
+         pos := ⟨2, 0⟩,
+         endPos := .some ⟨2, 7⟩,
+         severity := .warning,
+         data := "declaration uses 'sorry'",
+       }],
      }],
    }: Protocol.FrontendProcessResult)
 
@@ -363,12 +379,25 @@ def test_frontend_process_circular : Test := do
        goalStateId? := .some 0,
        goals? := .some #[goal1],
        goalSrcBoundaries? := .some #[(35, 40)],
-       messages := #["<anonymous>:1:8: warning: declaration uses 'sorry'\n"],
+       messages := #[{
+         fileName := "<anonymous>",
+         kind := `hasSorry,
+         pos := ⟨1, 8⟩,
+         endPos := .some ⟨1, 15⟩,
+         severity := .warning,
+         data := "declaration uses 'sorry'"
+       }],
      }],
-   }: Protocol.FrontendProcessResult)
+   } : Protocol.FrontendProcessResult)
   step "goal.tactic" ({ stateId := 0, tactic? := .some "exact?" }: Protocol.GoalTactic)
-   ({ messages? := .some #["`exact?` could not close the goal. Try `apply?` to see partial suggestions."] }
-   : Protocol.GoalTacticResult)
+   ({
+      messages? := .some #[{
+        fileName := ← getFileName,
+        kind := .anonymous,
+        pos := ⟨0, 0⟩,
+        data := "`exact?` could not close the goal. Try `apply?` to see partial suggestions."
+      }]
+    } : Protocol.GoalTacticResult)
 
 def runTestSuite (env : Lean.Environment) (steps : Test): IO LSpec.TestSeq := do
   -- Setup the environment for execution
