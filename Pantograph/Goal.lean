@@ -140,8 +140,7 @@ protected def GoalState.withRootContext { n } [MonadControlT MetaM n] [Monad n] 
 
 private def restoreCoreMExtra (state : Core.SavedState) : CoreM Unit :=
   let { nextMacroScope, ngen, .. } := state
-  modifyGetThe Core.State fun st => ((),
-    { st with nextMacroScope, ngen })
+  modifyThe Core.State ({ · with nextMacroScope, ngen })
 -- Restore the name generator and macro scopes of the core state
 protected def GoalState.restoreCoreMExtra (state: GoalState): CoreM Unit :=
   restoreCoreMExtra state.coreState
@@ -151,9 +150,6 @@ protected def GoalState.restoreMetaM (state: GoalState): MetaM Unit := do
 protected def GoalState.restoreElabM (state: GoalState): Elab.TermElabM Unit := do
   state.restoreCoreMExtra
   state.savedState.term.restore
-private def GoalState.restoreTacticM (state: GoalState) (goal: MVarId): Elab.Tactic.TacticM Unit := do
-  state.restoreElabM
-  Elab.Tactic.setGoals [goal]
 
 /--
 Brings into scope a list of goals. User must ensure `goals` are distinct.
