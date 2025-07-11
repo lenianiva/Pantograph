@@ -25,87 +25,15 @@ lake build
 ```
 This builds the executable in `.lake/build/bin/pantograph-repl`.
 
-## Executable Usage
+### Executable Usage
 
-``` sh
-pantograph-repl MODULES|LEAN_OPTIONS
-```
+See [Executable Usage](./doc/repl.md)
 
-The `pantograph-repl` executable must be run with a list of modules to import.
-It can also accept lean options of the form `--key=value` e.g. `--pp.raw=true`.
-
-The REPL loop accepts commands as single-line JSON inputs and outputs either an
-`Error:` (indicating malformed command) or a JSON return value indicating the
-result of a command execution.  The command can be passed in one of two formats
-```
-command { ... }
-{ "cmd": command, "payload": ... }
-```
-The list of available commands can be found in `Pantograph/Protocol.lean` and below. An
-empty command aborts the REPL.
-
-
-Example: (~5k symbols)
-```
-$ pantograph Init
-env.catalog
-env.inspect {"name": "Nat.le_add_left"}
-```
-Example with `mathlib4` (~90k symbols, may stack overflow, see troubleshooting)
-```
-$ pantograph Mathlib.Analysis.Seminorm
-env.catalog
-```
-Example proving a theorem: (alternatively use `goal.start {"copyFrom": "Nat.add_comm"}`) to prime the proof
-```
-$ pantograph Init
-goal.start {"expr": "∀ (n m : Nat), n + m = m + n"}
-goal.tactic {"stateId": 0, "tactic": "intro n m"}
-goal.tactic {"stateId": 1, "tactic": "assumption"}
-goal.delete {"stateIds": [0]}
-stat {}
-goal.tactic {"stateId": 1, "tactic": "rw [Nat.add_comm]"}
-stat
-```
-where the application of `assumption` should lead to a failure.
-
-For a list of commands, see [REPL Documentation](doc/repl.md).
-
-### Project Environment
-
-To use Pantograph in a project environment, setup the `LEAN_PATH` environment
-variable so it contains the library path of lean libraries. The libraries must
-be built in advance. For example, if `mathlib4` is stored at `../lib/mathlib4`,
-the environment might be setup like this:
-
-``` sh
-LIB="../lib"
-LIB_MATHLIB="$LIB/mathlib4/.lake"
-export LEAN_PATH="$LIB_MATHLIB:$LIB_MATHLIB/aesop/build/lib:$LIB_MATHLIB/Qq/build/lib:$LIB_MATHLIB/std/build/lib"
-
-LEAN_PATH=$LEAN_PATH build/bin/pantograph $@
-```
-The `$LEAN_PATH` executable of any project can be extracted by
-``` sh
-lake env printenv LEAN_PATH
-```
-
-### Troubleshooting
-
-If lean encounters stack overflow problems when printing catalog, execute this before running lean:
-```sh
-ulimit -s unlimited
-```
-
-## Library Usage
+### Library Usage
 
 `Pantograph/Library.lean` exposes a series of interfaces which allow FFI call
-with `Pantograph` which mirrors the REPL commands above. It is recommended to
-call Pantograph via this FFI since it provides a tremendous speed up.
-
-The executable can be used as-is, but linking against the shared library
-requires the presence of `lean-all`. Note that there isn't a 1-1 correspondence
-between executable (REPL) commands and library functions.
+with `Pantograph` which mirrors the REPL commands above. Note that there isn't a
+1-1 correspondence between executable (REPL) commands and library functions.
 
 Inject any project path via the `pantograph_init_search` function.
 
