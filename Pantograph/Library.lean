@@ -2,7 +2,6 @@ import Pantograph.Environment
 import Pantograph.Goal
 import Pantograph.Protocol
 import Pantograph.Delate
-import Pantograph.Version
 
 import Lean
 
@@ -187,5 +186,10 @@ def runCancelTokenWithTimeout (cancelToken : IO.CancelToken) (timeout : UInt32) 
     IO.sleep timeout
     cancelToken.set
   return ()
+
+def spawnCancelToken (timeout : UInt32) : IO IO.CancelToken := do
+  let token ← IO.CancelToken.new
+  runCancelTokenWithTimeout token timeout
+  return token
 
 end Pantograph

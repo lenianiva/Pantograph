@@ -200,7 +200,7 @@ def frontend_process (args: Protocol.FrontendProcess): EMainM Protocol.FrontendP
     else do
       .some <$> getEnv
   let (context, state) ← do Frontend.createContextStateFromFile file fileName env? {}
-  let frontendM: Elab.Frontend.FrontendM (List CompilationUnit) :=
+  let frontendM: Frontend.FrontendM (List CompilationUnit) :=
     Frontend.mapCompilationSteps λ step => do
     let boundary := (step.src.startPos.byteIdx, step.src.stopPos.byteIdx)
     let invocations: Option (List Protocol.InvokedTactic) ← if args.invocations?.isSome then
@@ -224,7 +224,10 @@ def frontend_process (args: Protocol.FrontendProcess): EMainM Protocol.FrontendP
       messages,
       newConstants
     }
-  let (li, state') ← frontendM.run context |>.run state
+  let cancelTk? ← match (← get).options.timeout with
+    | 0 => pure .none
+    | timeout => .some <$> spawnCancelToken (timeout := .ofBitVec timeout)
+  let (li, state') ← frontendM.run { cancelTk? } |>.run context |>.run state
   if args.inheritEnv then
     setEnv state'.commandState.env
     if let .some scope := state'.commandState.scopes.head? then

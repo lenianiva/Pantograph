@@ -6,8 +6,6 @@ open Lean
 namespace Lean.FileMap
 
 /-- Extract the range of a `Syntax` expressed as lines and columns. -/
--- Extracted from the private declaration `Lean.Elab.formatStxRange`,
--- in `Lean.Elab.InfoTree.Main`.
 @[export pantograph_frontend_stx_range]
 protected def stxRange (fileMap : FileMap) (stx : Syntax) : Position × Position :=
   let pos    := stx.getPos?.getD 0
@@ -19,9 +17,10 @@ namespace Lean.PersistentArray
 
 /--
 Drop the first `n` elements of a `PersistentArray`, returning the results as a `List`.
+
+We can't remove the `[Inhabited α]` hypotheses here until
+`PersistentArray`'s `GetElem` instance also does.
 -/
--- We can't remove the `[Inhabited α]` hypotheses here until
--- `PersistentArray`'s `GetElem` instance also does.
 protected def drop [Inhabited α] (t : PersistentArray α) (n : Nat) : List α :=
   List.range (t.size - n) |>.map fun i => t.get! (n + i)
 
@@ -36,8 +35,11 @@ def stxByteRange (stx : Syntax) : String.Pos × String.Pos :=
   let endPos := stx.getTailPos?.getD 0
   (pos, endPos)
 
+structure Context where
+  cancelTk? : Option IO.CancelToken := .none
 
-abbrev FrontendM := Elab.Frontend.FrontendM
+/-- This `FrontendM` comes with more options. -/
+abbrev FrontendM := ReaderT Context Elab.Frontend.FrontendM
 
 structure CompilationStep where
   scope : Elab.Command.Scope
@@ -50,10 +52,44 @@ structure CompilationStep where
   msgs : List Message
   trees : List Elab.InfoTree
 
-namespace CompilationStep
+/-- Like `Elab.Frontend.runCommandElabM`, but taking `cancelTk?` into account. -/
+@[inline] def runCommandElabM (x : Elab.Command.CommandElabM α) : FrontendM α := do
+  let config ← read
+  let ctx ← readThe Elab.Frontend.Context
+  let s ← get
+  let cmdCtx : Elab.Command.Context := {
+    cmdPos       := s.cmdPos
+    fileName     := ctx.inputCtx.fileName
+    fileMap      := ctx.inputCtx.fileMap
+    snap?        := none
+    cancelTk?    := config.cancelTk?
+  }
+  match (← liftM <| EIO.toIO' <| (x cmdCtx).run s.commandState) with
+  | Except.error e      => throw <| IO.Error.userError s!"unexpected internal error: {← e.toMessageData.toString}"
+  | Except.ok (a, sNew) => Elab.Frontend.setCommandState sNew; return a
 
-end CompilationStep
+def elabCommandAtFrontend (stx : Syntax) : FrontendM Unit := do
+  runCommandElabM do
+    let initMsgs ← modifyGet fun st => (st.messages, { st with messages := {} })
+    Elab.Command.elabCommandTopLevel stx
+    let mut msgs := (← get).messages
+    modify ({ · with messages := initMsgs ++ msgs })
 
+open Elab.Frontend in
+def processCommand : FrontendM Bool := do
+  updateCmdPos
+  let cmdState ← getCommandState
+  let ictx ← getInputContext
+  let pstate ← getParserState
+  let scope := cmdState.scopes.head!
+  let pmctx := { env := cmdState.env, options := scope.opts, currNamespace := scope.currNamespace, openDecls := scope.openDecls }
+  match profileit "parsing" scope.opts fun _ => Parser.parseCommand ictx pmctx pstate cmdState.messages with
+  | (cmd, ps, messages) =>
+    modify fun s => { s with commands := s.commands.push cmd }
+    setParserState ps
+    setMessages messages
+    elabCommandAtFrontend cmd
+    pure (Parser.isTerminalCommand cmd)
 
 /--
 Process one command, returning a `CompilationStep` and
@@ -63,17 +99,19 @@ Process one command, returning a `CompilationStep` and
 def processOneCommand: FrontendM (CompilationStep × Bool) := do
   let s := (← get).commandState
   let before := s.env
-  let done ← Elab.Frontend.processCommand
+  let done ← processCommand
   let stx := (← get).commands.back!
-  let src := (← read).inputCtx.input.toSubstring.extract (← get).cmdPos (← get).parserState.pos
+  let src := (← readThe Elab.Frontend.Context).inputCtx.input.toSubstring.extract
+    (← get).cmdPos
+    (← get).parserState.pos
   let s' := (← get).commandState
   let after := s'.env
   let msgs := s'.messages.toList.drop s.messages.toList.length
   let trees := s'.infoState.trees.drop s.infoState.trees.size
-  let ⟨_, fileName, fileMap⟩  := (← read).inputCtx
+  let ⟨_, fileName, fileMap⟩  := (← readThe Elab.Frontend.Context).inputCtx
   return ({ scope := s.scopes.head!, fileName, fileMap, src, stx, before, after, msgs, trees }, done)
 
-partial def mapCompilationSteps { α } (f: CompilationStep → IO α) : FrontendM (List α) := do
+partial def mapCompilationSteps { α } (f: CompilationStep → FrontendM α) : FrontendM (List α) := do
   let (cmd, done) ← processOneCommand
   if done then
     if cmd.src.isEmpty then
@@ -106,10 +144,11 @@ def createContextStateFromFile
   --let file ← IO.FS.readFile (← findSourcePath module)
   let inputCtx := Parser.mkInputContext file fileName
 
+  let (header, parserState, messages) ← Parser.parseHeader inputCtx
   let (env, parserState, messages) ← match env? with
     | .some env => pure (env, {}, .empty)
     | .none =>
-      let (header, parserState, messages) ← Parser.parseHeader inputCtx
+      -- Only process the header if we don't have an environment.
       let (env, messages) ← Elab.processHeader header opts messages inputCtx
       pure (env, parserState, messages)
   let commandState := Elab.Command.mkState env messages opts
