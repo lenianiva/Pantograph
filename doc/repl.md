@@ -1,5 +1,71 @@
 # REPL
 
+This documentation is about interacting with the REPL.
+
+## Examples
+
+``` sh
+pantograph-repl MODULES|LEAN_OPTIONS
+```
+
+The `pantograph-repl` executable must be run with a list of modules to import.
+It can also accept lean options of the form `--key=value` e.g. `--pp.raw=true`.
+
+The REPL loop accepts commands as single-line JSON inputs and outputs either an
+`Error:` (indicating malformed command) or a JSON return value indicating the
+result of a command execution.  The command can be passed in one of two formats
+```
+command { ... }
+{ "cmd": command, "payload": ... }
+```
+The list of available commands can be found in `Pantograph/Protocol.lean` and below. An
+empty command aborts the REPL.
+
+Example: (~5k symbols)
+```
+$ pantograph Init
+env.catalog
+env.inspect {"name": "Nat.le_add_left"}
+```
+Example with `mathlib4` (~90k symbols, may stack overflow, see troubleshooting)
+```
+$ pantograph Mathlib.Analysis.Seminorm
+env.catalog
+```
+Example proving a theorem: (alternatively use `goal.start {"copyFrom": "Nat.add_comm"}`) to prime the proof
+```
+$ pantograph Init
+goal.start {"expr": "∀ (n m : Nat), n + m = m + n"}
+goal.tactic {"stateId": 0, "tactic": "intro n m"}
+goal.tactic {"stateId": 1, "tactic": "assumption"}
+goal.delete {"stateIds": [0]}
+stat {}
+goal.tactic {"stateId": 1, "tactic": "rw [Nat.add_comm]"}
+stat
+```
+where the application of `assumption` should lead to a failure.
+
+For a list of commands, see [REPL Documentation](doc/repl.md).
+
+### Project Environment
+
+To use Pantograph in a project environment, setup the `LEAN_PATH` environment
+variable so it contains the library path of lean libraries. The libraries must
+be built in advance. For example, if `mathlib4` is stored at `../lib/mathlib4`,
+the environment might be setup like this:
+
+``` sh
+LIB="../lib"
+LIB_MATHLIB="$LIB/mathlib4/.lake"
+export LEAN_PATH="$LIB_MATHLIB:$LIB_MATHLIB/aesop/build/lib:$LIB_MATHLIB/Qq/build/lib:$LIB_MATHLIB/std/build/lib"
+
+LEAN_PATH=$LEAN_PATH build/bin/pantograph $@
+```
+The `$LEAN_PATH` executable of any project can be extracted by
+``` sh
+lake env printenv LEAN_PATH
+```
+
 ## Commands
 
 See `Pantograph/Protocol.lean` for a description of the parameters and return values in JSON.
@@ -15,16 +81,9 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
   current environment to/from a file
 * `env.module_read { "module": <name> }`: Reads a list of symbols from a module
 * `env.describe {}`: Describes the imports and modules in the current environment
-* `options.set { key: value, ... }`: Set one or more options (not Lean options; those
-  have to be set via command line arguments.), for options, see `Pantograph/Protocol.lean`
-
-  One particular option for interest for machine learning researchers is the
-  automatic mode (flag: `"automaticMode"`).  By default it is turned on, with
-  all goals automatically resuming. This makes Pantograph act like a gym,
-  with no resumption necessary to manage your goals.
-
-  Set `timeout` to a non-zero number to specify timeout (milliseconds) for all `CoreM`
-  operations.
+* `options.set { key: value, ... }`: Set one or more options. These are not Lean
+  `CoreM` options; those have to be set via command line arguments.), for
+  options see below.
 * `options.print`: Display the current set of options
 * `goal.start {["name": <name>], ["expr": <expr>], ["levels": [<levels>]], ["copyFrom": <symbol>]}`:
   Start a new proof from a given expression or symbol
@@ -63,6 +122,16 @@ See `Pantograph/Protocol.lean` for a description of the parameters and return va
   Warning: Behaviour is unstable in case of multiple `sorry`s. Use the draft
   tactic if possible.
 
+## Options
+
+The full list of options can be found in `Pantograph/Protocol.lean`. Particularly:
+- `automaticMode` (default on): Goals will not become dormant when this is
+  turned on. By default it is turned on, with all goals automatically resuming.
+  This makes Pantograph act like a gym, with no resumption necessary to manage
+  your goals.
+- `timeout` (default 0): Set `timeout` to a non-zero number to specify timeout
+  (milliseconds) for all `CoreM` and frontend operations.
+
 ## Errors
 
 When an error pertaining to the execution of a command happens, the returning JSON structure is
@@ -77,3 +146,10 @@ Common error forms:
 * `index`: Indicates an invariant maintained by the output of one command and
   input of another is broken. For example, attempting to query a symbol not
   existing in the library or indexing into a non-existent proof state.
+
+## Troubleshooting
+
+If lean encounters stack overflow problems when printing catalog, execute this before running lean:
+```sh
+ulimit -s unlimited
+```

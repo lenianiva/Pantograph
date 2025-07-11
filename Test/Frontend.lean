@@ -7,11 +7,16 @@ import LSpec
 open Lean Pantograph
 namespace Pantograph.Test.Frontend
 
-def runFrontend { α } (source: String) (f : Frontend.CompilationStep → IO α) : MetaM (List α) := do
+open Frontend
+
+def runFrontend { α } (source: String) (f : CompilationStep → FrontendM α) (timeout : UInt32 := 0): MetaM (List α) := do
   let filename := "<anonymous>"
-  let (context, state) ← do Frontend.createContextStateFromFile source filename (← getEnv) {}
-  let m := Frontend.mapCompilationSteps f
-  m.run context |>.run' state
+  let (context, state) ← do createContextStateFromFile source filename (← getEnv) {}
+  let m := mapCompilationSteps f
+  let cancelTk? ← match timeout with
+    | 0 => pure .none
+    | timeout => .some <$> spawnCancelToken timeout
+  m.run { cancelTk? } |>.run context |>.run' state
 
 def test_open : TestT MetaM Unit := do
   let sketch := "
@@ -29,7 +34,7 @@ def collectSorrysFromSource (source: String) (options : Frontend.GoalCollectionO
   let (context, state) ← do Frontend.createContextStateFromFile source filename (← getEnv) {}
   let m := Frontend.mapCompilationSteps λ step => do
     return (step.before, ← Frontend.collectSorrys step options)
-  let li ← m.run context |>.run' state
+  let li ← m.run {} |>.run context |>.run' state
   let goalStates ← li.filterMapM λ (env, sorrys) => withEnv env do
     if sorrys.isEmpty then
       return .none
@@ -227,7 +232,7 @@ def collectNewConstants (source: String) : MetaM (List (List Name)) := do
   let (context, state) ← do Frontend.createContextStateFromFile source filename (← getEnv) {}
   let m := Frontend.mapCompilationSteps λ step => do
     Frontend.collectNewDefinedConstants step
-  m.run context |>.run' state
+  m.run {} |>.run context |>.run' state
 
 def test_collect_one_constant : TestT MetaM Unit := do
   let input := "
