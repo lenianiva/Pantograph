@@ -37,7 +37,7 @@ with `Pantograph` which mirrors the REPL commands above. Note that there isn't a
 
 Inject any project path via the `pantograph_init_search` function.
 
-## Developing
+## Development
 
 A Lean development shell is provided in the Nix flake.
 
